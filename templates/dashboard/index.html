@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block nav_dash %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Dashboard</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-tachometer-alt"></i>Dashboard</h4>
+  <span style="color:#aaa;font-size:.8rem">{{ today|date:"l, d F Y" }}</span>
+</div>
+
+<!-- KPIs -->
+<div class="stats-grid" style="margin-bottom:1rem">
+  <div class="kpi"><div class="kpi-label">Invoiced This Month</div><div class="kpi-value" style="font-size:1.1rem">UGX {{ invoiced_month|floatformat:0|intcomma }}</div><div class="kpi-sub">Total billed</div></div>
+  <div class="kpi gold"><div class="kpi-label">Collected This Month</div><div class="kpi-value" style="font-size:1.1rem">UGX {{ collected_month|floatformat:0|intcomma }}</div><div class="kpi-sub">{{ collection_rate }}% collection rate</div></div>
+  <div class="kpi red"><div class="kpi-label">Total Outstanding</div><div class="kpi-value" style="font-size:1.1rem">UGX {{ total_outstanding|floatformat:0|intcomma }}</div><div class="kpi-sub">All unpaid balances</div></div>
+  <div class="kpi green"><div class="kpi-label">Jobs Completed</div><div class="kpi-value">{{ jobs_completed }}</div><div class="kpi-sub">This month</div></div>
+</div>
+
+<div class="layout-main-sidebar" style="margin-bottom:1rem">
+  <!-- Revenue chart -->
+  <div>
+    <div class="card-box card-compact" style="height:100%">
+      <div class="card-head"><span><i class="fas fa-chart-bar"></i>Revenue vs Collections — Last 6 Months</span></div>
+      <div class="card-body"><canvas id="revChart" style="max-height:200px"></canvas></div>
+    </div>
+  </div>
+  <!-- Job donut -->
+  <div>
+    <div class="card-box card-compact" style="height:100%">
+      <div class="card-head"><span><i class="fas fa-circle-notch"></i>Jobs by Status</span></div>
+      <div class="card-body"><canvas id="jobChart" style="max-height:200px"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="cards-grid-2" style="margin-bottom:1rem">
+  <!-- Upcoming deadlines -->
+  <div>
+    <div class="card-box card-compact">
+      <div class="card-head"><span><i class="fas fa-calendar-exclamation" style="color:#e74c3c"></i>Due in Next 7 Days</span><a href="{% url 'compliance:list' %}" class="btn btn-outline btn-sm">View All</a></div>
+      <div class="card-body p0">
+        {% if upcoming_deadlines %}
+        <table class="tbl">
+          <thead><tr><th>Client</th><th>Obligation</th><th>Due</th><th></th></tr></thead>
+          <tbody>
+            {% for d in upcoming_deadlines %}
+            <tr>
+              <td><a href="{% url 'clients:detail' d.obligation.client.pk %}">{{ d.obligation.client.get_display_name|truncatechars:18 }}</a></td>
+              <td style="font-size:.78rem">{{ d.obligation.service_type.name|truncatechars:20 }}</td>
+              <td><span style="font-size:.78rem;color:{% if d.due_date <= today %}#e74c3c{% else %}#555{% endif %};font-weight:{% if d.due_date <= today %}700{% else %}400{% endif %}">{{ d.due_date|date:"d M" }}</span></td>
+              <td>
+                <form method="post" action="{% url 'compliance:mark_filed' d.pk %}">{% csrf_token %}
+                  <button class="btn btn-success btn-sm">Filed</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state" style="padding:1.5rem"><i class="fas fa-check-circle" style="color:#27ae60"></i><p>No deadlines in next 7 days</p></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <!-- Overdue invoices -->
+  <div>
+    <div class="card-box card-compact">
+      <div class="card-head"><span><i class="fas fa-exclamation-triangle" style="color:#C8952A"></i>Top Overdue Invoices</span><a href="{% url 'billing:aging' %}" class="btn btn-outline btn-sm">Aging Report</a></div>
+      <div class="card-body p0">
+        {% if top_overdue %}
+        <table class="tbl">
+          <thead><tr><th>Invoice</th><th>Client</th><th>Balance</th><th>Days</th></tr></thead>
+          <tbody>
+            {% for inv in top_overdue %}
+            <tr>
+              <td><a href="{% url 'billing:detail' inv.pk %}">{{ inv.invoice_number }}</a></td>
+              <td style="font-size:.78rem">{{ inv.client.get_display_name|truncatechars:16 }}</td>
+              <td class="ugx ugx-red">{{ inv.balance_due|floatformat:0|intcomma }}</td>
+              <td><span class="badge badge-overdue">{{ inv.days_overdue }}d</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state" style="padding:1.5rem"><i class="fas fa-check-circle" style="color:#27ae60"></i><p>No overdue invoices</p></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cards-grid-2" style="margin-bottom:1rem">
+  <!-- Suspended clients -->
+  <div>
+    <div class="card-box card-compact">
+      <div class="card-head"><span><i class="fas fa-user-slash" style="color:#e74c3c"></i>Suspended Clients</span></div>
+      <div class="card-body p0">
+        {% if suspended_clients %}
+        <table class="tbl">
+          <thead><tr><th>Client</th><th>Outstanding</th><th>Officer</th></tr></thead>
+          <tbody>
+            {% for c in suspended_clients %}
+            <tr>
+              <td><a href="{% url 'clients:detail' c.pk %}">{{ c.get_display_name }}</a></td>
+              <td class="ugx ugx-red">UGX {{ c.total_outstanding|floatformat:0|intcomma }}</td>
+              <td style="font-size:.78rem">{{ c.assigned_officer.get_full_name|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state" style="padding:1.5rem"><i class="fas fa-check-circle" style="color:#27ae60"></i><p>No suspended clients</p></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <!-- Staff performance -->
+  <div>
+    <div class="card-box card-compact">
+      <div class="card-head"><span><i class="fas fa-users-cog"></i>Staff Performance (This Month)</span></div>
+      <div class="card-body p0">
+        <table class="tbl">
+          <thead><tr><th>Staff</th><th>Role</th><th>Assigned</th><th>Done</th><th>Overdue</th></tr></thead>
+          <tbody>
+            {% for s in staff_perf %}
+            <tr>
+              <td class="fw-600">{{ s.user.get_full_name|default:s.user.username }}</td>
+              <td><span style="font-size:.72rem;color:#888">{{ s.user.get_role_display }}</span></td>
+              <td>{{ s.assigned }}</td>
+              <td><span class="badge badge-completed">{{ s.completed }}</span></td>
+              <td>{% if s.overdue %}<span class="badge badge-overdue">{{ s.overdue }}</span>{% else %}<span style="color:#ccc">—</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card-box card-compact">
+  <div class="card-head"><i class="fas fa-bolt"></i>Quick Actions</div>
+  <div class="card-body d-flex gap-2 flex-wrap">
+    <a href="{% url 'clients:create' %}" class="btn btn-primary"><i class="fas fa-user-plus"></i>New Client</a>
+    <a href="{% url 'services:create' %}" class="btn btn-primary"><i class="fas fa-briefcase"></i>New Job Card</a>
+    <a href="{% url 'billing:create' %}" class="btn btn-outline-primary"><i class="fas fa-file-invoice"></i>Manual Invoice</a>
+    <a href="{% url 'expenses:create' %}" class="btn btn-gold"><i class="fas fa-receipt"></i>Log Expense</a>
+    <form method="post" action="{% url 'notifications:send_reminders' %}" style="display:inline">{% csrf_token %}
+      <button class="btn btn-outline" style="color:#27ae60;border-color:#27ae60"><i class="fab fa-whatsapp"></i>Send Debt Reminders</button>
+    </form>
+    <form method="post" action="{% url 'notifications:manager_report' %}" style="display:inline">{% csrf_token %}
+      <button class="btn btn-outline"><i class="fas fa-chart-pie"></i>Manager Report</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+new Chart(document.getElementById('revChart'),{type:'bar',data:{labels:{{ rev_labels|safe }},datasets:[
+  {label:'Invoiced',data:{{ rev_invoiced|safe }},backgroundColor:'rgba(26,60,110,.7)',borderColor:'#1A3C6E',borderWidth:1},
+  {label:'Collected',data:{{ rev_collected|safe }},backgroundColor:'rgba(200,149,42,.7)',borderColor:'#C8952A',borderWidth:1}
+]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
+new Chart(document.getElementById('jobChart'),{type:'doughnut',data:{labels:['Open','In Progress','Pending Pay','Completed','Cancelled'],datasets:[{data:[{{ job_counts.open }},{{ job_counts.in_progress }},{{ job_counts.pending_payment }},{{ job_counts.completed }},{{ job_counts.cancelled }}],backgroundColor:['#3498db','#f39c12','#e74c3c','#27ae60','#95a5a6']}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'bottom',labels:{font:{size:10}}}}}});
+</script>
+{% endblock %}
+

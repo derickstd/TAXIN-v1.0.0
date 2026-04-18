@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Statement — {{ client.get_display_name }}{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li><a href="{% url 'clients:detail' client.pk %}">{{ client.client_id }}</a></li><li class="active">Statement</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-file-invoice"></i>Account Statement — {{ client.get_display_name }}</h4>
+  <div class="d-flex gap-2 no-print">
+    <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <input type="date" name="from" value="{{ date_from|default:'' }}" class="form-control" style="width:140px" placeholder="From">
+      <input type="date" name="to" value="{{ date_to|default:'' }}" class="form-control" style="width:140px" placeholder="To">
+      <button class="btn btn-primary btn-sm">Filter</button>
+    </form>
+    <button onclick="window.print()" class="btn btn-outline btn-sm"><i class="fas fa-print"></i> Print</button>
+  </div>
+</div>
+
+<div class="card-box">
+  <div class="card-body">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1A3C6E;padding-bottom:1rem;margin-bottom:1.2rem">
+      <div><div style="font-size:1.4rem;font-weight:900;color:#1A3C6E">TAXMAN256</div>
+        <div style="color:#666;font-size:.82rem">Kampala, Uganda | +256785230670</div></div>
+      <div style="text-align:right">
+        <div style="font-size:1rem;font-weight:800;color:#C8952A">ACCOUNT STATEMENT</div>
+        <div style="font-weight:700">{{ client.get_display_name }}</div>
+        <div style="font-size:.78rem;color:#888">TIN: {{ client.tin|default:"N/A" }}</div>
+        <div style="font-size:.78rem;color:#888">Generated: {{ today }}</div>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl" style="border:1px solid #e8ebf0">
+        <thead style="background:#1A3C6E"><tr style="color:#fff"><th>Date</th><th>Invoice</th><th>Job Period</th><th style="text-align:right">Amount</th><th style="text-align:right">Paid</th><th style="text-align:right">Balance</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for inv in invoices %}
+          <tr>
+            <td style="font-size:.8rem">{{ inv.date_issued }}</td>
+            <td><a href="{% url 'billing:detail' inv.pk %}">{{ inv.invoice_number }}</a></td>
+            <td style="font-size:.78rem;color:#888">{% if inv.job_card %}{{ inv.job_card.get_period_label }}{% endif %}</td>
+            <td class="ugx" style="text-align:right">{{ inv.grand_total|floatformat:0|intcomma }}</td>
+            <td class="ugx ugx-green" style="text-align:right">{{ inv.amount_paid|floatformat:0|intcomma }}</td>
+            <td class="ugx {% if inv.balance_due > 0 %}ugx-red{% endif %}" style="text-align:right;font-weight:700">{{ inv.balance_due|floatformat:0|intcomma }}</td>
+            <td><span class="badge badge-{{ inv.status }}" style="font-size:.65rem">{{ inv.get_status_display }}</span></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" style="text-align:center;padding:2rem;color:#aaa">No invoices for this period</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot style="background:#f8f9fb;font-weight:800">
+          <tr>
+            <td colspan="3" style="text-align:right;padding:.7rem .9rem">TOTALS</td>
+            <td class="ugx" style="text-align:right;padding:.7rem .9rem">UGX {{ total_invoiced|floatformat:0|intcomma }}</td>
+            <td class="ugx ugx-green" style="text-align:right;padding:.7rem .9rem">UGX {{ total_paid|floatformat:0|intcomma }}</td>
+            <td class="ugx {% if balance > 0 %}ugx-red{% endif %}" style="text-align:right;padding:.7rem .9rem;font-size:1rem">UGX {{ balance|floatformat:0|intcomma }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block title %}{{ job.job_number }}{% endblock %}
+{% block nav_jobs %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'services:list' %}">Job Cards</a></li><li class="active">{{ job.job_number }}</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h4 class="page-title" style="margin-bottom:.1rem"><i class="fas fa-briefcase"></i>{{ job.job_number }}</h4>
+    <span style="color:#aaa;font-size:.8rem">{{ job.client.get_display_name }} &bull; {{ job.get_period_label }}</span>
+  </div>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <span class="badge badge-{{ job.status }}" style="padding:.35rem .9rem;font-size:.78rem">{{ job.get_status_display }}</span>
+    <form method="post" action="{% url 'services:update_status' job.pk %}" style="display:flex;gap:.4rem">
+      {% csrf_token %}
+      <select name="status" class="form-select" style="width:auto;font-size:.83rem">
+        {% for val,label in job.STATUS %}<option value="{{ val }}" {% if val == job.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary btn-sm">Update</button>
+    </form>
+    {% if job.invoice %}<a href="{% url 'billing:detail' job.invoice.pk %}" class="btn btn-gold btn-sm"><i class="fas fa-file-invoice"></i> Invoice</a>{% endif %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card-box" style="margin-bottom:1rem">
+      <div class="card-head"><i class="fas fa-tasks"></i>Services &amp; Tasks</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Service</th><th>Period</th><th>Default</th><th>Agreed Price</th><th>Status</th><th>Update</th></tr></thead>
+          <tbody>
+            {% for item in job.line_items.all %}
+            <tr>
+              <td style="font-weight:600">{{ item.get_description }}</td>
+              <td style="font-size:.78rem;color:#888">{{ item.period_label|default:"—" }}</td>
+              <td class="ugx" style="font-size:.78rem;color:#aaa">{{ item.default_price|floatformat:0|intcomma }}</td>
+              <td class="ugx" style="font-weight:700">{{ item.negotiated_price|floatformat:0|intcomma }}</td>
+              <td><span class="badge badge-{{ item.status }}">{{ item.get_status_display }}</span></td>
+              <td>
+                <form method="post" action="{% url 'services:line_status' item.pk %}" style="display:flex;gap:.3rem">
+                  {% csrf_token %}
+                  <select name="status" class="form-select" style="width:auto;font-size:.78rem">
+                    {% for val,label in item.ITEM_STATUS %}<option value="{{ val }}" {% if val == item.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                  </select>
+                  <button class="btn btn-outline btn-sm">✓</button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" style="text-align:center;color:#aaa;padding:1.5rem">No line items</td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr style="background:#f8f9fb"><td colspan="3" style="text-align:right;font-weight:700;padding:.6rem .9rem">Total</td><td class="ugx" style="font-weight:800;color:#1A3C6E;font-size:1rem;padding:.6rem .9rem" colspan="3">UGX {{ job.total_fee|floatformat:0|intcomma }}</td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="card-box">
+      <div class="card-head"><i class="fas fa-history"></i>Activity Log</div>
+      <div class="card-body p0">
+        {% for log in logs %}
+        <div style="display:flex;gap:1rem;padding:.5rem 1rem;border-bottom:1px solid #f3f4f6;font-size:.82rem">
+          <span style="color:#aaa;white-space:nowrap;min-width:120px">{{ log.created_at|date:"d M Y H:i" }}</span>
+          <span style="color:#888;min-width:100px">{{ log.staff.get_full_name|default:"System" }}</span>
+          <span>{{ log.action }}</span>
+        </div>
+        {% empty %}
+        <div style="padding:1rem;text-align:center;color:#aaa;font-size:.84rem">No activity logged</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card-box" style="margin-bottom:1rem">
+      <div class="card-head"><i class="fas fa-info-circle"></i>Job Details</div>
+      <div class="card-body">
+        <div class="stat-row"><span style="color:#888;font-size:.8rem">Job Number</span><span style="font-weight:700">{{ job.job_number }}</span></div>
+        <div class="stat-row"><span style="color:#888;font-size:.8rem">Client</span><a href="{% url 'clients:detail' job.client.pk %}">{{ job.client.get_display_name }}</a></div>
+        <div class="stat-row"><span style="color:#888;font-size:.8rem">Officer</span><span>{{ job.assigned_to.get_full_name|default:"Unassigned" }}</span></div>
+        <div class="stat-row"><span style="color:#888;font-size:.8rem">Period</span><span>{{ job.get_period_label }}</span></div>
+        <div class="stat-row"><span style="color:#888;font-size:.8rem">Priority</span><span class="badge badge-{{ job.priority }}">{{ job.get_priority_display }}</span></div>
+        <div class="stat-row"><span style="color:#888;font-size:.8rem">Due Date</span><span {% if job.due_date and job.due_date < today %}style="color:#e74c3c;font-weight:700"{% endif %}>{{ job.due_date|default:"Not set" }}</span></div>
+        <div class="stat-row"><span style="color:#888;font-size:.8rem">Created</span><span>{{ job.created_at|date:"d M Y" }}</span></div>
+        <div class="stat-row"><span style="color:#888;font-size:.8rem">Total Fee</span><span class="ugx" style="font-weight:800;color:#1A3C6E">UGX {{ job.total_fee|floatformat:0|intcomma }}</span></div>
+      </div>
+    </div>
+
+    {% if job.invoice %}
+    <div class="card-box">
+      <div class="card-head"><i class="fas fa-file-invoice-dollar"></i>Invoice Status</div>
+      <div class="card-body">
+        <div class="stat-row"><span>Invoice</span><a href="{% url 'billing:detail' job.invoice.pk %}">{{ job.invoice.invoice_number }}</a></div>
+        <div class="stat-row"><span>Total</span><span class="ugx">UGX {{ job.invoice.grand_total|floatformat:0|intcomma }}</span></div>
+        <div class="stat-row"><span>Paid</span><span class="ugx ugx-green">UGX {{ job.invoice.amount_paid|floatformat:0|intcomma }}</span></div>
+        <div class="stat-row"><span>Balance</span><span class="ugx {% if job.invoice.balance_due > 0 %}ugx-red{% else %}ugx-green{% endif %}">UGX {{ job.invoice.balance_due|floatformat:0|intcomma }}</span></div>
+        <div class="stat-row"><span>Status</span><span class="badge badge-{{ job.invoice.status }}">{{ job.invoice.get_status_display }}</span></div>
+        <div style="margin-top:.8rem">
+          <a href="{% url 'billing:detail' job.invoice.pk %}" class="btn btn-gold w-100"><i class="fas fa-file-invoice"></i> View Invoice</a>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if job.notes %}
+    <div class="alert-note mt-2">{{ job.notes }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+

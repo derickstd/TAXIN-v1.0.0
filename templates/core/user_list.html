@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Manage Users{% endblock %}
+{% block nav_users %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Users</li>{% endblock %}
+{% block content %}
+<div class="page-hdr">
+  <h4 class="page-title"><i class="fas fa-users-cog"></i>User Management</h4>
+  <a href="{% url 'core:user_new' %}" class="btn btn-primary"><i class="fas fa-user-plus"></i> Add User</a>
+</div>
+<div class="card">
+  <div class="card-hd"><i class="fas fa-users"></i>All Staff Accounts ({{ users|length }})</div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Theme</th><th>WhatsApp</th><th>Email (Notify)</th><th>Active</th><th>Debt Alerts</th><th></th></tr></thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td class="fw-7">{{ u.get_full_name|default:"—" }}</td>
+          <td><code style="font-size:.8rem">{{ u.username }}</code></td>
+          <td><span class="badge badge-{% if u.role == 'admin' %}suspended{% elif u.role == 'manager' %}pending_payment{% elif u.role == 'tax_officer' %}active{% else %}dormant{% endif %}">{{ u.get_role_display }}</span></td>
+          <td class="fs-sm">{{ u.get_ui_theme_display }}</td>
+          <td class="fs-sm">{{ u.phone_whatsapp|default:"—" }}</td>
+          <td class="fs-sm">{{ u.email_notify|default:u.email|default:"—" }}</td>
+          <td>{% if u.is_active %}<span class="badge badge-active">Yes</span>{% else %}<span class="badge badge-dormant">No</span>{% endif %}</td>
+          <td>{% if u.receive_debt_alerts %}<i class="fas fa-check text-success"></i>{% else %}<i class="fas fa-times text-muted"></i>{% endif %}</td>
+          <td><a href="{% url 'core:user_edit' u.pk %}" class="btn btn-outline btn-sm"><i class="fas fa-edit"></i> Edit</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9"><div class="empty-state"><i class="fas fa-users"></i><p>No users found</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="alert alert-note">
+  <i class="fas fa-info-circle"></i>
+  <span>Debt alerts are sent to users with <strong>WhatsApp</strong> and <strong>Notify Email</strong> configured. Only users with "Receive Debt Alerts" enabled will get Saturday/Monday reports.</span>
+</div>
+{% endblock %}

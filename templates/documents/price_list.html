@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}Price List{% endblock %}
+{% block nav_price %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'documents:home' %}">Documents</a></li><li class="active">Price List</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-tags"></i>Service Price List</h4>
+  <div class="d-flex gap-2 no-print">
+    <button onclick="window.print()" class="btn btn-outline btn-sm"><i class="fas fa-print"></i>Print</button>
+    <a href="{% url 'services:catalogue' %}" class="btn btn-primary btn-sm"><i class="fas fa-list"></i>Full Catalogue</a>
+  </div>
+</div>
+
+<div class="card-box">
+  <div class="card-body">
+    <!-- Letterhead -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1A3C6E;padding-bottom:1rem;margin-bottom:1.2rem">
+      <div>
+        <div style="font-size:1.6rem;font-weight:900;color:#1A3C6E;letter-spacing:1px">TAXMAN256</div>
+        <div style="color:#666;font-size:.84rem">Tax Consultation &amp; Compliance Services</div>
+        <div style="color:#888;font-size:.78rem">Kampala, Uganda &nbsp;|&nbsp; +256785230670 &nbsp;|&nbsp; info@taxman256.ug</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:1.1rem;font-weight:800;color:#C8952A">SERVICE PRICE LIST</div>
+        <div style="color:#888;font-size:.78rem">Effective: {{ today|date:"d F Y" }}</div>
+      </div>
+    </div>
+
+    <div class="alert-note mb-3">
+      <strong>All prices in Uganda Shillings (UGX).</strong>
+      Prices are negotiable based on scope and agreement. Contact us for a custom quote. VAT applicable where indicated.
+    </div>
+
+    {% for cat_name, cat_services in by_category.items %}
+    <div style="margin-bottom:1.5rem">
+      <div style="background:#1A3C6E;color:#fff;padding:.45rem .9rem;border-radius:6px 6px 0 0;font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:1px">
+        <i class="fas fa-folder-open" style="margin-right:.4rem;color:#C8952A"></i>{{ cat_name }}
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl" style="border:1px solid #e8ebf0;border-top:none">
+          <thead>
+            <tr>
+              <th style="width:40%">Service</th>
+              <th style="width:20%;text-align:right">Standard Price (UGX)</th>
+              <th style="width:25%">Deadline Rule</th>
+              <th style="width:8%;text-align:center">Monthly</th>
+              <th style="width:7%;text-align:center">VAT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in cat_services %}
+            <tr>
+              <td>
+                <div class="fw-600">{{ s.name }}</div>
+                {% if s.description %}<div style="color:#888;font-size:.75rem">{{ s.description }}</div>{% endif %}
+              </td>
+              <td style="text-align:right">
+                {% if s.default_price > 0 %}
+                  <span class="ugx" style="color:#1A3C6E">{{ s.default_price|floatformat:0|intcomma }}</span>
+                {% else %}
+                  <em style="color:#aaa;font-size:.8rem">Negotiable</em>
+                {% endif %}
+              </td>
+              <td><span style="color:#666;font-size:.8rem">{{ s.get_deadline_type_display }}</span></td>
+              <td style="text-align:center">
+                {% if s.is_recurring %}<span class="badge badge-open" style="font-size:.65rem">Yes</span>{% else %}<span style="color:#ccc">—</span>{% endif %}
+              </td>
+              <td style="text-align:center">
+                {% if s.vat_applicable %}<span class="badge badge-in_progress" style="font-size:.65rem">+18%</span>{% else %}<span style="color:#ccc">—</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% empty %}
+    <div class="empty-state"><i class="fas fa-tags"></i><p>No services found. Run <code>python manage.py setup_taxman256</code></p></div>
+    {% endfor %}
+
+    <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:.78rem;color:#888">
+      <div>Payment: Cash | Mobile Money (MTN/Airtel) | Bank Transfer (Stanbic Bank)</div>
+      <div>Taxman256 | Kampala, Uganda | +256785230670</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

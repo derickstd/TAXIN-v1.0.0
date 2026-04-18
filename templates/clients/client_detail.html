@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% block title %}{{ client.get_display_name }}{% endblock %}
+{% block nav_clients %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">{{ client.client_id }}</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h4 class="page-title" style="margin-bottom:.1rem"><i class="fas fa-user"></i>{{ client.get_display_name }}</h4>
+    <span style="color:#aaa;font-size:.8rem">{{ client.client_id }} &bull; {{ client.get_client_type_display }} &bull; {{ client.district }}</span>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <span class="badge badge-{{ client.status }}" style="padding:.35rem .8rem;font-size:.78rem">{{ client.get_status_display }}</span>
+    <a href="{% url 'clients:edit' client.pk %}" class="btn btn-outline btn-sm"><i class="fas fa-edit"></i> Edit</a>
+    <a href="{% url 'services:create' %}?client={{ client.pk }}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New Job</a>
+    <a href="{% url 'documents:statement' client.pk %}" class="btn btn-gold btn-sm"><i class="fas fa-file-alt"></i> Statement</a>
+    <a href="{% url 'credentials:list' %}?client={{ client.pk }}" class="btn btn-outline btn-sm"><i class="fas fa-key"></i> Credentials ({{ creds_count }})</a>
+  </div>
+</div>
+
+<div class="layout-sidebar-main">
+  <div class="stack">
+    <div class="card-box card-compact">
+      <div class="card-head"><i class="fas fa-id-card"></i>Details</div>
+      <div class="card-body">
+        {% for label, val in details %}
+        <div class="stat-row"><span style="color:#888;font-size:.8rem">{{ label }}</span><span style="font-weight:600;font-size:.84rem">{{ val }}</span></div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card-box card-compact">
+      <div class="card-head"><i class="fas fa-wallet"></i>Account Balance</div>
+      <div class="card-body">
+        <div class="stat-row"><span>Total Invoiced</span><span class="ugx">UGX {{ total_invoiced|floatformat:0|intcomma }}</span></div>
+        <div class="stat-row"><span>Total Paid</span><span class="ugx ugx-green">UGX {{ total_paid|floatformat:0|intcomma }}</span></div>
+        <div class="stat-row" style="border-top:2px solid #f0f2f5;padding-top:.6rem">
+          <span style="font-weight:700">Balance Due</span>
+          <span class="ugx {% if balance > 0 %}ugx-red{% else %}ugx-green{% endif %}" style="font-weight:800;font-size:1rem">UGX {{ balance|floatformat:0|intcomma }}</span>
+        </div>
+      </div>
+    </div>
+    {% if obligations %}
+    <div class="card-box card-compact">
+      <div class="card-head"><i class="fas fa-calendar-check"></i>Obligations</div>
+      <div class="card-body p0">
+        {% for obl in obligations %}
+        <div class="stat-row" style="padding:.4rem .9rem"><span style="font-size:.8rem">{{ obl.service_type.name }}</span><span class="badge badge-open" style="font-size:.65rem">{{ obl.get_frequency_display }}</span></div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="stack">
+    <div class="card-box card-compact" style="margin-bottom:1rem">
+      <div class="card-head"><i class="fas fa-briefcase"></i>Job Cards<a href="{% url 'services:create' %}?client={{ client.pk }}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i>New</a></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Job #</th><th>Period</th><th>Services</th><th>Total</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {% for job in job_cards %}
+            <tr>
+              <td><a href="{% url 'services:detail' job.pk %}" style="font-weight:700">{{ job.job_number }}</a></td>
+              <td style="font-size:.8rem">{{ job.get_period_label }}</td>
+              <td><span style="font-size:.78rem;color:#888">{{ job.line_items.count }} service(s)</span></td>
+              <td class="ugx" style="font-size:.82rem">{{ job.total_fee|floatformat:0|intcomma }}</td>
+              <td><span class="badge badge-{{ job.status }}">{{ job.get_status_display }}</span></td>
+              <td><a href="{% url 'services:detail' job.pk %}" class="btn btn-outline btn-sm">View</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" style="text-align:center;color:#aaa;padding:1.5rem">No job cards yet — <a href="{% url 'services:create' %}?client={{ client.pk }}">create one</a></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card-box card-compact">
+      <div class="card-head"><i class="fas fa-file-invoice-dollar"></i>Invoices</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Invoice</th><th>Date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {% for inv in invoices %}
+            <tr>
+              <td><a href="{% url 'billing:detail' inv.pk %}" style="font-weight:700">{{ inv.invoice_number }}</a></td>
+              <td style="font-size:.78rem">{{ inv.date_issued }}</td>
+              <td class="ugx" style="font-size:.82rem">{{ inv.grand_total|floatformat:0|intcomma }}</td>
+              <td class="ugx ugx-green" style="font-size:.82rem">{{ inv.amount_paid|floatformat:0|intcomma }}</td>
+              <td class="ugx {% if inv.balance_due > 0 %}ugx-red{% endif %}" style="font-size:.82rem">{{ inv.balance_due|floatformat:0|intcomma }}</td>
+              <td><span class="badge badge-{{ inv.status }}">{{ inv.get_status_display }}</span></td>
+              <td><a href="{% url 'billing:detail' inv.pk %}" class="btn btn-outline btn-sm">View</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" style="text-align:center;color:#aaa;padding:1.5rem">No invoices yet</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

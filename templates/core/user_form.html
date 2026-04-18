@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block nav_users %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'core:users' %}">Users</a></li><li class="active">{{ title }}</li>{% endblock %}
+{% block content %}
+<div class="page-hdr"><h4 class="page-title"><i class="fas fa-user-shield"></i>{{ title }}</h4></div>
+<div class="row"><div class="col-7">
+<div class="card">
+  <div class="card-hd"><i class="fas fa-id-card"></i>Account Details</div>
+  <div class="card-bd">
+    <form method="post" novalidate>{% csrf_token %}
+      <div class="form-stack">
+        <div><label class="form-label">First Name</label><input type="text" name="first_name" value="{{ form.first_name.value|default:'' }}" class="form-ctrl" placeholder="First name"></div>
+        <div><label class="form-label">Last Name</label><input type="text" name="last_name" value="{{ form.last_name.value|default:'' }}" class="form-ctrl" placeholder="Last name"></div>
+        <div><label class="form-label">Username <span class="req">*</span></label>
+          <input type="text" name="username" value="{{ form.username.value|default:'' }}" class="form-ctrl" required>
+          {% for e in form.username.errors %}<span class="err-msg">{{ e }}</span>{% endfor %}</div>
+        <div><label class="form-label">Role <span class="req">*</span></label>
+          <select name="role" class="s2" data-ph="Select role">
+            {% for val,label in form.fields.role.choices %}<option value="{{ val }}" {% if form.role.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select></div>
+        <div><label class="form-label">Theme</label>
+          <select name="ui_theme" class="s2" data-ph="Select theme">
+            {% for val,label in form.fields.ui_theme.choices %}<option value="{{ val }}" {% if form.ui_theme.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select></div>
+        <div><label class="form-label">WhatsApp Number <span class="req">*</span></label>
+          <input type="text" name="phone_whatsapp" value="{{ form.phone_whatsapp.value|default:'' }}" class="form-ctrl" placeholder="+256 700 000000">
+          <div class="form-hint">Used to send debt reports and task reminders</div></div>
+        <div><label class="form-label">Notification Email <span class="req">*</span></label>
+          <input type="email" name="email_notify" value="{{ form.email_notify.value|default:'' }}" class="form-ctrl" placeholder="e.g. taxissues.go@gmail.com">
+          <div class="form-hint">Emails sent from this address</div></div>
+        <div><label class="form-label">Login Email</label><input type="email" name="email" value="{{ form.email.value|default:'' }}" class="form-ctrl" placeholder="user@taxman256.ug"></div>
+        <div><label class="form-label">Date Joined Firm</label><input type="date" name="date_joined_firm" value="{{ form.date_joined_firm.value|default:'' }}" class="form-ctrl"></div>
+        {% if is_new %}
+        <div><label class="form-label">Password <span class="req">*</span></label>
+          <input type="password" name="password1" class="form-ctrl" placeholder="Set password">
+          <div class="form-hint">Leave blank for default: taxman2025!</div></div>
+        <div><label class="form-label">Confirm Password</label><input type="password" name="password2" class="form-ctrl" placeholder="Repeat password"></div>
+        {% else %}
+        <div><label class="form-label">New Password</label>
+          <input type="password" name="password1" class="form-ctrl" placeholder="Leave blank to keep current">
+        </div>
+        <div><label class="form-label">Confirm New Password</label><input type="password" name="password2" class="form-ctrl"></div>
+        {% endif %}
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:1.2rem;margin-bottom:1rem">
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem">
+          <input type="checkbox" name="is_active" {% if form.is_active.value %}checked{% endif %}> Account Active</label>
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem">
+          <input type="checkbox" name="is_active_staff" {% if form.is_active_staff.value %}checked{% endif %}> Active Staff</label>
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem">
+          <input type="checkbox" name="receive_debt_alerts" {% if form.receive_debt_alerts.value %}checked{% endif %}> Receive Debt Alerts</label>
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem">
+          <input type="checkbox" name="receive_task_reminders" {% if form.receive_task_reminders.value %}checked{% endif %}> Receive Task Reminders</label>
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Save User</button>
+        <a href="{% url 'core:users' %}" class="btn btn-outline btn-lg">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+</div><div class="col">
+<div class="card"><div class="card-hd"><i class="fas fa-info-circle"></i>Role Permissions</div>
+<div class="card-bd" style="font-size:.82rem">
+  {% for role,label,perms in role_guide %}
+  <div style="margin-bottom:.8rem">
+    <span class="badge badge-{% if role == 'admin' %}suspended{% elif role == 'manager' %}pending_payment{% elif role == 'tax_officer' %}active{% else %}dormant{% endif %}">{{ label }}</span>
+    <div style="color:var(--muted);margin-top:.3rem;font-size:.78rem">{{ perms }}</div>
+  </div>
+  {% endfor %}
+</div></div>
+<div class="alert alert-note mt-2">
+  <i class="fas fa-key"></i> Default password for new users: <strong>taxman2025!</strong><br>
+  Ask staff to change immediately after first login.
+</div>
+</div></div>
+{% endblock %}
+{% block extra_js %}
+<script>$(document).ready(function(){$('.s2').select2({theme:'bootstrap-5',allowClear:false});});</script>
+{% endblock %}

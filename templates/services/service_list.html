@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% block title %}Service Catalogue{% endblock %}
+{% block nav_cat %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Service Catalogue</li>{% endblock %}
+{% block content %}
+<div class="page-hdr">
+  <h4 class="page-title"><i class="fas fa-list-alt"></i>Service Catalogue</h4>
+  <div class="flex gap-2">
+    <a href="{% url 'documents:price_list' %}" class="btn btn-outline btn-sm"><i class="fas fa-print"></i> Price List</a>
+    {% if can_manage_services %}
+    <button class="btn btn-primary btn-sm" onclick="document.getElementById('addModal').classList.add('open')">
+      <i class="fas fa-plus"></i> Add Service
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{% if can_manage_services %}
+<div class="alert alert-note">
+  <i class="fas fa-layer-group"></i>
+  <span>Admins and managers can add new services with pricing. Removing an in-use service archives it so past job cards keep their history.</span>
+</div>
+{% endif %}
+
+{% regroup services by get_category_display as cats %}
+{% for group in cats %}
+<div class="card mb-3">
+  <div class="card-hd">
+    <span><i class="fas fa-folder-open"></i> {{ group.grouper }}</span>
+    <span class="fs-xs text-muted">{{ group.list|length }} service(s)</span>
+  </div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Service Name</th><th class="text-r">Default Price (UGX)</th><th>Deadline Rule</th><th class="text-c">Recurring</th><th class="text-c">VAT</th><th class="text-c">Status</th>{% if can_manage_services %}<th class="text-r">Actions</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for s in group.list %}
+        <tr {% if not s.is_active %}style="opacity:.5"{% endif %}>
+          <td>
+            <div class="fw-7">{{ s.name }}</div>
+            {% if s.description %}<div class="fs-xs text-muted">{{ s.description }}</div>{% endif %}
+          </td>
+          <td class="text-r ugx">{% if s.default_price > 0 %}{{ s.default_price|floatformat:0|intcomma }}{% else %}<em class="text-muted">Negotiable</em>{% endif %}</td>
+          <td class="fs-sm text-muted">{{ s.get_deadline_type_display }}</td>
+          <td class="text-c">{% if s.is_recurring %}<span class="badge badge-open">Monthly</span>{% else %}<span style="color:#ddd">—</span>{% endif %}</td>
+          <td class="text-c">{% if s.vat_applicable %}<span class="badge badge-in_progress">+18%</span>{% else %}<span style="color:#ddd">—</span>{% endif %}</td>
+          <td class="text-c">{% if s.is_active %}<span class="badge badge-active">Active</span>{% else %}<span class="badge badge-dormant">Inactive</span>{% endif %}</td>
+          {% if can_manage_services %}
+          <td class="text-r">
+            <form method="post" action="{% url 'services:service_toggle' s.pk %}" style="display:inline">
+              {% csrf_token %}
+              {% if s.is_active %}
+              <input type="hidden" name="action" value="remove">
+              <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)"
+                data-confirm="Remove '{{ s.name }}' from the active service catalogue?">
+                <i class="fas fa-trash"></i> Remove
+              </button>
+              {% else %}
+              <input type="hidden" name="action" value="restore">
+              <button class="btn btn-outline btn-sm" style="color:var(--green);border-color:var(--green)">
+                <i class="fas fa-undo"></i> Restore
+              </button>
+              {% endif %}
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+{% if not services %}
+<div class="card"><div class="card-bd"><div class="empty-state"><i class="fas fa-list"></i><p>No services. Run <code>python manage.py setup_taxman256</code></p></div></div></div>
+{% endif %}
+
+{% if can_manage_services %}
+<!-- Add Service Modal -->
+<div class="modal-overlay{% if open_add_modal %} open{% endif %}" id="addModal">
+  <div class="modal-box">
+    <div class="modal-hd">
+      <h5><i class="fas fa-plus-circle" style="color:var(--gold)"></i> Add New Service</h5>
+      <button class="modal-close" onclick="document.getElementById('addModal').classList.remove('open')">&times;</button>
+    </div>
+    {% if service_form.non_field_errors %}
+    <div class="alert alert-danger">
+      <i class="fas fa-exclamation-circle"></i>
+      <span>{{ service_form.non_field_errors|join:', ' }}</span>
+    </div>
+    {% endif %}
+    <form method="post" action="{% url 'services:service_new' %}">{% csrf_token %}
+      <div style="margin-bottom:.8rem">
+        <label class="form-label" for="{{ service_form.name.id_for_label }}">Service Name <span class="req">*</span></label>
+        <input type="text" name="{{ service_form.name.html_name }}" id="{{ service_form.name.id_for_label }}" class="form-ctrl" placeholder="e.g. Customs Entry Processing" value="{{ service_form.name.value|default:'' }}" required>
+        {% if service_form.name.errors %}<div class="err-msg">{{ service_form.name.errors|join:', ' }}</div>{% endif %}
+      </div>
+      <div class="grid g2" style="margin-bottom:.8rem">
+        <div>
+          <label class="form-label" for="{{ service_form.category.id_for_label }}">Category <span class="req">*</span></label>
+          <select name="{{ service_form.category.html_name }}" id="{{ service_form.category.id_for_label }}" class="form-ctrl">
+            {% for value,label in service_form.fields.category.choices %}
+            <option value="{{ value }}" {% if service_form.category.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {% if service_form.category.errors %}<div class="err-msg">{{ service_form.category.errors|join:', ' }}</div>{% endif %}
+        </div>
+        <div>
+          <label class="form-label" for="{{ service_form.default_price.id_for_label }}">Default Price (UGX)</label>
+          <input type="number" name="{{ service_form.default_price.html_name }}" id="{{ service_form.default_price.id_for_label }}" class="form-ctrl" placeholder="0 = negotiable" min="0" step="1000" value="{{ service_form.default_price.value|default:'0' }}">
+          {% if service_form.default_price.errors %}<div class="err-msg">{{ service_form.default_price.errors|join:', ' }}</div>{% endif %}
+        </div>
+      </div>
+      <div class="grid g2" style="margin-bottom:.8rem">
+        <div>
+          <label class="form-label" for="{{ service_form.deadline_type.id_for_label }}">Deadline Rule</label>
+          <select name="{{ service_form.deadline_type.html_name }}" id="{{ service_form.deadline_type.id_for_label }}" class="form-ctrl">
+            {% for value,label in service_form.fields.deadline_type.choices %}
+            <option value="{{ value }}" {% if service_form.deadline_type.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {% if service_form.deadline_type.errors %}<div class="err-msg">{{ service_form.deadline_type.errors|join:', ' }}</div>{% endif %}
+        </div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:.3rem;gap:1rem;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem">
+            <input type="checkbox" name="{{ service_form.is_recurring.html_name }}" {% if service_form.is_recurring.value %}checked{% endif %}> <span>Recurring Monthly</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem">
+            <input type="checkbox" name="{{ service_form.vat_applicable.html_name }}" {% if service_form.vat_applicable.value %}checked{% endif %}> <span>VAT Applies</span>
+          </label>
+        </div>
+      </div>
+      <div style="margin-bottom:.8rem">
+        <label class="form-label" for="{{ service_form.description.id_for_label }}">Description</label>
+        <textarea name="{{ service_form.description.html_name }}" id="{{ service_form.description.id_for_label }}" class="form-ctrl" rows="3" placeholder="Optional notes shown in the catalogue">{{ service_form.description.value|default:'' }}</textarea>
+        {% if service_form.description.errors %}<div class="err-msg">{{ service_form.description.errors|join:', ' }}</div>{% endif %}
+      </div>
+      <div class="flex gap-2 mt-3">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Add Service</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('addModal').classList.remove('open')">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+

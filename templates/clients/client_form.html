@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block nav_client_new %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">{{ title }}</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-user-plus"></i>{{ title }}</h4>
+</div>
+<form method="post" novalidate>{% csrf_token %}
+<div class="layout-main-sidebar">
+  <div>
+    <div class="card-box card-compact">
+      <div class="card-head"><i class="fas fa-id-card"></i>Client Information</div>
+      <div class="card-body">
+        <div class="form-stack">
+          <div>
+            <label class="form-label">Client Type <span class="req">*</span></label>
+            <select name="client_type" class="s2" data-ph="Select type">
+              {% for val,label in form.fields.client_type.choices %}<option value="{{ val }}" {% if form.client_type.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Full Name / Company Name <span class="req">*</span></label>
+            <input type="text" name="full_name" value="{{ form.full_name.value|default:'' }}" class="form-control {% if form.full_name.errors %}is-invalid{% endif %}" placeholder="Full legal or registered name" required>
+            {% for e in form.full_name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+          <div>
+            <label class="form-label">Trading Name</label>
+            <input type="text" name="trading_name" value="{{ form.trading_name.value|default:'' }}" class="form-control" placeholder="If different from full name">
+          </div>
+          <div>
+            <label class="form-label">TIN (Tax ID)</label>
+            <input type="text" name="tin" value="{{ form.tin.value|default:'' }}" class="form-control" placeholder="e.g. 1001234567">
+            <div class="form-hint">Required before URA filing</div>
+          </div>
+          <div>
+            <label class="form-label">Primary Phone <span class="req">*</span></label>
+            <input type="text" name="phone_primary" value="{{ form.phone_primary.value|default:'' }}" class="form-control {% if form.phone_primary.errors %}is-invalid{% endif %}" placeholder="+256 700 000 000" required>
+            {% for e in form.phone_primary.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+          <div>
+            <label class="form-label">WhatsApp Number</label>
+            <input type="text" name="phone_whatsapp" value="{{ form.phone_whatsapp.value|default:'' }}" class="form-control" placeholder="+256 700 000 000">
+            <div class="form-hint">Used for automated debt reminders. Leave blank if same.</div>
+          </div>
+          <div>
+            <label class="form-label">Email Address</label>
+            <input type="email" name="email" value="{{ form.email.value|default:'' }}" class="form-control" placeholder="client@email.com">
+          </div>
+          <div>
+            <label class="form-label">District</label>
+            <select name="district" class="s2" data-ph="Select district">
+              {% for d in districts %}<option value="{{ d }}" {% if form.district.value == d %}selected{% elif not form.district.value and d == 'Kampala' %}selected{% endif %}>{{ d }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Physical Address</label>
+            <input type="text" name="physical_address" value="{{ form.physical_address.value|default:'' }}" class="form-control" placeholder="Plot No., Street, Area">
+          </div>
+          <div>
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-control" rows="2" placeholder="Any extra information">{{ form.notes.value|default:'' }}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="stack">
+    <div class="card-box card-compact">
+      <div class="card-head"><i class="fas fa-link"></i>Assignment &amp; Referral</div>
+      <div class="card-body">
+        <div style="margin-bottom:.9rem">
+          <label class="form-label">Assigned Officer</label>
+          <select name="assigned_officer" class="s2" data-ph="Search staff...">
+            <option value="">— Unassigned —</option>
+            {% for u in form.fields.assigned_officer.queryset %}
+            <option value="{{ u.pk }}" {% if form.assigned_officer.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }} ({{ u.get_role_display }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Referred By</label>
+          <select name="referred_by" class="s2" data-ph="Search clients...">
+            <option value="">— None —</option>
+            {% for c in form.fields.referred_by.queryset %}
+            <option value="{{ c.pk }}" {% if form.referred_by.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.client_id }} — {{ c.get_display_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="card-box card-compact">
+      <div class="card-head"><i class="fas fa-lightbulb"></i>Tips</div>
+      <div class="card-body">
+        <div class="alert-note mb-2">WhatsApp number is used for automated Friday reminders.</div>
+        <div class="alert-note">TIN is required before any URA return can be filed.</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="d-flex gap-2 mt-2 flex-wrap">
+  <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i>Save Client</button>
+  <a href="{% url 'clients:list' %}" class="btn btn-outline btn-lg">Cancel</a>
+  {% if client %}<a href="{% url 'services:create' %}?client={{ client.pk }}" class="btn btn-gold btn-lg ms-auto"><i class="fas fa-briefcase"></i>Create Job Card</a>{% endif %}
+</div>
+</form>
+{% endblock %}
+{% block extra_js %}
+<script>$(document).ready(function(){$('.s2').select2({theme:'bootstrap-5',allowClear:false,placeholder:function(){return $(this).data('ph')||'Search...';}});});</script>
+{% endblock %}

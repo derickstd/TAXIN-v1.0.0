@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% block title %}{{ invoice.invoice_number }}{% endblock %}
+{% block nav_inv %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">{{ invoice.invoice_number }}</li>{% endblock %}
+{% block content %}
+<div class="page-hdr">
+  <div>
+    <h4 class="page-title" style="margin-bottom:.1rem">
+      <i class="fas fa-file-invoice-dollar"></i>{{ invoice.invoice_number }}
+      {% if invoice.document_type == 'proforma' %}<span class="badge badge-proforma" style="font-size:.7rem;vertical-align:middle">PRO FORMA</span>
+      {% elif invoice.document_type == 'quotation' %}<span class="badge badge-quotation" style="font-size:.7rem;vertical-align:middle">QUOTATION</span>{% endif %}
+    </h4>
+    <span class="fs-sm text-muted">{{ invoice.client.get_display_name }} &bull; {{ invoice.date_issued }}</span>
+  </div>
+  <div class="flex gap-2 flex-wrap no-print">
+    <span class="badge badge-{{ invoice.status }}" style="padding:.3rem .8rem;font-size:.76rem">{{ invoice.get_status_display }}</span>
+    {% if invoice.document_type != 'invoice' %}
+    <form method="post" action="{% url 'billing:convert' invoice.pk %}">{% csrf_token %}
+      <button class="btn btn-primary btn-sm" data-confirm="Convert to Tax Invoice? This cannot be undone.">
+        <i class="fas fa-exchange-alt"></i> Convert to Invoice
+      </button>
+    </form>
+    {% endif %}
+    <form method="post" action="{% url 'billing:whatsapp' invoice.pk %}">{% csrf_token %}
+      <button class="btn btn-success btn-sm"><i class="fab fa-whatsapp"></i> Send WhatsApp</button>
+    </form>
+    <button onclick="window.print()" class="btn btn-outline btn-sm"><i class="fas fa-print"></i> Print</button>
+  </div>
+</div>
+
+<div class="layout-main-sidebar">
+  <!-- Invoice Document -->
+  <div>
+    <div class="card card-compact" id="invoiceDoc">
+      <div class="card-bd">
+        <!-- Letterhead -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--blue);padding-bottom:1rem;margin-bottom:1.2rem">
+          <div>
+            <div style="font-size:1.6rem;font-weight:900;color:var(--blue);letter-spacing:1px">TAXMAN256</div>
+            <div style="color:var(--muted);font-size:.8rem">Tax Consultation &amp; Compliance Services</div>
+            <div style="color:#aaa;font-size:.75rem">{{ firm_address }} &nbsp;|&nbsp; {{ firm_phone }} &nbsp;|&nbsp; {{ firm_email }}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:1.1rem;font-weight:800;color:var(--gold)">{{ invoice.get_doc_label|upper }}</div>
+            <div class="fw-7" style="font-size:1rem">{{ invoice.invoice_number }}</div>
+            <div class="fs-sm text-muted">Date: {{ invoice.date_issued }}</div>
+            <div class="fs-sm text-muted">Due: {{ invoice.due_date }}</div>
+            {% if invoice.valid_until %}<div class="fs-sm text-muted">Valid Until: {{ invoice.valid_until }}</div>{% endif %}
+            {% if invoice.days_overdue > 0 %}<div class="fs-xs" style="color:var(--red);font-weight:700">{{ invoice.days_overdue }} days overdue</div>{% endif %}
+          </div>
+        </div>
+
+        <!-- Bill To -->
+        <div style="background:#f8f9fb;padding:.75rem 1rem;border-radius:7px;margin-bottom:1rem;font-size:.84rem">
+          <div class="fw-7 mb-1">Bill To:</div>
+          <div class="fw-6">{{ invoice.client.get_display_name }}</div>
+          {% if invoice.client.tin %}<div class="text-muted">TIN: {{ invoice.client.tin }}</div>{% endif %}
+          <div class="text-muted">{{ invoice.client.phone_primary }}</div>
+          {% if invoice.client.email %}<div class="text-muted">{{ invoice.client.email }}</div>{% endif %}
+        </div>
+
+        <!-- Line Items -->
+        <div class="tbl-wrap">
+          <table class="tbl" style="border:1px solid var(--border)">
+            <thead style="background:var(--blue)">
+              <tr style="color:#fff">
+                <th>Description</th><th>Period</th>
+                <th style="text-align:right">List Rate</th>
+                <th style="text-align:right">Your Price</th>
+                <th>Status</th>
+                <th style="text-align:right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if invoice.job_card %}
+                {% for item in invoice.job_card.line_items.all %}
+                <tr>
+                  <td class="fw-6">{{ item.get_description }}</td>
+                  <td class="fs-xs text-muted">{{ item.period_label|default:"—" }}</td>
+                  <td class="ugx text-r fs-xs text-muted">{{ item.default_price|floatformat:0|intcomma }}</td>
+                  <td class="ugx text-r fw-7">{{ item.negotiated_price|floatformat:0|intcomma }}</td>
+                  <td>
+                    {% if item.status == 'handled_paid' %}<span style="color:var(--green);font-size:.73rem;font-weight:700">✓ Filed &amp; Paid</span>
+                    {% elif item.status == 'handled_not_paid' %}<span style="color:var(--orange);font-size:.73rem;font-weight:700">✓ Filed — Awaiting Payment</span>
+                    {% else %}<span class="fs-xs text-muted">Pending</span>{% endif %}
+                  </td>
+                  <td class="ugx text-r fw-7">{{ item.line_total|floatformat:0|intcomma }}</td>
+                </tr>
+                {% endfor %}
+              {% else %}
+              <tr>
+                <td colspan="4" class="fw-6">{{ invoice.notes|default:"Professional Services" }}</td>
+                <td>—</td>
+                <td class="ugx text-r fw-7">{{ invoice.grand_total|floatformat:0|intcomma }}</td>
+              </tr>
+              {% endif %}
+            </tbody>
+            <tfoot>
+              <tr style="background:#f8f9fb"><td colspan="5" class="text-r fw-7" style="padding:.6rem .85rem">Subtotal</td><td class="ugx text-r fw-7" style="padding:.6rem .85rem">UGX {{ invoice.subtotal|floatformat:0|intcomma }}</td></tr>
+              {% if invoice.vat_total > 0 %}<tr><td colspan="5" class="text-r" style="padding:.5rem .85rem">VAT (18%)</td><td class="ugx text-r" style="padding:.5rem .85rem">UGX {{ invoice.vat_total|floatformat:0|intcomma }}</td></tr>{% endif %}
+              <tr style="background:var(--blue)"><td colspan="5" class="text-r fw-8" style="color:#fff;padding:.65rem .85rem">GRAND TOTAL</td><td class="ugx text-r fw-8" style="color:#fff;padding:.65rem .85rem;font-size:1.05rem">UGX {{ invoice.grand_total|floatformat:0|intcomma }}</td></tr>
+              {% if invoice.document_type == 'invoice' %}
+              <tr style="background:#d4edda"><td colspan="5" class="text-r" style="color:#155724;padding:.6rem .85rem">Amount Paid</td><td class="ugx text-r fw-7" style="color:var(--green);padding:.6rem .85rem">(UGX {{ invoice.amount_paid|floatformat:0|intcomma }})</td></tr>
+              <tr style="background:{% if invoice.balance_due > 0 %}#f8d7da{% else %}#d4edda{% endif %}">
+                <td colspan="5" class="text-r fw-8" style="padding:.7rem .85rem;{% if invoice.balance_due > 0 %}color:#721c24{% else %}color:#155724{% endif %}">BALANCE DUE</td>
+                <td class="ugx text-r fw-8" style="padding:.7rem .85rem;font-size:1.1rem;{% if invoice.balance_due > 0 %}color:var(--red){% else %}color:var(--green){% endif %}">UGX {{ invoice.balance_due|floatformat:0|intcomma }}</td>
+              </tr>
+              {% endif %}
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- Payment info -->
+        <div class="alert alert-note mt-3" style="font-size:.78rem">
+          <i class="fas fa-money-bill-wave"></i>
+          <span><strong>Payment:</strong> Mobile Money <strong>{{ firm_phone }}</strong> (Taxman256) &nbsp;|&nbsp; Bank: Stanbic Bank &nbsp;|&nbsp; <em>Ref: {{ invoice.invoice_number }}</em></span>
+        </div>
+        {% if invoice.balance_due == 0 and invoice.document_type == 'invoice' %}
+        <div style="text-align:center;font-size:3.5rem;font-weight:900;color:var(--green);opacity:.12;letter-spacing:4px;margin-top:-1rem">PAID</div>
+        {% endif %}
+        {% if invoice.document_type == 'quotation' %}
+        <div class="alert alert-info mt-2" style="font-size:.78rem"><i class="fas fa-info-circle"></i> <span>This is a <strong>Quotation</strong> — not a binding invoice. Prices valid until {% if invoice.valid_until %}{{ invoice.valid_until }}{% else %}further notice{% endif %}.</span></div>
+        {% elif invoice.document_type == 'proforma' %}
+        <div class="alert alert-info mt-2" style="font-size:.78rem"><i class="fas fa-info-circle"></i> <span>This is a <strong>Pro Forma Invoice</strong>. Click "Convert to Invoice" when work is confirmed.</span></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right panel -->
+  <div class="no-print stack">
+    {% if invoice.balance_due > 0 and invoice.document_type == 'invoice' %}
+    <div class="card card-compact mb-3">
+      <div class="card-hd"><i class="fas fa-money-bill-wave"></i>Record Payment</div>
+      <div class="card-bd">
+        <form method="post" action="{% url 'billing:pay' invoice.pk %}">{% csrf_token %}
+          <div class="mb-2"><label class="form-label">Amount (UGX)</label>
+            <input type="number" name="amount" class="form-ctrl" value="{{ invoice.balance_due|floatformat:0 }}"></div>
+          <div class="mb-2"><label class="form-label">Method</label>
+            <select name="method" class="form-ctrl">
+              <option value="cash">Cash</option>
+              <option value="mobile_money" selected>Mobile Money</option>
+              <option value="bank_transfer">Bank Transfer</option>
+            </select></div>
+          <div class="mb-3"><label class="form-label">Reference</label>
+            <input type="text" name="reference" class="form-ctrl" placeholder="MM ID, bank ref…"></div>
+          <button class="btn btn-success w-100"><i class="fas fa-check"></i> Record Payment</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card card-compact">
+      <div class="card-hd"><i class="fas fa-history"></i>Payments</div>
+      <div class="card-bd p0">
+        {% for pmt in payments %}
+        <div style="display:flex;justify-content:space-between;padding:.6rem 1rem;border-bottom:1px solid #f3f4f6;font-size:.82rem">
+          <div><div class="fw-6 ugx-g">UGX {{ pmt.amount|floatformat:0|intcomma }}</div>
+            <div class="fs-xs text-muted">{{ pmt.get_method_display }} &bull; {{ pmt.payment_date }}</div></div>
+          <div class="fs-xs text-muted text-r">{{ pmt.received_by.get_full_name|default:"—" }}</div>
+        </div>
+        {% empty %}
+        <div style="padding:1rem;text-align:center;color:var(--muted);font-size:.83rem">No payments yet</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

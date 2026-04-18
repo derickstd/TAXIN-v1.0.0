@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% block title %}Compliance{% endblock %}
+{% block nav_comp %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Compliance</li>{% endblock %}
+{% block content %}
+<div class="page-header"><h4 class="page-title"><i class="fas fa-calendar-check"></i>Compliance Deadlines</h4></div>
+
+{% if upcoming %}
+<div class="card-box" style="margin-bottom:1rem;border-left:4px solid #e74c3c">
+  <div class="card-head" style="color:#e74c3c"><i class="fas fa-exclamation-circle"></i>Due Within 7 Days — Action Required ({{ upcoming|length }})</div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Client</th><th>Obligation</th><th>Period</th><th>Due Date</th><th>Days Left</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for d in upcoming %}
+        <tr {% if d.due_date <= today %}style="background:#fff5f5"{% endif %}>
+          <td><a href="{% url 'clients:detail' d.obligation.client.pk %}" style="font-weight:600">{{ d.obligation.client.get_display_name|truncatechars:22 }}</a></td>
+          <td style="font-size:.82rem">{{ d.obligation.service_type.name }}</td>
+          <td style="font-size:.78rem;color:#888">{{ d.period_label }}</td>
+          <td style="font-weight:700;{% if d.due_date <= today %}color:#e74c3c{% endif %}">{{ d.due_date|date:"d M Y" }}</td>
+          <td>{% if d.due_date < today %}<span class="badge badge-overdue">Overdue</span>{% elif d.due_date == today %}<span class="badge badge-pending_payment">Today!</span>{% else %}<span style="font-size:.8rem;color:#888">{{ d.due_date|timeuntil }}</span>{% endif %}</td>
+          <td>
+            <div class="action-dropdown" style="position:relative;display:inline-block">
+              <button class="btn btn-primary btn-sm dropdown-toggle" type="button" onclick="toggleDropdown(this)" aria-expanded="false">
+                <i class="fas fa-tasks"></i> Update Status
+              </button>
+              <ul class="dropdown-menu show" style="display:none;position:absolute;z-index:1000;min-width:180px;background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;margin-top:4px;">
+                <li>
+                  <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_and_paid' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-check-circle" style="color:#27ae60"></i> Filed and Paid</button>
+                  </form>
+                </li>
+                <li>
+                  <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_not_paid' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-file-check" style="color:#3498db"></i> Filed and Not Paid</button>
+                  </form>
+                </li>
+                <li>
+                  <form method="post" action="{% url 'compliance:update_status' d.pk 'paid_not_filed' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-money-bill" style="color:#f39c12"></i> Paid but Not Filed</button>
+                  </form>
+                </li>
+                <li>
+                  <form method="post" action="{% url 'compliance:update_status' d.pk 'none' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-times-circle" style="color:#95a5a6"></i> None / Reset</button>
+                  </form>
+                </li>
+              </ul>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card-box" style="margin-bottom:1rem;border-left:4px solid #27ae60">
+  <div class="card-body" style="display:flex;align-items:center;gap:.7rem;color:#27ae60;font-weight:600">
+    <i class="fas fa-check-circle" style="font-size:1.3rem"></i> No deadlines due in the next 7 days — all clear!
+  </div>
+</div>
+{% endif %}
+
+<div class="card-box">
+  <div class="card-head"><i class="fas fa-list"></i>All Deadlines</div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Client</th><th>Obligation</th><th>Period</th><th>Due Date</th><th>Status</th><th>Filed By</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for d in all_deadlines %}
+        <tr>
+          <td><a href="{% url 'clients:detail' d.obligation.client.pk %}">{{ d.obligation.client.get_display_name|truncatechars:20 }}</a></td>
+          <td style="font-size:.82rem">{{ d.obligation.service_type.name|truncatechars:24 }}</td>
+          <td style="font-size:.78rem;color:#888">{{ d.period_label }}</td>
+          <td style="font-size:.82rem;{% if d.status == 'overdue' %}color:#e74c3c;font-weight:700{% endif %}">{{ d.due_date|date:"d M Y" }}</td>
+          <td>
+            {% if d.status == 'filed_and_paid' %}
+              <span class="badge" style="background:#27ae60;color:white">{{ d.get_status_display }}</span>
+            {% elif d.status == 'filed_not_paid' %}
+              <span class="badge" style="background:#3498db;color:white">{{ d.get_status_display }}</span>
+            {% elif d.status == 'paid_not_filed' %}
+              <span class="badge" style="background:#f39c12;color:white">{{ d.get_status_display }}</span>
+            {% elif d.status == 'none' %}
+              <span class="badge" style="background:#95a5a6;color:white">{{ d.get_status_display }}</span>
+            {% else %}
+              <span class="badge badge-{{ d.status }}">{{ d.get_status_display }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size:.78rem;color:#888">{{ d.filed_by.get_full_name|default:"—" }}{% if d.filed_date %} ({{ d.filed_date|date:"d M" }}){% endif %}</td>
+          <td>
+            <div class="action-dropdown" style="position:relative;display:inline-block">
+              <button class="btn btn-outline btn-sm dropdown-toggle" type="button" onclick="toggleDropdown(this)" aria-expanded="false" style="font-size:.75rem">
+                <i class="fas fa-tasks"></i> Update
+              </button>
+              <ul class="dropdown-menu show" style="display:none;position:absolute;z-index:1000;min-width:180px;background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;margin-top:4px;">
+                <li>
+                  <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_and_paid' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-check-circle" style="color:#27ae60"></i> Filed and Paid</button>
+                  </form>
+                </li>
+                <li>
+                  <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_not_paid' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-file-check" style="color:#3498db"></i> Filed and Not Paid</button>
+                  </form>
+                </li>
+                <li>
+                  <form method="post" action="{% url 'compliance:update_status' d.pk 'paid_not_filed' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-money-bill" style="color:#f39c12"></i> Paid but Not Filed</button>
+                  </form>
+                </li>
+                <li>
+                  <form method="post" action="{% url 'compliance:update_status' d.pk 'none' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-times-circle" style="color:#95a5a6"></i> None / Reset</button>
+                  </form>
+                </li>
+              </ul>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7"><div class="empty-state"><i class="fas fa-calendar"></i><p>No compliance deadlines configured yet</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// Close all dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.action-dropdown')) {
+    document.querySelectorAll('.action-dropdown .dropdown-menu').forEach(function(menu) {
+      menu.style.display = 'none';
+    });
+  }
+});
+
+function toggleDropdown(button) {
+  var menu = button.nextElementSibling;
+  var isShown = menu.style.display === 'block';
+  
+  // Close all other dropdowns
+  document.querySelectorAll('.action-dropdown .dropdown-menu').forEach(function(m) {
+    m.style.display = 'none';
+  });
+  
+  // Toggle this dropdown
+  menu.style.display = isShown ? 'none' : 'block';
+}
+</script>
+{% endblock %}

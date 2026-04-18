@@ -1,0 +1,9 @@
+{% for c in clients %}
+<div class="px-3 py-2 border-bottom" style="cursor:pointer" onclick="selectClient({{ c.pk }}, '{{ c.client_id }} — {{ c.get_display_name }}')">
+  <strong>{{ c.client_id }}</strong> — {{ c.get_display_name }}
+  {% if c.tin %}<small class="text-muted">TIN: {{ c.tin }}</small>{% endif %}
+  <span class="stat-chip badge-{{ c.status }} float-end">{{ c.get_status_display }}</span>
+</div>
+{% empty %}
+<div class="px-3 py-2 text-muted">No matching clients found</div>
+{% endfor %}

@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Aging Report{% endblock %}
+{% block nav_billing %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">Aging Report</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-chart-bar"></i>Invoice Aging Report</h4>
+  <button onclick="window.print()" class="btn btn-outline btn-sm no-print"><i class="fas fa-print"></i> Print</button>
+</div>
+{% for bucket, invs in buckets.items %}
+<div class="card-box" style="margin-bottom:.9rem;border-left:4px solid {% if bucket == 'Current' %}#27ae60{% elif bucket == '1–30 days' %}#f39c12{% else %}#e74c3c{% endif %}">
+  <div class="card-head">
+    <span>{{ bucket }}</span>
+    <span class="ugx {% if bucket != 'Current' %}ugx-red{% else %}ugx-green{% endif %}" style="font-weight:800">UGX {{ bucket_totals|dictsort:bucket|last|last|floatformat:0|intcomma }}</span>
+  </div>
+  {% if invs %}
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Invoice</th><th>Client</th><th>Due Date</th><th>Days</th><th style="text-align:right">Balance</th><th></th></tr></thead>
+      <tbody>
+        {% for inv in invs %}
+        <tr>
+          <td><a href="{% url 'billing:detail' inv.pk %}" style="font-weight:700">{{ inv.invoice_number }}</a></td>
+          <td>{{ inv.client.get_display_name|truncatechars:22 }}</td>
+          <td style="font-size:.8rem">{{ inv.due_date }}</td>
+          <td>{% if inv.days_overdue > 0 %}<span class="badge badge-overdue">{{ inv.days_overdue }}d</span>{% else %}<span class="badge badge-active">Current</span>{% endif %}</td>
+          <td class="ugx ugx-red" style="text-align:right;font-weight:700">UGX {{ inv.balance_due|floatformat:0|intcomma }}</td>
+          <td><a href="{% url 'billing:detail' inv.pk %}" class="btn btn-outline btn-sm">Pay</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body" style="color:#aaa;font-size:.84rem;text-align:center;padding:.8rem">No invoices in this bucket ✓</div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}
+

@@ -1,0 +1,49 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Login — Taxman256</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}">
+<style>
+body{background:linear-gradient(135deg,#1A3C6E 0%,#0d2040 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+.login-card{background:#fff;border-radius:14px;padding:2.2rem;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.login-logo{text-align:center;margin-bottom:1.5rem}
+.login-logo h2{color:#1A3C6E;font-weight:900;font-size:1.8rem;letter-spacing:1px;margin:0}
+.login-logo p{color:#C8952A;font-size:.8rem;margin:.3rem 0 0}
+.form-group{margin-bottom:1rem}
+.btn-login{background:#1A3C6E;color:#fff;border:none;border-radius:7px;padding:.65rem;width:100%;font-size:.95rem;font-weight:700;cursor:pointer;margin-top:.5rem}
+.btn-login:hover{background:#122a50}
+.error-box{background:#f8d7da;color:#721c24;border-left:4px solid #e74c3c;padding:.6rem .9rem;border-radius:4px;margin-bottom:1rem;font-size:.84rem}
+.hint{text-align:center;color:#aaa;font-size:.73rem;margin-top:1.2rem}
+</style>
+</head>
+<body>
+<div class="login-card">
+  <div class="login-logo">
+    <div style="width:50px;height:50px;background:#C8952A;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto .8rem;font-size:1.4rem;color:#fff">&#9632;</div>
+    <h2>TAXMAN256</h2>
+    <p>Tax Consultation &amp; Compliance Services — Kampala, Uganda</p>
+  </div>
+  {% if form.errors %}
+  <div class="error-box"><i class="fas fa-exclamation-circle" style="margin-right:.4rem"></i>Invalid username or password. Please try again.</div>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <input type="text" name="username" class="form-control" placeholder="Enter your username" autofocus autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input type="password" name="password" class="form-control" placeholder="Enter your password" autocomplete="current-password">
+    </div>
+    <button type="submit" class="btn-login">Sign In to Taxman256</button>
+  </form>
+  <div class="hint">
+    Default: admin / admin123 &nbsp;|&nbsp; officer1 / pass1234<br>
+    Taxman256 Practice Management System v2.0
+  </div>
+</div>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</body>
+</html>

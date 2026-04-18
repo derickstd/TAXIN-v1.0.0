@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block title %}Job Cards{% endblock %}
+{% block nav_jobs %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Job Cards</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-briefcase"></i>Job Cards</h4>
+  <a href="{% url 'services:create' %}" class="btn btn-primary"><i class="fas fa-plus"></i>New Job Card</a>
+</div>
+<div class="layout-main-sidebar" style="margin-bottom:.9rem">
+  <div class="card-box card-compact">
+    <div class="card-body" style="padding:.7rem .9rem">
+      <form method="get" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+        <input type="text" name="q" value="{{ q }}" class="form-control" style="max-width:260px" placeholder="Search job number or client…">
+        <select name="status" class="form-select" style="width:auto" onchange="this.form.submit()">
+          <option value="">All Statuses</option>
+          {% for val,label in status_choices %}<option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-primary"><i class="fas fa-search"></i></button>
+        <a href="{% url 'services:list' %}" class="btn btn-outline"><i class="fas fa-times"></i></a>
+      </form>
+    </div>
+  </div>
+
+  <div class="card-box card-compact">
+    <div class="card-head"><i class="fas fa-bars-progress"></i>Status Summary</div>
+    <div class="card-body">
+      <div class="stat-row"><span>Visible Jobs</span><span class="fw-7">{{ jobs|length }}</span></div>
+      <div class="stat-row"><span>Filter</span><span class="text-muted">{{ status|default:"All" }}</span></div>
+      <div class="stat-row"><span>Board Columns</span><span class="text-muted">{{ status_choices|length }}</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Simple kanban by status groups -->
+<div class="kanban-board" style="margin-bottom:1.2rem">
+  {% for s_val,s_label in status_choices %}
+  <div class="kanban-col">
+    <div class="kanban-col-header badge-{{ s_val }}" style="margin-bottom:.7rem">
+      <span style="font-size:.7rem">{{ s_label }}</span>
+      <span style="background:rgba(0,0,0,.15);border-radius:10px;padding:0 6px;font-size:.68rem">{{ kanban|dictsort:s_val|length }}</span>
+    </div>
+    {% for job in jobs %}{% if job.status == s_val %}
+    <a href="{% url 'services:detail' job.pk %}" class="kanban-card {% if job.priority == 'urgent' %}urgent{% endif %}" style="display:block;text-decoration:none">
+      <div class="kc-title">{{ job.job_number }}</div>
+      <div class="kc-client">{{ job.client.get_display_name|truncatechars:20 }}</div>
+      <div style="font-size:.72rem;color:#aaa;margin-top:.15rem">{{ job.get_period_label }}</div>
+      <div class="kc-foot">
+        <span class="ugx" style="font-size:.75rem;color:#1A3C6E">{{ job.total_fee|floatformat:0|intcomma }}</span>
+        {% if job.priority == 'urgent' %}<span style="font-size:.62rem;color:#e74c3c">URGENT</span>{% endif %}
+      </div>
+    </a>
+    {% endif %}{% endfor %}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card-box card-compact">
+  <div class="card-head"><i class="fas fa-list"></i>All Job Cards ({{ jobs|length }})</div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Job #</th><th>Client</th><th>Period</th><th>Assigned</th><th>Total</th><th>Status</th><th>Due</th><th></th></tr></thead>
+      <tbody>
+        {% for job in jobs %}
+        <tr>
+          <td><a href="{% url 'services:detail' job.pk %}" style="font-weight:700">{{ job.job_number }}</a></td>
+          <td><a href="{% url 'clients:detail' job.client.pk %}">{{ job.client.get_display_name|truncatechars:18 }}</a></td>
+          <td style="font-size:.8rem">{{ job.get_period_label }}</td>
+          <td style="font-size:.78rem;color:#888">{{ job.assigned_to.get_full_name|default:"—" }}</td>
+          <td class="ugx" style="font-size:.82rem">{{ job.total_fee|floatformat:0|intcomma }}</td>
+          <td><span class="badge badge-{{ job.status }}">{{ job.get_status_display }}</span></td>
+          <td style="font-size:.78rem;{% if job.due_date and job.due_date < today %}color:#e74c3c;font-weight:700{% endif %}">{{ job.due_date|default:"—" }}</td>
+          <td><a href="{% url 'services:detail' job.pk %}" class="btn btn-outline btn-sm">View</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8"><div class="empty-state"><i class="fas fa-briefcase"></i><p>No job cards. <a href="{% url 'services:create' %}">Create one</a></p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

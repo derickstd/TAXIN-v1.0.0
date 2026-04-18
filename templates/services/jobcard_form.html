@@ -1,0 +1,228 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block nav_jobs %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'services:list' %}">Job Cards</a></li><li class="active">{{ title }}</li>{% endblock %}
+{% block content %}
+<div class="page-hdr">
+  <h4 class="page-title"><i class="fas fa-briefcase"></i>{{ title }}</h4>
+</div>
+<form method="post" novalidate id="jcForm">{% csrf_token %}
+<div class="layout-sidebar-main">
+
+  <!-- LEFT: Job Details + Fee Summary (sticky on desktop) -->
+  <div>
+    <div style="position:sticky;top:calc(var(--topbar-h) + 1rem)">
+      <div class="card card-compact mb-3">
+        <div class="card-hd"><i class="fas fa-info-circle"></i>Job Details</div>
+        <div class="card-bd">
+          <div class="mb-2">
+            <label class="form-label">Client <span class="req">*</span></label>
+            <select name="client" id="clientSelect" class="s2" data-ph="Type name, TIN or ID…" required>
+              <option value="">Search clients…</option>
+              {% for c in form.fields.client.queryset %}
+              <option value="{{ c.pk }}" data-tin="{{ c.tin }}" data-phone="{{ c.phone_primary }}" data-type="{{ c.get_client_type_display }}"
+                {% if form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>
+                {{ c.client_id }} — {{ c.get_display_name }}{% if c.tin %} ({{ c.tin }}){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-hint"><a href="{% url 'clients:create' %}" target="_blank"><i class="fas fa-plus"></i> New client</a></div>
+            <!-- Client info strip -->
+            <div id="clientStrip" style="display:none;margin-top:.4rem;background:#f0f4ff;border-radius:6px;padding:.4rem .7rem;font-size:.77rem">
+              <span id="stripType" style="font-weight:600;color:var(--blue)"></span>
+              &bull; <span id="stripPhone"></span>
+            </div>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Month</label>
+            <select name="period_month" id="monthSel" class="s2" data-ph="Month">
+              <option value="">Month</option>
+              {% for val,label in form.fields.period_month.choices %}{% if val %}
+              <option value="{{ val }}" {% if form.period_month.value|stringformat:"s" == val|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+              {% endif %}{% endfor %}
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Year</label>
+            <select name="period_year" id="yearSel" class="s2" data-ph="Year">
+              <option value="">Year</option>
+              {% for y in years %}<option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Assigned To</label>
+            <select name="assigned_to" class="s2" data-ph="Search staff…">
+              <option value="">— Unassigned —</option>
+              {% for u in form.fields.assigned_to.queryset %}
+              <option value="{{ u.pk }}" {% if u.role == 'tax_officer' %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Priority</label>
+            <select name="priority" class="form-ctrl">
+              {% for val,label in form.fields.priority.choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Due Date</label>
+            <input type="date" name="due_date" class="form-ctrl">
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-ctrl" rows="2" placeholder="Special instructions…"></textarea>
+          </div>
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.82rem">
+            <input type="checkbox" name="is_periodic"> <span>Recurring monthly job</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Fee Summary -->
+      <div class="card card-compact">
+        <div class="card-hd"><i class="fas fa-calculator"></i>Fee Summary</div>
+        <div class="card-bd">
+          <div class="stat-row"><span class="text-muted">Services</span><span class="fw-7" id="sumCount">0 services</span></div>
+          <div class="stat-row"><span class="text-muted">Subtotal</span><span class="ugx fw-7" id="sumTotal">UGX 0</span></div>
+          <div style="margin-top:.6rem;padding-top:.6rem;border-top:2px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span class="fw-8 text-blue">Total</span>
+            <span class="ugx fw-8" id="sumGrand" style="font-size:1.1rem;color:var(--blue)">UGX 0</span>
+          </div>
+          <div class="form-hint mt-2"><i class="fas fa-file-invoice" style="color:var(--gold)"></i> Invoice auto-generated on save</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Line Items -->
+  <div>
+    <div class="card card-compact">
+      <div class="card-hd">
+        <span><i class="fas fa-list-check"></i>Services / Line Items</span>
+        <button type="button" class="btn btn-primary btn-sm" id="addLine">
+          <i class="fas fa-plus"></i> Add Service
+        </button>
+      </div>
+      <div class="card-bd">
+        {{ formset.management_form }}
+        <div id="lineItems">
+          {% for f in formset %}
+          <div class="li-row" style="background:#f8f9fb;border:1.5px solid var(--border);border-radius:8px;padding:.85rem;margin-bottom:.7rem">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem">
+              <span class="fw-7 text-blue fs-sm li-num">Service {{ forloop.counter }}</span>
+              {% if formset.can_delete %}
+              <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;color:var(--red);font-size:.76rem">
+                {{ f.DELETE }} <span><i class="fas fa-trash"></i> Remove</span>
+              </label>
+              {% endif %}
+            </div>
+            <div class="form-stack" style="gap:.6rem">
+              <div style="grid-column:1/-1">
+                <label class="form-label fs-xs">Service Type</label>
+                <select name="{{ f.service_type.html_name }}" class="s2-svc"
+                  data-ph="Search services…" style="font-size:.83rem">
+                  <option value="">Search services…</option>
+                  {% for st in f.fields.service_type.queryset %}
+                  <option value="{{ st.pk }}" data-price="{{ st.default_price }}" data-vat="{{ st.vat_applicable|yesno:'true,false' }}"
+                    {% if f.service_type.value|stringformat:"s" == st.pk|stringformat:"s" %}selected{% endif %}>
+                    {{ st.name }} (UGX {{ st.default_price|floatformat:0|intcomma }})
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="form-label fs-xs">Agreed Price (UGX) <span class="req">*</span>
+                  <span class="li-vat-badge badge badge-in_progress" style="display:none;font-size:.58rem;margin-left:.3rem">+VAT</span>
+                </label>
+                <input type="number" name="{{ f.negotiated_price.html_name }}"
+                  value="{{ f.negotiated_price.value|default:'' }}"
+                  class="form-ctrl li-price" style="font-size:.85rem" placeholder="0" min="0" step="1000">
+              </div>
+              <div>
+                <label class="form-label fs-xs">Default / List Price</label>
+                <input type="number" name="{{ f.default_price.html_name }}"
+                  value="{{ f.default_price.value|default:'' }}"
+                  class="form-ctrl li-default" style="font-size:.85rem;background:#f0f2f5" readonly>
+              </div>
+              <div>
+                <label class="form-label fs-xs">Status</label>
+                <select name="{{ f.status.html_name }}" class="form-ctrl" style="font-size:.83rem">
+                  {% for val,label in f.fields.status.choices %}<option value="{{ val }}" {% if f.status.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="form-label fs-xs">Period Label</label>
+                <input type="text" name="{{ f.period_label.html_name }}"
+                  value="{{ f.period_label.value|default:'' }}"
+                  class="form-ctrl li-period" style="font-size:.83rem" placeholder="e.g. April 2025">
+              </div>
+              <div style="">
+                <label class="form-label fs-xs">Notes <span class="text-muted">(optional)</span></label>
+                <input type="text" name="{{ f.notes.html_name }}"
+                  value="{{ f.notes.value|default:'' }}"
+                  class="form-ctrl" style="font-size:.83rem" placeholder="Any note for this item">
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="alert alert-note mt-2" style="font-size:.78rem">
+          <i class="fas fa-info-circle"></i>
+          <span>Select a service to auto-fill the price. Agreed price can be less than the list price.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="flex gap-2 mt-2 flex-wrap">
+  <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Save &amp; Generate Invoice</button>
+  <a href="{% url 'services:list' %}" class="btn btn-outline btn-lg">Cancel</a>
+</div>
+</form>
+{% endblock %}
+{% block extra_js %}
+<script>
+$(document).ready(function(){
+  // Client select2 + auto-show info strip
+  $('#clientSelect').select2({theme:'bootstrap-5',allowClear:false,placeholder:'Type name, TIN or client ID…'});
+  $('#clientSelect').on('select2:select',function(e){
+    var opt = e.params.data.element;
+    var type = $(opt).data('type'), phone = $(opt).data('phone');
+    if(type||phone){
+      $('#stripType').text(type||'');
+      $('#stripPhone').text(phone||'');
+      $('#clientStrip').show();
+    }
+  });
+  $('#clientSelect').on('select2:clear',function(){ $('#clientStrip').hide(); });
+
+  // Service selects
+  $('.s2-svc').select2({theme:'bootstrap-5',allowClear:false,placeholder:'Search services…'});
+
+  // service select → auto-fill price
+  $(document).on('select2:select','.s2-svc',function(e){
+    var price=$(e.params.data.element).data('price')||'';
+    var vat=$(e.params.data.element).data('vat')==='true';
+    var row=$(this).closest('.li-row');
+    if(price){ row.find('.li-default').val(price); if(!row.find('.li-price').val())row.find('.li-price').val(price); }
+    row.find('.li-vat-badge').toggle(vat);
+    recalcTotal();
+  });
+  $(document).on('input','.li-price',recalcTotal);
+  $(document).on('change','.li-delete',recalcTotal);
+
+  // Period label auto-fill
+  $('#monthSel,#yearSel').on('change',function(){
+    var m=$('#monthSel option:selected').text(), y=$('#yearSel').val();
+    if(m&&y&&m!=='Month'){ $('.li-period').each(function(){if(!$(this).val())$(this).val(m+' '+y);}); }
+  });
+
+  recalcTotal();
+});
+</script>
+{% endblock %}
+

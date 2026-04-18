@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Walk-in Intake{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">Walk-in Intake</li>{% endblock %}
+{% block content %}
+<div class="page-header"><h4 class="page-title"><i class="fas fa-door-open"></i>Record Walk-in Visit</h4></div>
+<div class="form-shell">
+<div class="card-box">
+  <div class="card-head"><i class="fas fa-door-open"></i>Visit Details</div>
+  <div class="card-body">
+    <div class="alert-note" style="margin-bottom:1rem">
+      <i class="fas fa-search"></i> Search for an existing client below. Not found? <a href="{% url 'clients:create' %}" target="_blank">Register them first</a>, then come back here.
+    </div>
+    <form method="post" novalidate>{% csrf_token %}
+      <div class="form-grid-2">
+        <div class="field-span-2">
+        <label class="form-label">Client <span class="req">*</span></label>
+        <select name="client" class="form-select s2" data-ph="Search by name or client ID…" required>
+          <option value="">Select client…</option>
+          {% for c in form.fields.client.queryset %}<option value="{{ c.pk }}" {% if form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.client_id }} — {{ c.get_display_name }}</option>{% endfor %}
+        </select>
+        </div>
+        <div class="field-span-2">
+        <label class="form-label">Purpose of Visit <span class="req">*</span></label>
+        <textarea name="purpose" class="form-control" rows="3" placeholder="Why has the client come in today?" required>{{ form.purpose.value|default:'' }}</textarea>
+        </div>
+        <div>
+          <label class="form-label">Assigned Staff</label>
+          <select name="assigned_staff" class="form-select s2" data-ph="Who is handling this?">
+            <option value="">— Self —</option>
+            {% for u in form.fields.assigned_staff.queryset %}<option value="{{ u.pk }}" {% if form.assigned_staff.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Outcome</label>
+          <select name="outcome" class="form-select s2" data-ph="Select outcome">
+            {% for val,label in form.fields.outcome.choices %}<option value="{{ val }}" {% if form.outcome.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field-span-2">
+        <label class="form-label">Notes</label>
+        <textarea name="notes" class="form-control" rows="2" placeholder="Any additional observations">{{ form.notes.value|default:'' }}</textarea>
+        </div>
+      </div>
+      <div class="form-actions mt-3">
+        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i>Record Visit</button>
+        <a href="{% url 'clients:list' %}" class="btn btn-outline btn-lg">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>$(document).ready(function(){$('.s2').select2({theme:'bootstrap-5',width:'100%',allowClear:true,placeholder:function(){return $(this).data('ph')||'Search…';}});});</script>
+{% endblock %}

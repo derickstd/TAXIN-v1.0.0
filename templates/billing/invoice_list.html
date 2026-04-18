@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block title %}Invoices{% endblock %}
+{% block nav_billing %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Invoices</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-file-invoice-dollar"></i>Invoices</h4>
+  <div class="d-flex gap-2">
+    <a href="{% url 'billing:create' %}" class="btn btn-outline btn-sm"><i class="fas fa-file-medical"></i> Manual</a>
+    <a href="{% url 'billing:aging' %}" class="btn btn-outline btn-sm"><i class="fas fa-chart-bar"></i> Aging</a>
+  </div>
+</div>
+
+{% if totals.total_invoiced %}
+<div class="stats-grid" style="margin-bottom:1rem">
+  <div class="kpi"><div class="kpi-label">Total Invoiced</div><div class="kpi-value" style="font-size:1.1rem">{{ totals.total_invoiced|floatformat:0|intcomma }}</div><div class="kpi-sub">UGX</div></div>
+  <div class="kpi green"><div class="kpi-label">Total Collected</div><div class="kpi-value" style="font-size:1.1rem">{{ totals.total_paid|floatformat:0|intcomma }}</div><div class="kpi-sub">UGX</div></div>
+  <div class="kpi red"><div class="kpi-label">Outstanding</div><div class="kpi-value" style="font-size:1.1rem">{{ totals.outstanding|floatformat:0|intcomma }}</div><div class="kpi-sub">UGX</div></div>
+</div>
+{% endif %}
+
+<div class="layout-main-sidebar">
+  <div class="card-box card-compact">
+    <div class="card-body" style="padding:.7rem .9rem">
+      <form method="get" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+        <input type="text" name="q" value="{{ q }}" class="form-control" style="max-width:280px" placeholder="Invoice number or client name…">
+        <select name="status" class="form-select" style="width:auto" onchange="this.form.submit()">
+          <option value="">All Statuses</option>
+          {% for val,label in status_choices %}<option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-primary"><i class="fas fa-search"></i></button>
+        <a href="{% url 'billing:list' %}" class="btn btn-outline"><i class="fas fa-times"></i></a>
+      </form>
+    </div>
+  </div>
+
+  <div class="card-box card-compact">
+    <div class="card-head"><i class="fas fa-layer-group"></i>View Summary</div>
+    <div class="card-body">
+      <div class="stat-row"><span>Visible Invoices</span><span class="fw-7">{{ invoices|length }}</span></div>
+      <div class="stat-row"><span>Status Filter</span><span class="text-muted">{{ status|default:"All" }}</span></div>
+      <div class="stat-row"><span>Search</span><span class="text-muted">{{ q|default:"None" }}</span></div>
+      <div class="stat-row"><span>Quick Action</span><a href="{% url 'billing:create' %}">New manual invoice</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="card-box card-compact">
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Invoice #</th><th>Client</th><th>Date</th><th>Due</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for inv in invoices %}
+        <tr>
+          <td><a href="{% url 'billing:detail' inv.pk %}" style="font-weight:700">{{ inv.invoice_number }}</a></td>
+          <td><a href="{% url 'clients:detail' inv.client.pk %}">{{ inv.client.get_display_name|truncatechars:20 }}</a></td>
+          <td style="font-size:.78rem">{{ inv.date_issued }}</td>
+          <td style="font-size:.78rem;{% if inv.days_overdue > 0 %}color:#e74c3c;font-weight:700{% endif %}">{{ inv.due_date }}</td>
+          <td class="ugx">{{ inv.grand_total|floatformat:0|intcomma }}</td>
+          <td class="ugx ugx-green">{{ inv.amount_paid|floatformat:0|intcomma }}</td>
+          <td class="ugx {% if inv.balance_due > 0 %}ugx-red{% endif %}">{{ inv.balance_due|floatformat:0|intcomma }}</td>
+          <td><span class="badge badge-{{ inv.status }}">{{ inv.get_status_display }}</span></td>
+          <td><a href="{% url 'billing:detail' inv.pk %}" class="btn btn-outline btn-sm">View</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9"><div class="empty-state"><i class="fas fa-file-invoice"></i><p>No invoices found</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

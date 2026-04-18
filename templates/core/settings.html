@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block title %}My Settings{% endblock %}
+{% block nav_settings %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">My Settings</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h4 class="page-title"><i class="fas fa-palette"></i>My Settings</h4>
+    <span class="text-muted fs-sm">Update your appearance and notification preferences.</span>
+  </div>
+</div>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  <div class="layout-main-sidebar">
+    <div class="stack">
+      <div class="card-box card-compact">
+        <div class="card-head"><i class="fas fa-swatchbook"></i>Appearance</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Theme</label>
+            <select name="ui_theme" class="form-select s2" data-ph="Choose theme">
+              {% for val,label in form.fields.ui_theme.choices %}
+              <option value="{{ val }}" {% if form.ui_theme.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-hint">Your selected theme applies across the main system pages after saving.</div>
+          </div>
+
+          <div class="theme-grid">
+            {% for key,label,desc in theme_guide %}
+            <label class="theme-card{% if form.ui_theme.value == key %} selected{% endif %}" data-theme-preview="{{ key }}">
+              <input type="radio" name="theme_picker" value="{{ key }}" {% if form.ui_theme.value == key %}checked{% endif %}>
+              <span class="theme-swatch theme-swatch-{{ key }}">
+                <span></span><span></span><span></span>
+              </span>
+              <span class="theme-copy">
+                <strong>{{ label }}</strong>
+                <small>{{ desc }}</small>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="card-box card-compact">
+        <div class="card-head"><i class="fas fa-bell"></i>Notifications</div>
+        <div class="card-body">
+          <div class="grid g2">
+            <div>
+              <label class="form-label">WhatsApp Number</label>
+              <input type="text" name="phone_whatsapp" value="{{ form.phone_whatsapp.value|default:'' }}" class="form-control" placeholder="+256 700 000 000">
+              <div class="form-hint">Used for reminders and debt alerts.</div>
+            </div>
+            <div>
+              <label class="form-label">Notification Email</label>
+              <input type="email" name="email_notify" value="{{ form.email_notify.value|default:'' }}" class="form-control" placeholder="you@taxman256.ug">
+              <div class="form-hint">Where system notifications should be sent.</div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <div class="stack">
+            <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.84rem">
+              <input type="checkbox" name="receive_debt_alerts" {% if form.receive_debt_alerts.value %}checked{% endif %}>
+              <span>Receive debt alerts and finance reminders</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.84rem">
+              <input type="checkbox" name="receive_task_reminders" {% if form.receive_task_reminders.value %}checked{% endif %}>
+              <span>Receive job card and task reminder updates</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Save Settings</button>
+        <a href="{% url 'dashboard:index' %}" class="btn btn-outline btn-lg">Back</a>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card-box card-compact">
+        <div class="card-head"><i class="fas fa-user-circle"></i>Account Snapshot</div>
+        <div class="card-body">
+          <div class="stat-row"><span>Name</span><span class="fw-7">{{ user.get_full_name|default:user.username }}</span></div>
+          <div class="stat-row"><span>Role</span><span>{{ user.get_role_display }}</span></div>
+          <div class="stat-row"><span>Current Theme</span><span>{{ user.get_ui_theme_display }}</span></div>
+          <div class="stat-row"><span>WhatsApp</span><span>{{ user.phone_whatsapp|default:"Not set" }}</span></div>
+          <div class="stat-row"><span>Notification Email</span><span>{{ user.get_notify_email|default:"Not set" }}</span></div>
+        </div>
+      </div>
+
+      <div class="card-box card-compact">
+        <div class="card-head"><i class="fas fa-lightbulb"></i>Theme Notes</div>
+        <div class="card-body">
+          <div class="alert-note mb-2">Themes update the sidebar, buttons, focus states, cards, and backgrounds without changing your data.</div>
+          <div class="alert-note">Each theme is saved to your account, so your preferred look follows you when you sign in again.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
+{% block extra_js %}
+<script>
+$(document).ready(function(){
+  $('.s2').select2({theme:'bootstrap-5',width:'100%',allowClear:false});
+  $(document).on('change','input[name="theme_picker"], select[name="ui_theme"]',function(){
+    var value=$(this).val();
+    if(this.type==='radio'){
+      $('select[name="ui_theme"]').val(value).trigger('change.select2');
+    }else{
+      $('input[name="theme_picker"][value="'+value+'"]').prop('checked',true);
+    }
+    document.body.setAttribute('data-theme', value);
+    $('.theme-card').removeClass('selected');
+    $('.theme-card[data-theme-preview="'+value+'"]').addClass('selected');
+  });
+});
+</script>
+{% endblock %}

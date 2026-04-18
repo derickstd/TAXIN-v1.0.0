@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block title %}Notifications{% endblock %}
+{% block nav_notif %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Notifications</li>{% endblock %}
+{% block content %}
+<div class="page-hdr">
+  <h4 class="page-title"><i class="fas fa-bell"></i>Notification Log</h4>
+  <div class="flex gap-2 flex-wrap">
+    <form method="post" action="{% url 'notifications:send_reminders' %}">{% csrf_token %}
+      <button class="btn btn-success btn-sm"><i class="fab fa-whatsapp"></i> Send Debt Reminders</button>
+    </form>
+    <form method="post" action="{% url 'notifications:manager_report' %}">{% csrf_token %}
+      <button class="btn btn-outline btn-sm"><i class="fas fa-chart-bar"></i> Manager Report</button>
+    </form>
+    <form method="post" action="{% url 'notifications:task_reminders' %}">{% csrf_token %}
+      <button class="btn btn-outline btn-sm"><i class="fas fa-tasks"></i> Task Reminders</button>
+    </form>
+  </div>
+</div>
+
+<div class="alert alert-note mb-3">
+  <i class="fas fa-clock"></i>
+  <div>
+    <strong>Automated schedule (Africa/Kampala time):</strong><br>
+    • <strong>Every Friday 8AM</strong> — Debt reminders to all clients with outstanding balances (sent from {{ firm_phone }} / {{ firm_email }})<br>
+    • <strong>Saturday &amp; Monday 8AM</strong> — Full debt report to all managers with alerts enabled<br>
+    • <strong>Monday &amp; Thursday 9AM</strong> — Task reminders to staff with incomplete job cards<br>
+    • <strong>1st of month 7AM</strong> — Auto-generate monthly job cards for recurring clients
+  </div>
+</div>
+
+<div class="card">
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Time</th><th>Type</th><th>To</th><th>Client</th><th>Status</th><th>Message Preview</th></tr></thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td class="fs-xs" style="white-space:nowrap">{{ log.created_at|date:"d M H:i" }}</td>
+          <td><span class="badge badge-open" style="font-size:.62rem">{{ log.get_message_type_display }}</span></td>
+          <td class="fs-xs" style="font-family:monospace">{{ log.recipient_number }}</td>
+          <td class="fs-xs">{{ log.client.get_display_name|default:"Internal"|truncatechars:18 }}</td>
+          <td><span class="badge badge-{% if log.status == 'sent' or log.status == 'delivered' %}active{% elif log.status == 'failed' %}suspended{% else %}in_progress{% endif %}" style="font-size:.62rem">{{ log.get_status_display }}</span></td>
+          <td class="fs-xs text-muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ log.message_body|truncatechars:70 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6"><div class="empty-state"><i class="fas fa-bell"></i><p>No notifications yet. Click a button above to trigger one manually.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

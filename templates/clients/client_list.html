@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% block title %}Clients{% endblock %}
+{% block nav_clients %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Clients</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-users"></i>Clients</h4>
+  <a href="{% url 'clients:create' %}" class="btn btn-primary"><i class="fas fa-user-plus"></i>New Client</a>
+</div>
+
+<!-- Status chips -->
+<div class="d-flex gap-2 flex-wrap" style="margin-bottom:.8rem">
+  <a href="{% url 'clients:list' %}" class="btn btn-sm {% if not status %}btn-primary{% else %}btn-outline{% endif %}">All ({{ clients.count }})</a>
+  {% for val,label in status_choices %}
+  <a href="?status={{ val }}" class="btn btn-sm {% if status == val %}btn-primary{% else %}btn-outline{% endif %}">{{ label }} ({{ counts|dictsort:val }})</a>
+  {% endfor %}
+</div>
+
+<div class="layout-main-sidebar" style="margin-bottom:.9rem">
+  <div class="card-box card-compact">
+    <div class="card-body" style="padding:.7rem .9rem">
+      <form method="get" style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <input type="hidden" name="status" value="{{ status }}">
+        <input type="text" name="q" value="{{ q }}" class="form-control"
+          style="max-width:340px" placeholder="Search name, TIN, phone, client ID…"
+          hx-get="{% url 'clients:list' %}" hx-trigger="keyup changed delay:300ms"
+          hx-target="#client-tbody" hx-include="[name=status]">
+        <select name="type" class="form-select" style="width:auto" onchange="this.form.submit()">
+          <option value="">All Types</option>
+          {% for val,label in type_choices %}<option value="{{ val }}" {% if ctype == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-primary"><i class="fas fa-search"></i></button>
+        <a href="{% url 'clients:list' %}" class="btn btn-outline"><i class="fas fa-times"></i> Clear</a>
+      </form>
+    </div>
+  </div>
+
+  <div class="card-box card-compact">
+    <div class="card-head"><i class="fas fa-chart-simple"></i>List Summary</div>
+    <div class="card-body">
+      <div class="stat-row"><span>Visible Clients</span><span class="fw-7">{{ clients|length }}</span></div>
+      <div class="stat-row"><span>Status</span><span class="text-muted">{{ status|default:"All" }}</span></div>
+      <div class="stat-row"><span>Type</span><span class="text-muted">{{ ctype|default:"All" }}</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="card-box card-compact">
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Type</th><th>TIN</th><th>Phone</th><th>Status</th><th>Officer</th><th>Outstanding</th><th></th></tr>
+      </thead>
+      <tbody id="client-tbody">
+        {% include 'clients/partials/client_rows.html' %}
+      </tbody>
+    </table>
+  </div>
+  {% if not clients %}
+  <div class="empty-state"><i class="fas fa-users"></i><p>No clients found. <a href="{% url 'clients:create' %}">Add the first client</a></p></div>
+  {% endif %}
+</div>
+{% endblock %}

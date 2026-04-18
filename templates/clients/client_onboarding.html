@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+{% block title %}Client Onboarding{% endblock %}
+{% block nav_cnew %}{% if import_section_active == 'new_client' %}active{% endif %}{% endblock %}
+{% block nav_import %}{% if import_section_active == 'batch_import' %}active{% endif %}{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">Client Onboarding</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h4 class="page-title"><i class="fas fa-user-plus"></i>Client Onboarding</h4>
+    <span class="text-muted fs-sm">Register a new client, record a walk-in, or import a CSV from one page.</span>
+  </div>
+  <div class="quick-bar">
+    <a href="{% url 'clients:create' %}" class="btn btn-sm {% if import_section_active == 'new_client' %}btn-primary{% else %}btn-outline{% endif %}"><i class="fas fa-id-card"></i> New Client</a>
+    <a href="{% url 'clients:walkin' %}" class="btn btn-sm {% if import_section_active == 'walkin' %}btn-primary{% else %}btn-outline{% endif %}"><i class="fas fa-door-open"></i> Walk-in Intake</a>
+    <a href="{% url 'clients:import' %}" class="btn btn-sm {% if import_section_active == 'batch_import' %}btn-primary{% else %}btn-outline{% endif %}"><i class="fas fa-file-import"></i> Batch Import</a>
+  </div>
+</div>
+
+<div class="layout-main-sidebar">
+  <div class="stack">
+    <div class="card-box card-compact" id="new-client-section">
+      <div class="card-head"><i class="fas fa-id-card"></i>New Client Registration</div>
+      <div class="card-body">
+        <div class="alert-note mb-3">Add complete client details here before creating job cards, invoices, or credentials.</div>
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <div class="form-grid-2">
+            <div>
+              <label class="form-label">Client Type <span class="req">*</span></label>
+              <select name="client_type" class="form-select s2" data-ph="Select type">
+                {% for val,label in client_form.fields.client_type.choices %}<option value="{{ val }}" {% if client_form.client_type.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Full Name / Company Name <span class="req">*</span></label>
+              <input type="text" name="full_name" value="{{ client_form.full_name.value|default:'' }}" class="form-control {% if client_form.full_name.errors %}is-invalid{% endif %}" placeholder="Full legal or registered name" required>
+              {% for e in client_form.full_name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+            </div>
+            <div>
+              <label class="form-label">Trading Name</label>
+              <input type="text" name="trading_name" value="{{ client_form.trading_name.value|default:'' }}" class="form-control" placeholder="If different from full name">
+            </div>
+            <div>
+              <label class="form-label">TIN (Tax ID)</label>
+              <input type="text" name="tin" value="{{ client_form.tin.value|default:'' }}" class="form-control" placeholder="e.g. 1001234567">
+              <div class="form-hint">Required before URA filing</div>
+            </div>
+            <div>
+              <label class="form-label">Primary Phone <span class="req">*</span></label>
+              <input type="text" name="phone_primary" value="{{ client_form.phone_primary.value|default:'' }}" class="form-control {% if client_form.phone_primary.errors %}is-invalid{% endif %}" placeholder="+256 700 000 000" required>
+              {% for e in client_form.phone_primary.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+            </div>
+            <div>
+              <label class="form-label">WhatsApp Number</label>
+              <input type="text" name="phone_whatsapp" value="{{ client_form.phone_whatsapp.value|default:'' }}" class="form-control" placeholder="+256 700 000 000">
+              <div class="form-hint">Used for automated debt reminders. Leave blank if same.</div>
+            </div>
+            <div>
+              <label class="form-label">Email Address</label>
+              <input type="email" name="email" value="{{ client_form.email.value|default:'' }}" class="form-control" placeholder="client@email.com">
+            </div>
+            <div>
+              <label class="form-label">District</label>
+              <select name="district" class="form-select s2" data-ph="Select district">
+                {% for d in districts %}<option value="{{ d }}" {% if client_form.district.value == d %}selected{% elif not client_form.district.value and d == 'Kampala' %}selected{% endif %}>{{ d }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="field-span-2">
+              <label class="form-label">Physical Address</label>
+              <input type="text" name="physical_address" value="{{ client_form.physical_address.value|default:'' }}" class="form-control" placeholder="Plot No., Street, Area">
+            </div>
+            <div>
+              <label class="form-label">Assigned Officer</label>
+              <select name="assigned_officer" class="form-select s2" data-ph="Search staff...">
+                <option value="">— Unassigned —</option>
+                {% for u in client_form.fields.assigned_officer.queryset %}
+                <option value="{{ u.pk }}" {% if client_form.assigned_officer.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }} ({{ u.get_role_display }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Referred By</label>
+              <select name="referred_by" class="form-select s2" data-ph="Search clients...">
+                <option value="">— None —</option>
+                {% for c in client_form.fields.referred_by.queryset %}
+                <option value="{{ c.pk }}" {% if client_form.referred_by.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.client_id }} — {{ c.get_display_name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field-span-2">
+              <label class="form-label">Notes</label>
+              <textarea name="notes" class="form-control" rows="2" placeholder="Any extra information">{{ client_form.notes.value|default:'' }}</textarea>
+            </div>
+          </div>
+          <div class="form-actions mt-3">
+            <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Save Client</button>
+            <a href="{% url 'clients:list' %}" class="btn btn-outline btn-lg">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="card-box card-compact" id="walkin-section">
+      <div class="card-head"><i class="fas fa-door-open"></i>Walk-in Intake</div>
+      <div class="card-body">
+        <div class="alert-note mb-3">Use this when an existing client visits the office and you want to capture why they came in.</div>
+        <form method="post" novalidate action="{% url 'clients:walkin' %}">
+          {% csrf_token %}
+          <div class="form-stack">
+            <div>
+              <label class="form-label">Client <span class="req">*</span></label>
+              <select name="client" class="form-select s2" data-ph="Search by name or client ID…" required>
+                <option value="">Select client…</option>
+                {% for c in walkin_form.fields.client.queryset %}<option value="{{ c.pk }}" {% if walkin_form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.client_id }} — {{ c.get_display_name }}</option>{% endfor %}
+              </select>
+              {% for e in walkin_form.client.errors %}<div class="err-msg">{{ e }}</div>{% endfor %}
+            </div>
+            <div>
+              <label class="form-label">Purpose of Visit <span class="req">*</span></label>
+              <textarea name="purpose" class="form-control" rows="3" placeholder="Why has the client come in today?" required>{{ walkin_form.purpose.value|default:'' }}</textarea>
+              {% for e in walkin_form.purpose.errors %}<div class="err-msg">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="form-grid-2">
+              <div>
+                <label class="form-label">Assigned Staff</label>
+                <select name="assigned_staff" class="form-select s2" data-ph="Who is handling this?">
+                  <option value="">— Self —</option>
+                  {% for u in walkin_form.fields.assigned_staff.queryset %}<option value="{{ u.pk }}" {% if walkin_form.assigned_staff.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="form-label">Outcome</label>
+                <select name="outcome" class="form-select s2" data-ph="Select outcome">
+                  {% for val,label in walkin_form.fields.outcome.choices %}<option value="{{ val }}" {% if walkin_form.outcome.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="form-label">Notes</label>
+              <textarea name="notes" class="form-control" rows="2" placeholder="Any additional observations">{{ walkin_form.notes.value|default:'' }}</textarea>
+            </div>
+          </div>
+          <div class="form-actions mt-3">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Record Visit</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card-box card-compact" id="import-section">
+      <div class="card-head"><i class="fas fa-file-import"></i>Batch Import</div>
+      <div class="card-body">
+        <div class="alert-note mb-3">
+          Upload a CSV file with client data.
+          <a href="#" onclick="downloadTemplate(); return false;" style="font-weight:700">Download template CSV</a>
+        </div>
+        {% if import_errors %}
+        <div class="alert alert-warning">
+          <i class="fas fa-triangle-exclamation"></i>
+          <span>{{ import_errors|join:' | ' }}</span>
+        </div>
+        {% endif %}
+        <form method="post" enctype="multipart/form-data" novalidate action="{% url 'clients:import' %}">
+          {% csrf_token %}
+          <div class="form-stack">
+            <div>
+              <label class="form-label">CSV File <span class="req">*</span></label>
+              <input type="file" id="importFile" name="csv_file" class="form-ctrl" accept=".csv,.txt" required>
+              <div class="form-hint">Max 500 rows per import. Duplicate phones are skipped.</div>
+            </div>
+            <div class="tbl-wrap">
+              <table class="tbl">
+                <thead><tr><th>Column</th><th>Required</th><th>Example</th></tr></thead>
+                <tbody>
+                  <tr><td><code>full_name</code></td><td><span class="badge badge-suspended">Yes</span></td><td>Kampala Traders Ltd</td></tr>
+                  <tr><td><code>phone_primary</code></td><td><span class="badge badge-suspended">Yes</span></td><td>+256700100001</td></tr>
+                  <tr><td><code>client_type</code></td><td><span class="badge badge-dormant">No</span></td><td>individual / company / ngo</td></tr>
+                  <tr><td><code>trading_name</code></td><td><span class="badge badge-dormant">No</span></td><td>KT Ltd</td></tr>
+                  <tr><td><code>tin</code></td><td><span class="badge badge-dormant">No</span></td><td>1001234567</td></tr>
+                  <tr><td><code>email</code></td><td><span class="badge badge-dormant">No</span></td><td>client@mail.com</td></tr>
+                  <tr><td><code>phone_whatsapp</code></td><td><span class="badge badge-dormant">No</span></td><td>+256700100001</td></tr>
+                  <tr><td><code>district</code></td><td><span class="badge badge-dormant">No</span></td><td>Kampala</td></tr>
+                  <tr><td><code>address</code></td><td><span class="badge badge-dormant">No</span></td><td>Plot 5, Main Street</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="form-actions mt-3">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-cloud-upload-alt"></i> Import Clients</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+$(document).ready(function(){
+  $('.s2').select2({theme:'bootstrap-5',width:'100%',allowClear:true,placeholder:function(){return $(this).data('ph')||'Search...';}});
+  var target = '{{ import_section_active }}';
+  var ids = {
+    walkin: '#walkin-section',
+    batch_import: '#import-section'
+  };
+  if(ids[target]){
+    var node = $(ids[target]);
+    if(node.length){
+      $('html, body').animate({scrollTop: Math.max(node.offset().top - 84, 0)}, 150);
+    }
+  }
+});
+
+function downloadTemplate(){
+  var csv='full_name,phone_primary,client_type,trading_name,tin,email,phone_whatsapp,district\n'+
+    'Kampala Traders Ltd,+256700100001,company,KT Ltd,1001234567,info@kt.co.ug,+256700100001,Kampala\n'+
+    'Sarah Namukasa,+256700200002,individual,,1009876543,sarah@mail.com,,Wakiso\n';
+  var a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='taxman256_clients_template.csv';
+  a.click();
+}
+</script>
+{% endblock %}

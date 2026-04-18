@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% block title %}Create Invoice / Quotation{% endblock %}
+{% block nav_inv %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">Create Document</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-file-invoice"></i>Create Invoice / Quotation</h4>
+</div>
+<div class="form-shell">
+<div class="card-box">
+  <div class="card-head"><i class="fas fa-file-alt"></i>Document Details</div>
+  <div class="card-body">
+    <div class="alert-note" style="margin-bottom:1rem">
+      <i class="fas fa-info-circle"></i>
+      <div><strong>Tax Invoice</strong> = final bill with payment obligation.<br>
+      <strong>Pro Forma Invoice</strong> = preliminary invoice before work begins.<br>
+      <strong>Quotation</strong> = price offer, no payment obligation yet.<br>
+      Both Pro Forma and Quotation can be converted to a Tax Invoice when work is confirmed.</div>
+    </div>
+    <form method="post" novalidate>{% csrf_token %}
+      <input type="hidden" name="document_type" value="">
+      <div style="margin-bottom:1.1rem">
+        <label class="form-label">Document Type <span class="req">*</span></label>
+        <div class="doc-type-btns">
+          <button type="button" class="doc-type-btn" data-val="invoice">
+            <i class="fas fa-file-invoice-dollar"></i> Tax Invoice <i class="fas fa-chevron-down"></i>
+          </button>
+          <button type="button" class="doc-type-btn" data-val="proforma">
+            <i class="fas fa-file-alt"></i> Pro Forma <i class="fas fa-chevron-down"></i>
+          </button>
+          <button type="button" class="doc-type-btn" data-val="quotation">
+            <i class="fas fa-tags"></i> Quotation <i class="fas fa-chevron-down"></i>
+          </button>
+        </div>
+      </div>
+      <div id="doc-fields" style="display:none">
+      <div class="form-grid-2">
+        <div class="field-span-2">
+        <label class="form-label">Client <span class="req">*</span></label>
+        <select name="client" class="s2" data-ph="Search clients…" required>
+          <option value="">Select client…</option>
+          {% for c in clients %}<option value="{{ c.pk }}">{{ c.client_id }} — {{ c.get_display_name }}</option>{% endfor %}
+        </select>
+        <div class="form-hint"><a href="{% url 'clients:create' %}" target="_blank"><i class="fas fa-plus"></i> Register new client</a></div>
+        </div>
+        <div class="field-span-2">
+        <label class="form-label">Description / Scope of Work <span class="req">*</span></label>
+        <textarea name="description" class="form-control" rows="3" placeholder="e.g. Tax advisory — April 2025" required></textarea>
+        </div>
+        <div>
+        <label class="form-label">Amount (UGX) <span class="req">*</span></label>
+        <input type="number" name="amount" class="form-control" placeholder="e.g. 150000" min="1" required>
+        </div>
+        <div id="due-date-field">
+        <label class="form-label">Due Date</label>
+        <input type="date" name="due_date" class="form-control">
+        <div class="form-hint" id="due-date-hint">Leave blank for 14 days from today</div>
+        </div>
+        <div id="valid-until-field" style="display:none">
+        <label class="form-label">Valid Until</label>
+        <input type="date" name="valid_until" class="form-control">
+        <div class="form-hint">Expiry date for this quote/proforma</div>
+        </div>
+      </div>
+      <div class="form-actions mt-3">
+        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Create Document</button>
+        <a href="{% url 'billing:list' %}" class="btn btn-outline btn-lg">Cancel</a>
+      </div>
+      </div>
+    </form>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+$(document).ready(function(){
+  $('.s2').select2({theme:'bootstrap-5',allowClear:false,placeholder:function(){return $(this).data('ph')||'Search…';}});
+
+  function applyDocType(docType){
+    if(!docType){ $('#doc-fields').hide(); return; }
+    $('#doc-fields').show();
+    if(docType==='invoice'){
+      $('#due-date-field').show();
+      $('#due-date-hint').text('Leave blank for 14 days from today');
+      $('#valid-until-field').hide();
+    } else {
+      $('#due-date-field').show();
+      $('#due-date-hint').text('Leave blank for 30 days from today');
+      $('#valid-until-field').show();
+    }
+  }
+
+  $('.doc-type-btn').on('click', function(){
+    var val=$(this).data('val');
+    $('.doc-type-btn').removeClass('selected');
+    $(this).addClass('selected');
+    $('input[name=document_type]').val(val);
+    applyDocType(val);
+  });
+});
+</script>
+{% endblock %}

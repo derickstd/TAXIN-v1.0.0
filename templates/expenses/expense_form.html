@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block title %}Log Expense{% endblock %}
+{% block nav_exp %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'expenses:list' %}">Expenses</a></li><li class="active">New Expense</li>{% endblock %}
+{% block content %}
+<div class="page-header"><h4 class="page-title"><i class="fas fa-receipt"></i>Log New Expense</h4></div>
+<div class="form-shell-wide">
+<div class="card-box">
+  <div class="card-head"><i class="fas fa-receipt"></i>Expense Details</div>
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
+      <div class="form-stack">
+        <div>
+          <label class="form-label">Date <span class="req">*</span></label>
+          <input type="date" name="expense_date" value="{{ today }}" class="form-control" required>
+        </div>
+        <div>
+          <label class="form-label">Category <span class="req">*</span></label>
+          <select name="category" class="s2" data-ph="Search categories..." required>
+            <option value="">Select category...</option>
+            {% for cat in form.fields.category.queryset %}
+            <option value="{{ cat.pk }}">{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-hint"><a href="/admin/expenses/expensecategory/add/" target="_blank"><i class="fas fa-plus"></i> Add new category</a></div>
+        </div>
+        <div>
+          <label class="form-label">Description <span class="req">*</span></label>
+          <textarea name="description" class="form-control" rows="2" placeholder="What was this expense for?" required></textarea>
+        </div>
+        <div>
+          <label class="form-label">Amount (UGX) <span class="req">*</span></label>
+          <input type="number" name="amount" class="form-control" placeholder="e.g. 50000" min="0" required>
+        </div>
+        <div>
+          <label class="form-label">Payment Method</label>
+          <select name="payment_method" class="s2" data-ph="Select method">
+            {% for val,label in form.fields.payment_method.choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Reference / Receipt No.</label>
+          <input type="text" name="reference" class="form-control" placeholder="MM transaction ID, receipt...">
+        </div>
+        <div>
+          <label class="form-label">Receipt Photo</label>
+          <input type="file" name="receipt_upload" class="form-control" accept="image/*,.pdf">
+        </div>
+        <div>
+          <label class="form-label">Linked Client <span style="color:#aaa">(optional)</span></label>
+          <select name="client" class="s2" data-ph="Search clients...">
+            <option value="">— None —</option>
+            {% for c in form.fields.client.queryset %}<option value="{{ c.pk }}">{{ c.client_id }} — {{ c.get_display_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Linked Job Card <span style="color:#aaa">(optional)</span></label>
+          <select name="job_card" class="s2" data-ph="Search job cards...">
+            <option value="">— None —</option>
+            {% for j in form.fields.job_card.queryset %}<option value="{{ j.pk }}">{{ j.job_number }} — {{ j.client.get_display_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">
+            <input type="checkbox" name="is_billable"><span>This expense is billable to the client</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-actions mt-3">
+        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i>Save Expense</button>
+        <a href="{% url 'expenses:list' %}" class="btn btn-outline btn-lg">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>$(document).ready(function(){$('.s2').select2({theme:'bootstrap-5',allowClear:false,placeholder:function(){return $(this).data('ph')||'Search...';}});});</script>
+{% endblock %}

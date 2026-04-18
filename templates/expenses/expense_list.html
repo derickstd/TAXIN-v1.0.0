@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}Expenses{% endblock %}
+{% block nav_exp %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Expenses</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-receipt"></i>Expenses</h4>
+  <a href="{% url 'expenses:create' %}" class="btn btn-primary"><i class="fas fa-plus"></i>Log Expense</a>
+</div>
+
+<div class="stats-grid" style="margin-bottom:1rem">
+  <div class="kpi red"><div class="kpi-label">Total Expenses</div><div class="kpi-value" style="font-size:1.1rem">{{ total|floatformat:0|intcomma }}</div><div class="kpi-sub">UGX all time</div></div>
+  <div class="kpi"><div class="kpi-label">Approved</div><div class="kpi-value" style="font-size:1.1rem">{{ approved_total|floatformat:0|intcomma }}</div><div class="kpi-sub">UGX approved</div></div>
+  <div class="kpi gold"><div class="kpi-label">Pending Approval</div><div class="kpi-value" style="font-size:1.1rem">{{ pending_count }}</div><div class="kpi-sub">expenses awaiting</div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card-box card-compact" style="margin-bottom:.9rem">
+      <div class="card-body" style="padding:.7rem 1rem">
+        <form method="get" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+          <select name="category" class="form-select s2" style="max-width:240px" data-ph="Filter by category…">
+            <option value="">All Categories</option>
+            {% for cat in categories %}<option value="{{ cat.pk }}" {% if cat.pk|stringformat:"s" == cat_filter %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}
+          </select>
+          <button class="btn btn-primary btn-sm">Filter</button>
+          <a href="{% url 'expenses:list' %}" class="btn btn-outline btn-sm">Clear</a>
+        </form>
+      </div>
+    </div>
+    <div class="card-box card-compact">
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Method</th><th>By</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {% for exp in expenses %}
+            <tr>
+              <td style="font-size:.78rem;white-space:nowrap">{{ exp.expense_date }}</td>
+              <td style="font-size:.78rem">{{ exp.category.name|truncatechars:18 }}</td>
+              <td style="font-size:.82rem">{{ exp.description|truncatechars:28 }}</td>
+              <td class="ugx ugx-red" style="font-size:.82rem;white-space:nowrap">{{ exp.amount|floatformat:0|intcomma }}</td>
+              <td style="font-size:.75rem;color:#888">{{ exp.get_payment_method_display }}</td>
+              <td style="font-size:.75rem;color:#888">{{ exp.paid_by.get_full_name|default:"—"|truncatechars:12 }}</td>
+              <td>
+                <span class="badge badge-{% if exp.status == 'approved' %}active{% elif exp.status == 'rejected' %}suspended{% else %}in_progress{% endif %}">
+                  {{ exp.get_status_display }}
+                </span>
+              </td>
+              <td>
+                {% if exp.status == 'submitted' and user.is_manager_or_admin %}
+                <form method="post" action="{% url 'expenses:approve' exp.pk %}">{% csrf_token %}
+                  <button class="btn btn-success btn-sm">Approve</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i class="fas fa-receipt"></i><p>No expenses logged yet. <a href="{% url 'expenses:create' %}">Log one</a></p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card-box card-compact">
+      <div class="card-head"><i class="fas fa-chart-pie"></i>By Category</div>
+      <div class="card-body p0">
+        {% for item in by_cat %}
+        <div class="stat-row" style="padding:.45rem 1rem">
+          <span style="font-size:.82rem">{{ item.category__name|default:"Other" }}</span>
+          <span class="ugx ugx-red" style="font-size:.82rem">{{ item.total|floatformat:0|intcomma }}</span>
+        </div>
+        {% empty %}
+        <div style="padding:1rem;text-align:center;color:#aaa;font-size:.83rem">No data yet</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>$(document).ready(function(){$('.s2').select2({theme:'bootstrap-5',width:'100%',allowClear:true,placeholder:function(){return $(this).data('ph')||'Search…';}});});</script>
+{% endblock %}
+

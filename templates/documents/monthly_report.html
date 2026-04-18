@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% block title %}Monthly Report — {{ month_name }} {{ year }}{% endblock %}
+{% block breadcrumbs %}
+<li class="breadcrumb-item"><a href="{% url 'documents:home' %}">Documents</a></li>
+<li class="breadcrumb-item active">Monthly Report</li>
+{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h4 class="page-title"><i class="fas fa-chart-line me-2 text-gold"></i>Monthly Report — {{ month_name }} {{ year }}</h4>
+  <div class="d-flex gap-2 flex-wrap no-print">
+    <form method="get" class="d-flex gap-2 flex-wrap">
+      <select name="month" class="form-select form-select-sm select2" style="width:130px">
+        {% for i,mn in months %}
+        <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ mn }}</option>
+        {% endfor %}
+      </select>
+      <select name="year" class="form-select form-select-sm" style="width:90px">
+        {% for y in years %}
+        <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-sm btn-brand">Load</button>
+    </form>
+    <button onclick="window.print()" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-print me-1"></i>Print
+    </button>
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="stats-grid mb-4">
+  <div class="kpi-card">
+    <div class="kpi-label">Invoiced</div>
+    <div class="kpi-value">{{ total_invoiced|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">UGX</div>
+  </div>
+  <div class="kpi-card green">
+    <div class="kpi-label">Collected</div>
+    <div class="kpi-value">{{ total_collected|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">{{ collection_rate }}% rate</div>
+  </div>
+  <div class="kpi-card red">
+    <div class="kpi-label">Expenses</div>
+    <div class="kpi-value">{{ total_expenses|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">UGX approved</div>
+  </div>
+  <div class="kpi-card {% if net_profit >= 0 %}gold{% else %}red{% endif %}">
+    <div class="kpi-label">Net Profit Est.</div>
+    <div class="kpi-value">{{ net_profit|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">UGX</div>
+  </div>
+</div>
+
+<div class="cards-grid-2">
+  <div>
+    <div class="card-box card-compact">
+      <div class="card-box-header"><i class="fas fa-trophy me-2"></i>Top Clients by Revenue</div>
+      <div class="card-box-body p-0">
+        <table class="table table-taxman mb-0">
+          <thead><tr><th>#</th><th>Client</th><th>Revenue (UGX)</th></tr></thead>
+          <tbody>
+            {% for c in top_clients %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td><a href="{% url 'clients:detail' c.pk %}">{{ c.get_display_name }}</a></td>
+              <td class="ugx">{{ c.revenue|floatformat:0|intcomma }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-center text-muted py-3">No data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="card-box card-compact">
+      <div class="card-box-header"><i class="fas fa-receipt me-2"></i>Expenses by Category</div>
+      <div class="card-box-body p-0">
+        <table class="table table-taxman mb-0">
+          <thead><tr><th>Category</th><th>Amount (UGX)</th></tr></thead>
+          <tbody>
+            {% for e in exp_by_cat %}
+            <tr>
+              <td>{{ e.category__name|default:"Other" }}</td>
+              <td class="ugx">{{ e.total|floatformat:0|intcomma }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="2" class="text-center text-muted py-3">No approved expenses this month</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cards-grid-2 mt-1">
+  <div>
+    <div class="card-box card-compact">
+      <div class="card-box-header"><i class="fas fa-briefcase me-2"></i>Job Cards Summary</div>
+      <div class="card-box-body">
+        {% for s, cnt in job_summary.items %}
+        <div class="stat-row">
+          <span><span class="badge-status badge-{{ s }}">{{ s|title }}</span></span>
+          <span class="fw-bold">{{ cnt }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="card-box card-compact">
+      <div class="card-box-header"><i class="fas fa-file-invoice me-2"></i>Invoice Summary</div>
+      <div class="card-box-body">
+        {% for s, cnt in invoice_summary.items %}
+        <div class="stat-row">
+          <span><span class="badge-status badge-{{ s }}">{{ s|title }}</span></span>
+          <span class="fw-bold">{{ cnt }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

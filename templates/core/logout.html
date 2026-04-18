@@ -1,0 +1,28 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signed Out — Taxman256</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}">
+<style>
+body{background:linear-gradient(135deg,#1A3C6E 0%,#0d2040 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+.card{background:#fff;border-radius:14px;padding:2.4rem 2.2rem;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center}
+.icon{width:60px;height:60px;background:#f0f4ff;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.2rem;font-size:1.6rem;color:#1A3C6E}
+h2{color:#1A3C6E;font-weight:900;font-size:1.4rem;margin:0 0 .4rem}
+p{color:#888;font-size:.85rem;margin:0 0 1.6rem}
+.btn-login{display:block;background:#1A3C6E;color:#fff;border:none;border-radius:7px;padding:.65rem;width:100%;font-size:.92rem;font-weight:700;cursor:pointer;text-decoration:none}
+.btn-login:hover{background:#122a50;color:#fff}
+.hint{color:#bbb;font-size:.72rem;margin-top:1.1rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon"><i class="fas fa-sign-out-alt"></i></div>
+  <h2>You've been signed out</h2>
+  <p>Your session has ended. Sign back in to continue using Taxman256.</p>
+  <a href="{% url 'login' %}" class="btn-login">Sign In Again</a>
+  <div class="hint">Taxman256 Practice Management System</div>
+</div>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</body>
+</html>

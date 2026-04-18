@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% block title %}Batch Import Clients{% endblock %}
+{% block nav_import %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">Batch Import</li>{% endblock %}
+{% block content %}
+<div class="page-hdr"><h4 class="page-title"><i class="fas fa-file-import"></i>Batch Import Clients</h4></div>
+<div class="form-shell-wide">
+<div class="cards-grid-2">
+<div class="card form-panel">
+  <div class="card-hd"><i class="fas fa-upload"></i>Upload CSV File</div>
+  <div class="card-bd">
+    <div class="alert alert-note mb-3">
+      <i class="fas fa-info-circle"></i>
+      <div>Upload a CSV file with client data. <a href="#" onclick="downloadTemplate(); return false;" style="font-weight:700">Download template CSV</a></div>
+    </div>
+    <form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
+      <div class="form-grid-2" style="margin-bottom:1rem">
+        <div class="field-span-2">
+        <label class="form-label">CSV File <span class="req">*</span></label>
+        <input type="file" id="importFile" name="csv_file" class="form-ctrl" accept=".csv,.txt" required>
+        <div class="form-hint">Max 500 rows per import. Duplicate phones are skipped.</div>
+        </div>
+      </div>
+      <div id="importPreview" style="margin-bottom:1rem"></div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-cloud-upload-alt"></i> Import Clients</button>
+        <a href="{% url 'clients:list' %}" class="btn btn-outline btn-lg">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+<div class="card form-panel"><div class="card-hd"><i class="fas fa-table"></i>Required CSV Format</div>
+<div class="card-bd" style="font-size:.82rem">
+  <p>Your CSV must have a header row. Supported column names:</p>
+  <table class="tbl">
+    <thead><tr><th>Column</th><th>Required</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><code>full_name</code></td><td><span class="badge badge-suspended">Yes</span></td><td>Kampala Traders Ltd</td></tr>
+      <tr><td><code>phone_primary</code></td><td><span class="badge badge-suspended">Yes</span></td><td>+256700100001</td></tr>
+      <tr><td><code>client_type</code></td><td><span class="badge badge-dormant">No</span></td><td>individual / company / ngo</td></tr>
+      <tr><td><code>trading_name</code></td><td><span class="badge badge-dormant">No</span></td><td>KT Ltd</td></tr>
+      <tr><td><code>tin</code></td><td><span class="badge badge-dormant">No</span></td><td>1001234567</td></tr>
+      <tr><td><code>email</code></td><td><span class="badge badge-dormant">No</span></td><td>client@mail.com</td></tr>
+      <tr><td><code>phone_whatsapp</code></td><td><span class="badge badge-dormant">No</span></td><td>+256700100001</td></tr>
+      <tr><td><code>district</code></td><td><span class="badge badge-dormant">No</span></td><td>Kampala</td></tr>
+      <tr><td><code>address</code></td><td><span class="badge badge-dormant">No</span></td><td>Plot 5, Main Street</td></tr>
+    </tbody>
+  </table>
+</div></div>
+</div>
+</div>
+<script>
+function downloadTemplate(){
+  var csv='full_name,phone_primary,client_type,trading_name,tin,email,phone_whatsapp,district\n'+
+    'Kampala Traders Ltd,+256700100001,company,KT Ltd,1001234567,info@kt.co.ug,+256700100001,Kampala\n'+
+    'Sarah Namukasa,+256700200002,individual,,1009876543,sarah@mail.com,,Wakiso\n';
+  var a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='taxman256_clients_template.csv';
+  a.click();
+}
+</script>
+{% endblock %}
