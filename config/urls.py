@@ -4,12 +4,14 @@ from django.contrib.auth import views as auth_views
 from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
+from core.views import service_worker
 
 urlpatterns = [
     path('', lambda r: redirect('dashboard:index'), name='home'),
     path('admin/', admin.site.urls),
     path('login/',  auth_views.LoginView.as_view(template_name='core/login.html'), name='login'),
     path('logout/', auth_views.LogoutView.as_view(template_name='core/logout.html'), name='logout'),
+    path('sw.js',   service_worker, name='sw'),
     path('dashboard/',     include('dashboard.urls')),
     path('clients/',       include('clients.urls')),
     path('jobs/',          include('services.urls')),

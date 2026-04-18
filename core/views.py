@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.views.decorators.cache import never_cache
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.hashers import make_password
@@ -34,6 +35,21 @@ class UserSettingsForm(forms.ModelForm):
             'first_name', 'last_name', 'email_notify', 'phone_whatsapp',
             'receive_debt_alerts', 'receive_task_reminders', 'ui_theme',
         ]
+
+
+@never_cache
+def offline(request):
+    return render(request, 'core/offline.html')
+
+
+def service_worker(request):
+    import os
+    from django.http import HttpResponse
+    from django.conf import settings
+    sw_path = os.path.join(settings.BASE_DIR, 'static', 'sw.js')
+    with open(sw_path, 'r') as f:
+        content = f.read()
+    return HttpResponse(content, content_type='application/javascript')
 
 
 def _require_admin(request):
@@ -140,30 +156,6 @@ def change_password(request):
 
 @login_required
 def user_settings(request):
-    theme_guide = [
-        ('classic',  'Classic Blue',  'The original Taxman256 look — strong blue navigation with gold accents.'),
-        ('forest',   'Forest Ledger', 'A calmer green-led palette suited for long working sessions.'),
-        ('sunset',   'Sunset Copper', 'A warmer orange and navy mix with softer surfaces.'),
-        ('midnight', 'Midnight Slate','A deeper slate theme with cooler contrast for focused work.'),
-        ('dark',     'Dark Mode',     'A true dark interface with higher contrast surfaces for low-light work.'),
-        ('ocean',    'Ocean Teal',    'A fresh cyan and teal palette inspired by coastal clarity.'),
-        ('rose',     'Rose Gold',     'A bold pink and gold combination for a distinctive look.'),
-        ('charcoal', 'Charcoal Pro',  'A near-black dark theme with amber accents for a premium feel.'),
-        ('violet',   'Violet Dusk',   'A rich purple palette with warm gold highlights.'),
-        ('earth',    'Earth Brown',   'A warm earthy tone with deep brown and amber — grounded and natural.'),
-    ]
-    if request.method == 'POST':
-        form = UserSettingsForm(request.POST, instance=request.user)
-        if form.is_valid():
-            form.save()
-            messages.success(request, 'Your settings were updated.')
-            return redirect('core:settings')
-    else:
-        form = UserSettingsForm(instance=request.user)
-    return render(request, 'core/settings.html', {
-        'form': form,
-        'theme_guide': theme_guide,
-    })
     theme_guide = [
         ('classic',  'Classic Blue',  'The original Taxman256 look — strong blue navigation with gold accents.'),
         ('forest',   'Forest Ledger', 'A calmer green-led palette suited for long working sessions.'),

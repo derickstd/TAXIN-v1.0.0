@@ -1,0 +1,29 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Offline — Taxman256</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}">
+<style>
+body{background:linear-gradient(135deg,#1A3C6E 0%,#0d2040 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+.card{background:rgba(255,255,255,.08);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.15);border-radius:20px;padding:2.5rem 2rem;width:100%;max-width:420px;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.4)}
+.icon{font-size:3.5rem;margin-bottom:1rem;display:block}
+h2{color:#fff;font-weight:800;font-size:1.5rem;margin:0 0 .5rem}
+p{color:rgba(255,255,255,.7);font-size:.9rem;margin:0 0 1.5rem;line-height:1.6}
+.btn-retry{display:inline-flex;align-items:center;gap:.4rem;background:#C8952A;color:#fff;border:none;border-radius:10px;padding:.65rem 1.4rem;font-size:.9rem;font-weight:700;cursor:pointer;text-decoration:none;transition:background .15s}
+.btn-retry:hover{background:#a07020;color:#fff}
+</style>
+</head>
+<body>
+<div class="card">
+  <span class="icon">📡</span>
+  <h2>You're Offline</h2>
+  <p>No internet connection detected. Please check your network and try again. Previously visited pages may still be available.</p>
+  <button class="btn-retry" onclick="window.location.reload()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+    Try Again
+  </button>
+</div>
+</body>
+</html>

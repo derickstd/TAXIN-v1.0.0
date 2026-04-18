@@ -29,6 +29,20 @@ class CredentialForm(forms.ModelForm):
 
 @login_required
 def credential_list(request):
+    if request.method == 'POST':
+        form = CredentialForm(request.POST)
+        if form.is_valid():
+            cred = form.save(commit=False)
+            cred.created_by = request.user
+            cred.set_username(form.cleaned_data.get('username_plain', ''))
+            cred.set_password(form.cleaned_data.get('password_plain', ''))
+            cred.set_notes(form.cleaned_data.get('notes_plain', ''))
+            cred.save()
+            messages.success(request, 'Credential saved and encrypted successfully.')
+        else:
+            messages.error(request, 'Please fix the errors below.')
+        return redirect('credentials:list')
+
     q = request.GET.get('q', '')
     type_filter = request.GET.get('type', '')
     creds = ClientCredential.objects.select_related('client', 'last_accessed_by').order_by('client__full_name')
@@ -42,6 +56,7 @@ def credential_list(request):
         'creds': creds, 'expiring_soon': expiring_soon,
         'today': today, 'q': q, 'type_filter': type_filter,
         'cred_types': ClientCredential.CRED_TYPE,
+        'add_form': CredentialForm(),
     })
 
 
