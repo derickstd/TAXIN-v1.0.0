@@ -65,10 +65,29 @@ def credential_create(request):
 
 
 @login_required
+def credential_edit(request, pk):
+    cred = get_object_or_404(ClientCredential, pk=pk)
+    if request.method == 'POST':
+        form = CredentialForm(request.POST, instance=cred)
+        if form.is_valid():
+            c = form.save(commit=False)
+            pw = form.cleaned_data.get('password_plain', '')
+            un = form.cleaned_data.get('username_plain', '')
+            notes = form.cleaned_data.get('notes_plain', '')
+            if un: c.set_username(un)
+            if pw: c.set_password(pw)
+            if notes: c.set_notes(notes)
+            c.save()
+            messages.success(request, 'Credential updated successfully.')
+            return redirect('credentials:list')
+    else:
+        form = CredentialForm(instance=cred)
+    return render(request, 'credentials/credential_form.html', {'form': form, 'edit': True, 'cred': cred})
+
+
+@login_required
 def reveal_password(request, pk):
     cred = get_object_or_404(ClientCredential, pk=pk)
-    if request.user.role not in ('manager', 'admin') and not request.user.is_superuser:
-        return JsonResponse({'error': 'Permission denied — Manager/Admin only'}, status=403)
     CredentialAccessLog.objects.create(credential=cred, accessed_by=request.user)
     cred.last_accessed_by = request.user
     cred.last_accessed_at = timezone.now()

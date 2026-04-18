@@ -219,9 +219,88 @@ function initTableLabels(){
   });
 }
 
+/* ── Keyboard Shortcuts ── */
+function initKeyboardShortcuts(){
+  /* Build cheatsheet DOM once */
+  var sheet = null;
+
+  function getSheet(){
+    if(sheet) return sheet;
+    sheet = document.createElement('div');
+    sheet.id = 'kb-sheet';
+    sheet.innerHTML =
+      '<div id="kb-inner">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.9rem">'+
+      '<strong style="font-size:.95rem;color:var(--blue)"><i class="fas fa-keyboard" style="color:var(--gold);margin-right:.4rem"></i>Keyboard Shortcuts</strong>'+
+      '<button id="kb-close" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#888;line-height:1">&times;</button>'+
+      '</div>'+
+      '<div class="kb-grid">'+
+      r('Ctrl+D','Dashboard')+r('Ctrl+C','Clients')+r('Ctrl+J','Job Cards')+
+      r('Ctrl+B','Billing')+r('Ctrl+E','Expenses')+r('Ctrl+K','Compliance')+
+      r('Ctrl+R','Reports')+r('Ctrl+S','Settings')+
+      r('Ctrl+Shift+C','New Client')+r('Ctrl+Shift+J','New Job Card')+
+      r('Ctrl+Shift+I','New Invoice')+r('Ctrl+Shift+E','New Expense')+
+      r('Ctrl+\\','Toggle Sidebar')+r('Ctrl+/','This help')+r('Esc','Close')+
+      '</div></div>';
+    document.body.appendChild(sheet);
+    document.getElementById('kb-close').onclick = hide;
+    sheet.addEventListener('click', function(e){ if(e.target===sheet) hide(); });
+    return sheet;
+  }
+
+  function r(k,l){
+    return '<div class="kb-row"><kbd>'+k+'</kbd><span>'+l+'</span></div>';
+  }
+
+  function show(){ getSheet().classList.add('open'); }
+  function hide(){ if(sheet) sheet.classList.remove('open'); }
+
+  /* Expose show so topbar button can call it */
+  window.txShowShortcuts = show;
+
+  var NAV = {d:'/dashboard/',c:'/clients/',j:'/jobs/',b:'/billing/',e:'/expenses/',k:'/compliance/',r:'/documents/price-list/',s:'/staff/settings/'};
+  var NEW = {c:'/clients/new/',j:'/jobs/new/',i:'/billing/new/',e:'/expenses/new/'};
+
+  document.addEventListener('keydown',function(e){
+    if(!e.ctrlKey && e.key!=='Escape' && e.key!=='?') return;
+
+    var key=e.key.toLowerCase();
+
+    /* Esc — close sheet */
+    if(e.key==='Escape'){ hide(); return; }
+
+    /* Ctrl+/ — show help */
+    if(e.ctrlKey && e.key==='/'){
+      e.preventDefault(); show(); return;
+    }
+
+    /* Ctrl+\ — toggle sidebar */
+    if(e.ctrlKey && (e.key==='\\'||e.key==='|')){
+      e.preventDefault();
+      var tb=document.getElementById('sidebarToggle');
+      if(tb) tb.click();
+      return;
+    }
+
+    /* Ctrl+letter — navigate */
+    if(e.ctrlKey && NAV[key]){
+      /* skip browser defaults only for our keys */
+      e.preventDefault();
+      window.location.href=NAV[key];
+      return;
+    }
+
+    /* Ctrl+Shift+letter — create new */
+    if(e.ctrlKey && e.shiftKey && NEW[key]){
+      e.preventDefault();
+      window.location.href=NEW[key];
+      return;
+    }
+  });
+}
+
 /* ── Init all ── */
 document.addEventListener('DOMContentLoaded',function(){
-  initSelect2();
   initSelect2();
   initDates();
   initAlerts();
@@ -233,6 +312,7 @@ document.addEventListener('DOMContentLoaded',function(){
   initPeriodAuto();
   initImportPreview();
   initTableLabels();
+  initKeyboardShortcuts();
   recalcTotal();
 });
 

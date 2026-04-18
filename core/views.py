@@ -58,24 +58,31 @@ def user_create(request):
         form = UserForm(request.POST)
         if form.is_valid():
             user = form.save(commit=False)
-            p = form.cleaned_data.get('password1')
-            if p:
-                user.set_password(p)
-            else:
-                user.set_password('taxman2025!')  # default
+            p = form.cleaned_data.get('password1') or 'taxman2025!'
+            user.set_password(p)
+            user.is_active = True
+            user.is_active_staff = True
             user.save()
-            messages.success(request, f'User {user.username} created. Default password: taxman2025!')
+            messages.success(
+                request,
+                f'User "{user.username}" created. '
+                f'Login: username = {user.username}, '
+                f'password = {p}. '
+                f'Ask them to change it after first login.'
+            )
             return redirect('core:users')
     else:
         form = UserForm()
     role_guide = [
-        ("admin","Admin","Full access: users, settings, all data, all approvals"),
-        ("manager","Manager","Finance, billing, approvals, reports, no system settings"),
-        ("senior_officer","Senior Officer","All job cards, credentials, reports"),
-        ("tax_officer","Tax Officer","Own job cards, clients, compliance filing"),
-        ("receptionist","Receptionist","Client registration and walk-in intake only"),
+        ('admin', 'Admin', 'Full access: users, settings, all data, all approvals'),
+        ('manager', 'Manager', 'Finance, billing, approvals, reports, no system settings'),
+        ('senior_officer', 'Senior Officer', 'All job cards, credentials, reports'),
+        ('tax_officer', 'Tax Officer', 'Own job cards, clients, compliance filing'),
+        ('receptionist', 'Receptionist', 'Client registration and walk-in intake only'),
     ]
-    return render(request, "core/user_form.html", {"form": form, "title": "New User", "is_new": True, "role_guide": role_guide})
+    return render(request, 'core/user_form.html', {
+        'form': form, 'title': 'New User', 'is_new': True, 'role_guide': role_guide,
+    })
 
 
 @login_required
@@ -108,13 +115,66 @@ def user_edit(request, pk):
 
 
 @login_required
+def change_password(request):
+    if request.method == 'POST':
+        current  = request.POST.get('current_password', '')
+        new1     = request.POST.get('new_password1', '')
+        new2     = request.POST.get('new_password2', '')
+        if not request.user.check_password(current):
+            messages.error(request, 'Current password is incorrect.')
+        elif not new1:
+            messages.error(request, 'New password cannot be blank.')
+        elif new1 != new2:
+            messages.error(request, 'New passwords do not match.')
+        elif len(new1) < 6:
+            messages.error(request, 'Password must be at least 6 characters.')
+        else:
+            request.user.set_password(new1)
+            request.user.save()
+            from django.contrib.auth import update_session_auth_hash
+            update_session_auth_hash(request, request.user)
+            messages.success(request, 'Password changed successfully.')
+            return redirect('core:settings')
+    return redirect('core:settings')
+
+
+@login_required
 def user_settings(request):
     theme_guide = [
-        ('classic', 'Classic Blue', 'The existing Taxman256 look with strong blue navigation and gold accents.'),
-        ('forest', 'Forest Ledger', 'A calmer green-led palette suited for long working sessions.'),
-        ('sunset', 'Sunset Copper', 'A warmer orange and navy mix with softer surfaces.'),
-        ('midnight', 'Midnight Slate', 'A deeper slate theme with cooler contrast for focused work.'),
-        ('dark', 'Dark Mode', 'A true dark interface with higher contrast surfaces for low-light work.'),
+        ('classic',  'Classic Blue',  'The original Taxman256 look — strong blue navigation with gold accents.'),
+        ('forest',   'Forest Ledger', 'A calmer green-led palette suited for long working sessions.'),
+        ('sunset',   'Sunset Copper', 'A warmer orange and navy mix with softer surfaces.'),
+        ('midnight', 'Midnight Slate','A deeper slate theme with cooler contrast for focused work.'),
+        ('dark',     'Dark Mode',     'A true dark interface with higher contrast surfaces for low-light work.'),
+        ('ocean',    'Ocean Teal',    'A fresh cyan and teal palette inspired by coastal clarity.'),
+        ('rose',     'Rose Gold',     'A bold pink and gold combination for a distinctive look.'),
+        ('charcoal', 'Charcoal Pro',  'A near-black dark theme with amber accents for a premium feel.'),
+        ('violet',   'Violet Dusk',   'A rich purple palette with warm gold highlights.'),
+        ('earth',    'Earth Brown',   'A warm earthy tone with deep brown and amber — grounded and natural.'),
+    ]
+    if request.method == 'POST':
+        form = UserSettingsForm(request.POST, instance=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Your settings were updated.')
+            return redirect('core:settings')
+    else:
+        form = UserSettingsForm(instance=request.user)
+    return render(request, 'core/settings.html', {
+        'form': form,
+        'theme_guide': theme_guide,
+    })
+    theme_guide = [
+        ('classic',  'Classic Blue',  'The original Taxman256 look — strong blue navigation with gold accents.'),
+        ('forest',   'Forest Ledger', 'A calmer green-led palette suited for long working sessions.'),
+        ('sunset',   'Sunset Copper', 'A warmer orange and navy mix with softer surfaces.'),
+        ('midnight', 'Midnight Slate','A deeper slate theme with cooler contrast for focused work.'),
+        ('dark',     'Dark Mode',     'A true dark interface with higher contrast surfaces for low-light work.'),
+        ('ocean',    'Ocean Teal',    'A fresh cyan and teal palette inspired by coastal clarity.'),
+        ('rose',     'Rose Gold',     'A bold pink and gold combination for a distinctive look.'),
+        ('charcoal', 'Charcoal Pro',  'A near-black dark theme with amber accents for a premium feel.'),
+        ('violet',   'Violet Dusk',   'A rich purple palette with warm gold highlights.'),
+        ('earth',    'Earth Brown',   'A warm earthy tone with deep brown and amber — grounded and natural.'),
     ]
     if request.method == 'POST':
         form = UserSettingsForm(request.POST, instance=request.user)

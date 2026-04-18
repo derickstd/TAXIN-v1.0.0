@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
-<link rel="stylesheet" href="{% static 'css/app.css' %}">
+<link rel="stylesheet" href="{% static 'css/app.css' %}?v=5">
 {% block extra_css %}{% endblock %}
 </head>
 <body{% if user.is_authenticated %} data-theme="{{ user.ui_theme|default:'classic' }}"{% endif %}>
@@ -51,7 +51,7 @@
 
     <!-- Clients -->
     <div class="sb-group" id="grp-clients">
-      <button type="button" class="sb-group-hd" data-grp="grp-clients" title="Clients">
+      <button type="button" class="sb-group-hd" data-grp="grp-clients" data-href="{% url 'clients:list' %}" title="Clients">
         <i class="fas fa-users"></i>
         <span class="sb-lbl">Clients</span>
         <i class="fas fa-chevron-down sb-arrow"></i>
@@ -66,7 +66,7 @@
 
     <!-- Work -->
     <div class="sb-group" id="grp-work">
-      <button type="button" class="sb-group-hd" data-grp="grp-work" title="Work">
+      <button type="button" class="sb-group-hd" data-grp="grp-work" data-href="{% url 'services:list' %}" title="Work">
         <i class="fas fa-briefcase"></i>
         <span class="sb-lbl">Work</span>
         {% if pending_jobs_count %}<span class="sb-badge">{{ pending_jobs_count }}</span>{% endif %}
@@ -88,7 +88,7 @@
 
     <!-- Finance -->
     <div class="sb-group" id="grp-finance">
-      <button type="button" class="sb-group-hd" data-grp="grp-finance" title="Finance">
+      <button type="button" class="sb-group-hd" data-grp="grp-finance" data-href="{% url 'billing:list' %}" title="Finance">
         <i class="fas fa-file-invoice-dollar"></i>
         <span class="sb-lbl">Finance</span>
         {% if overdue_invoices_count %}<span class="sb-badge">{{ overdue_invoices_count }}</span>{% endif %}
@@ -105,7 +105,7 @@
 
     <!-- Security -->
     <div class="sb-group" id="grp-security">
-      <button type="button" class="sb-group-hd" data-grp="grp-security" title="Security">
+      <button type="button" class="sb-group-hd" data-grp="grp-security" data-href="{% url 'credentials:list' %}" title="Security">
         <i class="fas fa-shield-alt"></i>
         <span class="sb-lbl">Security</span>
         <i class="fas fa-chevron-down sb-arrow"></i>
@@ -118,7 +118,7 @@
 
     <!-- Reports -->
     <div class="sb-group" id="grp-reports">
-      <button type="button" class="sb-group-hd" data-grp="grp-reports" title="Reports">
+      <button type="button" class="sb-group-hd" data-grp="grp-reports" data-href="{% url 'documents:price_list' %}" title="Reports">
         <i class="fas fa-chart-line"></i>
         <span class="sb-lbl">Reports</span>
         <i class="fas fa-chevron-down sb-arrow"></i>
@@ -133,7 +133,7 @@
 
     <!-- Account -->
     <div class="sb-group" id="grp-account">
-      <button type="button" class="sb-group-hd" data-grp="grp-account" title="Account">
+      <button type="button" class="sb-group-hd" data-grp="grp-account" data-href="{% url 'core:settings' %}" title="Account">
         <i class="fas fa-user-circle"></i>
         <span class="sb-lbl">Account</span>
         <i class="fas fa-chevron-down sb-arrow"></i>
@@ -207,6 +207,11 @@
     }
 
     btn.addEventListener('click', function(){
+      var href = btn.getAttribute('data-href');
+      if(sb.classList.contains('collapsed') && href){
+        window.location.href = href;
+        return;
+      }
       var opening = sub.style.maxHeight === '0px' || sub.style.maxHeight === '';
       if(opening){
         sub.style.maxHeight = '600px';
@@ -282,6 +287,9 @@
     <div class="topbar-r">
       <a href="{% url 'services:create' %}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New Job</a>
       <a href="{% url 'clients:create' %}"  class="btn btn-outline btn-sm d-xs-none"><i class="fas fa-user-plus"></i> Client</a>
+      <span class="kb-hint d-xs-none" onclick="window.txShowShortcuts&&window.txShowShortcuts()" title="Keyboard shortcuts">
+        <kbd>Ctrl+/</kbd> Shortcuts
+      </span>
     </div>
   </div>
 
@@ -305,7 +313,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="{% static 'js/app.js' %}"></script>
+<script src="{% static 'js/app.js' %}?v=3"></script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

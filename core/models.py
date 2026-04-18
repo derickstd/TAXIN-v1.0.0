@@ -10,11 +10,16 @@ class User(AbstractUser):
         ('admin',        'Admin'),
     ]
     THEME_CHOICES = [
-        ('classic', 'Classic Blue'),
-        ('forest', 'Forest Ledger'),
-        ('sunset', 'Sunset Copper'),
+        ('classic',  'Classic Blue'),
+        ('forest',   'Forest Ledger'),
+        ('sunset',   'Sunset Copper'),
         ('midnight', 'Midnight Slate'),
-        ('dark', 'Dark Mode'),
+        ('dark',     'Dark Mode'),
+        ('ocean',    'Ocean Teal'),
+        ('rose',     'Rose Gold'),
+        ('charcoal', 'Charcoal Pro'),
+        ('violet',   'Violet Dusk'),
+        ('earth',    'Earth Brown'),
     ]
     role              = models.CharField(max_length=20, choices=ROLE_CHOICES, default='tax_officer')
     phone_whatsapp    = models.CharField(max_length=20, blank=True,

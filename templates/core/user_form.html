@@ -9,7 +9,7 @@
   <div class="card-hd"><i class="fas fa-id-card"></i>Account Details</div>
   <div class="card-bd">
     <form method="post" novalidate>{% csrf_token %}
-      <div class="form-stack">
+      <div class="form-grid-2">
         <div><label class="form-label">First Name</label><input type="text" name="first_name" value="{{ form.first_name.value|default:'' }}" class="form-ctrl" placeholder="First name"></div>
         <div><label class="form-label">Last Name</label><input type="text" name="last_name" value="{{ form.last_name.value|default:'' }}" class="form-ctrl" placeholder="Last name"></div>
         <div><label class="form-label">Username <span class="req">*</span></label>
@@ -19,22 +19,22 @@
           <select name="role" class="s2" data-ph="Select role">
             {% for val,label in form.fields.role.choices %}<option value="{{ val }}" {% if form.role.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
           </select></div>
-        <div><label class="form-label">Theme</label>
-          <select name="ui_theme" class="s2" data-ph="Select theme">
-            {% for val,label in form.fields.ui_theme.choices %}<option value="{{ val }}" {% if form.ui_theme.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-          </select></div>
-        <div><label class="form-label">WhatsApp Number <span class="req">*</span></label>
+        <div><label class="form-label">WhatsApp Number</label>
           <input type="text" name="phone_whatsapp" value="{{ form.phone_whatsapp.value|default:'' }}" class="form-ctrl" placeholder="+256 700 000000">
-          <div class="form-hint">Used to send debt reports and task reminders</div></div>
-        <div><label class="form-label">Notification Email <span class="req">*</span></label>
+          <div class="form-hint">Used for debt reports and task reminders</div></div>
+        <div><label class="form-label">Notification Email</label>
           <input type="email" name="email_notify" value="{{ form.email_notify.value|default:'' }}" class="form-ctrl" placeholder="e.g. taxissues.go@gmail.com">
           <div class="form-hint">Emails sent from this address</div></div>
         <div><label class="form-label">Login Email</label><input type="email" name="email" value="{{ form.email.value|default:'' }}" class="form-ctrl" placeholder="user@taxman256.ug"></div>
         <div><label class="form-label">Date Joined Firm</label><input type="date" name="date_joined_firm" value="{{ form.date_joined_firm.value|default:'' }}" class="form-ctrl"></div>
+        <div><label class="form-label">Theme</label>
+          <select name="ui_theme" class="s2" data-ph="Select theme">
+            {% for val,label in form.fields.ui_theme.choices %}<option value="{{ val }}" {% if form.ui_theme.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select></div>
         {% if is_new %}
-        <div><label class="form-label">Password <span class="req">*</span></label>
-          <input type="password" name="password1" class="form-ctrl" placeholder="Set password">
-          <div class="form-hint">Leave blank for default: taxman2025!</div></div>
+        <div><label class="form-label">Password</label>
+          <input type="password" name="password1" class="form-ctrl" placeholder="Leave blank for default: taxman2025!">
+        </div>
         <div><label class="form-label">Confirm Password</label><input type="password" name="password2" class="form-ctrl" placeholder="Repeat password"></div>
         {% else %}
         <div><label class="form-label">New Password</label>
