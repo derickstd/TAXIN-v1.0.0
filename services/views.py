@@ -39,7 +39,7 @@ def jobcard_list(request):
     status = request.GET.get('status','')
     q = request.GET.get('q','')
     if status: jobs = jobs.filter(status=status)
-    if q: jobs = jobs.filter(Q(job_number__icontains=q)|Q(client__full_name__icontains=q)|Q(client__trading_name__icontains=q))
+    if q: jobs = jobs.filter(Q(job_number__icontains=q)|Q(client__full_name__icontains=q))
     kanban = {s: [j for j in jobs if j.status == s] for s,_ in JobCard.STATUS}
     return render(request, 'services/jobcard_list.html', {
         'jobs': jobs, 'kanban': kanban, 'status': status, 'q': q,

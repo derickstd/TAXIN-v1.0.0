@@ -47,7 +47,7 @@ def credential_list(request):
     type_filter = request.GET.get('type', '')
     creds = ClientCredential.objects.select_related('client', 'last_accessed_by').order_by('client__full_name')
     if q:
-        creds = creds.filter(Q(client__full_name__icontains=q) | Q(client__trading_name__icontains=q) | Q(label__icontains=q))
+        creds = creds.filter(Q(client__full_name__icontains=q) | Q(label__icontains=q))
     if type_filter:
         creds = creds.filter(credential_type=type_filter)
     today = timezone.now().date()

@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}Delete Category{% endblock %}
+{% block nav_exp %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'expenses:list' %}">Expenses</a></li><li><a href="{% url 'expenses:category_list' %}">Categories</a></li><li class="active">Delete</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-trash"></i>Delete Category</h4>
+</div>
+
+<div class="form-shell">
+  <div class="card-box">
+    <div class="card-head"><i class="fas fa-exclamation-triangle"></i>Confirm Deletion</div>
+    <div class="card-body">
+      <p style="font-size:.95rem;margin-bottom:1.5rem;color:#666">Are you sure you want to delete the category <strong style="color:#1A3C6E">{{ category.name }}</strong>?</p>
+      <div class="alert alert-danger" style="margin-bottom:1.5rem">
+        <i class="fas fa-exclamation-circle"></i>
+        <span>This action cannot be undone. Existing expenses with this category will have their category set to null.</span>
+      </div>
+      <form method="post">{% csrf_token %}
+        <div class="form-actions">
+          <button type="submit" class="btn btn-danger btn-lg"><i class="fas fa-trash"></i>Delete Category</button>
+          <a href="{% url 'expenses:category_list' %}" class="btn btn-outline btn-lg">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

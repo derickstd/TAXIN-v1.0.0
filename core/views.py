@@ -3,6 +3,7 @@ from django.views.decorators.cache import never_cache
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.hashers import make_password
+from django.http import JsonResponse
 from .models import User
 from django import forms
 
@@ -157,16 +158,7 @@ def change_password(request):
 @login_required
 def user_settings(request):
     theme_guide = [
-        ('classic',  'Classic Blue',  'The original Taxman256 look — strong blue navigation with gold accents.'),
-        ('forest',   'Forest Ledger', 'A calmer green-led palette suited for long working sessions.'),
-        ('sunset',   'Sunset Copper', 'A warmer orange and navy mix with softer surfaces.'),
-        ('midnight', 'Midnight Slate','A deeper slate theme with cooler contrast for focused work.'),
-        ('dark',     'Dark Mode',     'A true dark interface with higher contrast surfaces for low-light work.'),
         ('ocean',    'Ocean Teal',    'A fresh cyan and teal palette inspired by coastal clarity.'),
-        ('rose',     'Rose Gold',     'A bold pink and gold combination for a distinctive look.'),
-        ('charcoal', 'Charcoal Pro',  'A near-black dark theme with amber accents for a premium feel.'),
-        ('violet',   'Violet Dusk',   'A rich purple palette with warm gold highlights.'),
-        ('earth',    'Earth Brown',   'A warm earthy tone with deep brown and amber — grounded and natural.'),
     ]
     if request.method == 'POST':
         form = UserSettingsForm(request.POST, instance=request.user)
@@ -180,3 +172,37 @@ def user_settings(request):
         'form': form,
         'theme_guide': theme_guide,
     })
+
+
+@login_required
+def trigger_automation(request):
+    """Manually trigger automation tasks (Admin/Manager only)"""
+    if not request.user.is_manager_or_admin():
+        return JsonResponse({'success': False, 'error': 'Permission denied'})
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'generate_invoices':
+            from core.automation import auto_generate_missing_invoices
+            count = auto_generate_missing_invoices()
+            return JsonResponse({
+                'success': True,
+                'message': f'Generated {count} missing invoices'
+            })
+        
+        elif action == 'update_statuses':
+            from django.core.management import call_command
+            try:
+                call_command('run_automation')
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Automation tasks completed successfully'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'error': str(e)
+                })
+    
+    return JsonResponse({'success': False, 'error': 'Invalid request'})

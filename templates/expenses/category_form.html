@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Category{% endblock %}
+{% block nav_exp %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'expenses:list' %}">Expenses</a></li><li><a href="{% url 'expenses:category_list' %}">Categories</a></li><li class="active">{{ action }}</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-tag"></i>{{ action }} Expense Category</h4>
+</div>
+
+<div class="form-shell">
+  <div class="card-box">
+    <div class="card-head"><i class="fas fa-tags"></i>Category Information</div>
+    <div class="card-body">
+      <form method="post">{% csrf_token %}
+        <div class="form-group">
+          <label class="form-label">Category Name <span class="req">*</span></label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          {{ form.description }}
+          <div class="form-hint">Brief description of what this category covers</div>
+          {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">
+            {{ form.is_active }}
+            <span>Active (visible in expense forms)</span>
+          </label>
+        </div>
+        <div class="form-actions mt-3">
+          <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i>Save Category</button>
+          <a href="{% url 'expenses:category_list' %}" class="btn btn-outline btn-lg">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

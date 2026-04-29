@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#1A3C6E"/>
+  <rect x="60" y="60" width="392" height="392" rx="80" fill="#1A3C6E"/>
+  <!-- Gold calculator body -->
+  <rect x="120" y="100" width="272" height="312" rx="24" fill="#C8952A"/>
+  <!-- Screen -->
+  <rect x="148" y="128" width="216" height="80" rx="10" fill="#0f2444"/>
+  <!-- Screen text -->
+  <text x="360" y="196" font-family="monospace" font-size="52" font-weight="bold" fill="#C8952A" text-anchor="end">256</text>
+  <!-- Button grid -->
+  <rect x="148" y="228" width="48" height="36" rx="7" fill="#0f2444"/>
+  <rect x="212" y="228" width="48" height="36" rx="7" fill="#0f2444"/>
+  <rect x="276" y="228" width="48" height="36" rx="7" fill="#0f2444"/>
+  <rect x="340" y="228" width="28" height="36" rx="7" fill="#e74c3c"/>
+  <rect x="148" y="278" width="48" height="36" rx="7" fill="#0f2444"/>
+  <rect x="212" y="278" width="48" height="36" rx="7" fill="#0f2444"/>
+  <rect x="276" y="278" width="48" height="36" rx="7" fill="#0f2444"/>
+  <rect x="340" y="278" width="28" height="36" rx="7" fill="#0f2444"/>
+  <rect x="148" y="328" width="48" height="36" rx="7" fill="#0f2444"/>
+  <rect x="212" y="328" width="48" height="36" rx="7" fill="#0f2444"/>
+  <rect x="276" y="328" width="48" height="36" rx="7" fill="#0f2444"/>
+  <rect x="340" y="328" width="28" height="80" rx="7" fill="#27ae60"/>
+  <rect x="148" y="378" width="112" height="36" rx="7" fill="#0f2444"/>
+  <rect x="276" y="378" width="48" height="36" rx="7" fill="#0f2444"/>
+</svg>

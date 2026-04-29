@@ -43,6 +43,19 @@ class ClientCredential(models.Model):
     def get_password(self): return decrypt_value(self.password_encrypted)
     def get_notes(self): return decrypt_value(self.notes_encrypted)
 
+    def get_website_url(self):
+        """Return the official website URL for the credential type."""
+        urls = {
+            'ura_etax': 'https://ura.go.ug',
+            'nssf': 'https://nssfug.org',
+            'ursb': 'https://ursb.go.ug',
+            'bank': '',  # Varies by bank
+            'mobile_money': '',  # Varies by provider
+            'customs': 'https://ura.go.ug',  # ASYCUDA via URA
+            'custom': '',  # Custom - no default
+        }
+        return urls.get(self.credential_type, '')
+
     def __str__(self):
         return f"{self.client} — {self.label}"
 

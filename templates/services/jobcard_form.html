@@ -34,21 +34,32 @@
             </div>
           </div>
 
-          <div class="mb-2">
-            <label class="form-label">Month</label>
-            <select name="period_month" id="monthSel" class="s2" data-ph="Month">
-              <option value="">Month</option>
-              {% for val,label in form.fields.period_month.choices %}{% if val %}
-              <option value="{{ val }}" {% if form.period_month.value|stringformat:"s" == val|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
-              {% endif %}{% endfor %}
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Year</label>
-            <select name="period_year" id="yearSel" class="s2" data-ph="Year">
-              <option value="">Year</option>
-              {% for y in years %}<option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
-            </select>
+          <div class="mb-2" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+            <div>
+              <label class="form-label">Month</label>
+              <select name="period_month" id="monthSel" class="s2" data-ph="Month">
+                <option value="">Month</option>
+                <option value="1" {% if form.period_month.value == '1' %}selected{% endif %}>Jan</option>
+                <option value="2" {% if form.period_month.value == '2' %}selected{% endif %}>Feb</option>
+                <option value="3" {% if form.period_month.value == '3' %}selected{% endif %}>Mar</option>
+                <option value="4" {% if form.period_month.value == '4' %}selected{% endif %}>Apr</option>
+                <option value="5" {% if form.period_month.value == '5' %}selected{% endif %}>May</option>
+                <option value="6" {% if form.period_month.value == '6' %}selected{% endif %}>Jun</option>
+                <option value="7" {% if form.period_month.value == '7' %}selected{% endif %}>Jul</option>
+                <option value="8" {% if form.period_month.value == '8' %}selected{% endif %}>Aug</option>
+                <option value="9" {% if form.period_month.value == '9' %}selected{% endif %}>Sep</option>
+                <option value="10" {% if form.period_month.value == '10' %}selected{% endif %}>Oct</option>
+                <option value="11" {% if form.period_month.value == '11' %}selected{% endif %}>Nov</option>
+                <option value="12" {% if form.period_month.value == '12' %}selected{% endif %}>Dec</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Year</label>
+              <select name="period_year" id="yearSel" class="s2" data-ph="Year">
+                <option value="">Year</option>
+                {% for y in years %}<option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+              </select>
+            </div>
           </div>
 
           <div class="mb-2">
@@ -103,9 +114,6 @@
     <div class="card card-compact">
       <div class="card-hd">
         <span><i class="fas fa-list-check"></i>Services / Line Items</span>
-        <button type="button" class="btn btn-primary btn-sm" id="addLine">
-          <i class="fas fa-plus"></i> Add Service
-        </button>
       </div>
       <div class="card-bd">
         {{ formset.management_form }}
@@ -170,6 +178,9 @@
           </div>
           {% endfor %}
         </div>
+        <button type="button" class="btn btn-outline btn-sm" id="addLine" style="width:100%">
+          <i class="fas fa-plus"></i> Add Another Service
+        </button>
         <div class="alert alert-note mt-2" style="font-size:.78rem">
           <i class="fas fa-info-circle"></i>
           <span>Select a service to auto-fill the price. Agreed price can be less than the list price.</span>
@@ -222,6 +233,27 @@ $(document).ready(function(){
   });
 
   recalcTotal();
+
+  // Add service button
+  $('#addLine').on('click',function(){
+    var total=$('.li-row').length;
+    var template=$('.li-row').first().clone();
+    template.find('input,select,textarea').val('');
+    template.find('.li-num').text('Service '+(total+1));
+    template.find('.s2-svc').removeClass('select2-hidden-accessible').next('.select2').remove();
+    template.find('.li-vat-badge').hide();
+    var mgmt=$('input[name$="-TOTAL_FORMS"]');
+    mgmt.val(parseInt(mgmt.val())+1);
+    template.find('input,select,textarea').each(function(){
+      var name=$(this).attr('name');
+      if(name){
+        var newName=name.replace(/-\d+-/,'-'+total+'-');
+        $(this).attr('name',newName).attr('id','id_'+newName);
+      }
+    });
+    $('#lineItems').append(template);
+    template.find('.s2-svc').select2({theme:'bootstrap-5',allowClear:false,placeholder:'Search services…'});
+  });
 });
 </script>
 {% endblock %}

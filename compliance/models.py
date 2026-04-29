@@ -43,6 +43,18 @@ class ComplianceDeadline(models.Model):
     class Meta:
         ordering = ['due_date']
         unique_together = ('obligation', 'period_label')
+    
+    @property
+    def client(self):
+        return self.obligation.client if self.obligation else None
+    
+    @property
+    def service_name(self):
+        return self.obligation.service_type.name if self.obligation and self.obligation.service_type else ''
+    
+    @property
+    def is_filed(self):
+        return self.status in ('filed_and_paid', 'filed_not_paid')
 
     def __str__(self):
         return f"{self.obligation.client} — {self.obligation.service_type.name} — {self.period_label}"

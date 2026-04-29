@@ -56,7 +56,6 @@ def _process_client_import_file(uploaded_file, user):
                 continue
             Client.objects.create(
                 full_name=name,
-                trading_name=(row.get('trading_name') or '').strip(),
                 tin=(row.get('tin') or '').strip(),
                 phone_primary=phone,
                 phone_whatsapp=(row.get('phone_whatsapp') or phone).strip(),
@@ -80,7 +79,7 @@ def client_list(request):
     ctype = request.GET.get('type','')
     if q:
         clients = clients.filter(
-            Q(full_name__icontains=q)|Q(trading_name__icontains=q)|
+            Q(full_name__icontains=q)|
             Q(tin__icontains=q)|Q(phone_primary__icontains=q)|Q(client_id__icontains=q)
         )
     if status:
@@ -111,7 +110,6 @@ def client_detail(request, pk):
     obligations = ComplianceObligation.objects.filter(client=client, is_active=True).select_related('service_type')
     details = [
         ('Full Name', client.full_name),
-        ('Trading Name', client.trading_name or '—'),
         ('TIN', client.tin or 'Not provided'),
         ('Phone', client.phone_primary),
         ('WhatsApp', client.phone_whatsapp or 'Same as phone'),
@@ -192,7 +190,7 @@ def walkin_create(request):
 def client_search_api(request):
     q = request.GET.get('q','')
     clients = Client.objects.filter(
-        Q(full_name__icontains=q)|Q(trading_name__icontains=q)|
+        Q(full_name__icontains=q)|
         Q(tin__icontains=q)|Q(client_id__icontains=q)
     )[:10] if q else []
     return render(request, 'clients/partials/search_results.html', {'clients': clients})

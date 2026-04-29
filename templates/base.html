@@ -42,17 +42,8 @@
 <link rel="stylesheet" href="{% static 'css/app.css' %}?v=5">
 {% block extra_css %}{% endblock %}
 </head>
-<body{% if user.is_authenticated %} data-theme="{{ user.ui_theme|default:'classic' }}"{% endif %}>
+<body data-theme="ocean">
 {% if user.is_authenticated %}
-
-{% if pending_task_count > 0 %}
-<div class="reminder-bar no-print">
-  <i class="fas fa-clock"></i>
-  <span>You have <strong>{{ pending_task_count }} job card(s)</strong> with incomplete tasks.
-  <a href="{% url 'services:list' %}?status=in_progress" style="color:var(--blue);font-weight:700;text-decoration:underline">Review now →</a></span>
-  <span style="margin-left:auto;font-size:.72rem;color:#aaa">Reminder sent to {{ user.get_notify_whatsapp }}</span>
-</div>
-{% endif %}
 
 <div class="overlay" id="overlay"></div>
 
@@ -73,7 +64,7 @@
 
   <!-- Brand + collapse toggle -->
   <div class="sb-brand">
-    <div class="sb-icon"><i class="fas fa-calculator"></i></div>
+    <div class="sb-icon"><img src="{% static 'icons/primeserver.png' %}" alt="Logo" style="width:100%;height:100%;object-fit:contain"></div>
     <div class="sb-brand-text">
       <div class="sb-brand-name">Taxman256</div>
       <div class="sb-brand-sub">Tax &amp; Compliance — KLA</div>
@@ -210,116 +201,121 @@
 
 <script>
 (function(){
-  var sb  = document.getElementById('sidebar');
-  var ov  = document.getElementById('overlay');
-  var hb  = document.getElementById('hamburger');
-  var tb  = document.getElementById('sidebarToggle');
-  var ti  = document.getElementById('sidebarToggleIcon');
-  var CK  = 'tx_sb_col';
-  var GK  = 'tx_sb_grp';
+  /* Run after full DOM is parsed */
+  function init(){
+    var sb  = document.getElementById('sidebar');
+    var ov  = document.getElementById('overlay');
+    var hb  = document.getElementById('hamburger');
+    var tb  = document.getElementById('sidebarToggle');
+    var ti  = document.getElementById('sidebarToggleIcon');
+    var CK  = 'tx_sb_col';
+    var GK  = 'tx_sb_grp';
 
-  /* ── helpers ── */
-  function isDesktop(){ return window.innerWidth > 900; }
-  function loadGS(){ try{ return JSON.parse(localStorage.getItem(GK))||{}; }catch(e){ return {}; } }
-  function saveGS(s){ localStorage.setItem(GK, JSON.stringify(s)); }
+    if(!sb) return;
 
-  /* ── active link detection ── */
-  var path = window.location.pathname;
-  document.querySelectorAll('#sidebar .sb-link').forEach(function(a){
-    var h = a.getAttribute('href');
-    if(h && h !== '/' && path.startsWith(h)) a.classList.add('active');
-  });
+    function isDesktop(){ return window.innerWidth > 900; }
+    function loadGS(){ try{ return JSON.parse(localStorage.getItem(GK))||{}; }catch(e){ return {}; } }
+    function saveGS(s){ localStorage.setItem(GK, JSON.stringify(s)); }
 
-  /* ── group toggles ── */
-  var gs = loadGS();
-  document.querySelectorAll('#sidebar .sb-group').forEach(function(grp){
-    var id  = grp.id;                          /* e.g. grp-clients */
-    var sub = grp.querySelector('.sb-sub');
-    var btn = grp.querySelector('.sb-group-hd');
-    var arr = grp.querySelector('.sb-arrow');
-    if(!sub || !btn) return;
-
-    var hasActive = !!grp.querySelector('.sb-link.active');
-    var isOpen    = hasActive || gs[id] === true;
-
-    /* set initial height without animation */
-    if(isOpen){
-      sub.style.maxHeight = '600px';
-      if(arr) arr.style.transform = 'rotate(180deg)';
-    } else {
-      sub.style.maxHeight = '0';
-    }
-
-    btn.addEventListener('click', function(){
-      var href = btn.getAttribute('data-href');
-      if(sb.classList.contains('collapsed') && href){
-        window.location.href = href;
-        return;
-      }
-      var opening = sub.style.maxHeight === '0px' || sub.style.maxHeight === '';
-      if(opening){
-        sub.style.maxHeight = '600px';
-        if(arr) arr.style.transform = 'rotate(180deg)';
-      } else {
-        sub.style.maxHeight = '0px';
-        if(arr) arr.style.transform = 'rotate(0deg)';
-      }
-      var s = loadGS(); s[id] = opening; saveGS(s);
+    /* active link detection */
+    var path = window.location.pathname;
+    document.querySelectorAll('#sidebar .sb-link').forEach(function(a){
+      var h = a.getAttribute('href');
+      if(h && h !== '/' && path.startsWith(h)) a.classList.add('active');
     });
-  });
 
-  /* ── sidebar collapse (desktop) ── */
-  function setCollapsed(c){
-    sb.classList.toggle('collapsed', c);
-    if(ti) ti.style.transform = c ? 'rotate(180deg)' : 'rotate(0deg)';
-    localStorage.setItem(CK, c ? '1' : '0');
-    if(c){
-      document.querySelectorAll('#sidebar .sb-sub').forEach(function(s){ s.style.maxHeight='0'; });
-    } else {
-      var s2 = loadGS();
-      document.querySelectorAll('#sidebar .sb-group').forEach(function(grp){
-        var sub=grp.querySelector('.sb-sub');
-        var arr=grp.querySelector('.sb-arrow');
-        if(!sub) return;
-        var open = !!grp.querySelector('.sb-link.active') || s2[grp.id]===true;
-        sub.style.maxHeight = open ? '600px' : '0';
-        if(arr) arr.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+    /* group toggles */
+    var gs = loadGS();
+    document.querySelectorAll('#sidebar .sb-group').forEach(function(grp){
+      var id  = grp.id;
+      var sub = grp.querySelector('.sb-sub');
+      var btn = grp.querySelector('.sb-group-hd');
+      var arr = grp.querySelector('.sb-arrow');
+      if(!sub || !btn) return;
+
+      var hasActive = !!grp.querySelector('.sb-link.active');
+      var isOpen    = hasActive || gs[id] === true;
+
+      sub.style.maxHeight = isOpen ? '600px' : '0';
+      if(arr) arr.style.transform = isOpen ? 'rotate(180deg)' : 'rotate(0deg)';
+
+      btn.addEventListener('click', function(){
+        /* collapsed desktop: navigate instead of expand */
+        if(isDesktop() && sb.classList.contains('collapsed')){
+          var href = btn.getAttribute('data-href');
+          if(href){ window.location.href = href; return; }
+        }
+        var opening = sub.style.maxHeight === '0px' || sub.style.maxHeight === '';
+        sub.style.maxHeight = opening ? '600px' : '0px';
+        if(arr) arr.style.transform = opening ? 'rotate(180deg)' : 'rotate(0deg)';
+        var s = loadGS(); s[id] = opening; saveGS(s);
       });
+    });
+
+    /* desktop collapse */
+    function setCollapsed(c){
+      sb.classList.toggle('collapsed', c);
+      if(ti) ti.style.transform = c ? 'rotate(180deg)' : 'rotate(0deg)';
+      localStorage.setItem(CK, c ? '1' : '0');
+      if(c){
+        document.querySelectorAll('#sidebar .sb-sub').forEach(function(s){ s.style.maxHeight='0'; });
+      } else {
+        var s2 = loadGS();
+        document.querySelectorAll('#sidebar .sb-group').forEach(function(grp){
+          var sub=grp.querySelector('.sb-sub'), arr=grp.querySelector('.sb-arrow');
+          if(!sub) return;
+          var open = !!grp.querySelector('.sb-link.active') || s2[grp.id]===true;
+          sub.style.maxHeight = open ? '600px' : '0';
+          if(arr) arr.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+        });
+      }
     }
+
+    if(isDesktop() && localStorage.getItem(CK) === '1') setCollapsed(true);
+
+    if(tb) tb.addEventListener('click', function(){ setCollapsed(!sb.classList.contains('collapsed')); });
+
+    /* mobile overlay */
+    function openMobile(){
+      sb.classList.add('open');
+      if(ov) ov.classList.add('show');
+      document.body.classList.add('nav-open');
+    }
+    function closeMobile(){
+      sb.classList.remove('open');
+      if(ov) ov.classList.remove('show');
+      document.body.classList.remove('nav-open');
+    }
+
+    if(hb) hb.addEventListener('click', function(){
+      if(isDesktop()) setCollapsed(!sb.classList.contains('collapsed'));
+      else sb.classList.contains('open') ? closeMobile() : openMobile();
+    });
+    if(ov) ov.addEventListener('click', closeMobile);
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeMobile(); });
+    window.addEventListener('resize', function(){ if(window.innerWidth > 900) closeMobile(); });
+    document.querySelectorAll('#sidebar .sb-link').forEach(function(a){
+      a.addEventListener('click', function(){ if(!isDesktop()) closeMobile(); });
+    });
   }
 
-  if(isDesktop() && localStorage.getItem(CK) === '1') setCollapsed(true);
-
-  if(tb) tb.addEventListener('click', function(){
-    setCollapsed(!sb.classList.contains('collapsed'));
-  });
-
-  /* ── mobile overlay ── */
-  function openMobile(){
-    sb.classList.add('open');
-    ov.classList.add('show');
-    document.body.classList.add('nav-open');
+  /* Wait for full DOM — sidebar script is mid-body so hamburger isn't parsed yet */
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
-  function closeMobile(){
-    sb.classList.remove('open');
-    ov.classList.remove('show');
-    document.body.classList.remove('nav-open');
-  }
-
-  if(hb) hb.addEventListener('click', function(){
-    if(isDesktop()) setCollapsed(!sb.classList.contains('collapsed'));
-    else sb.classList.contains('open') ? closeMobile() : openMobile();
-  });
-  if(ov) ov.addEventListener('click', closeMobile);
-  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeMobile(); });
-  window.addEventListener('resize', function(){ if(window.innerWidth > 900) closeMobile(); });
-  document.querySelectorAll('#sidebar .sb-link').forEach(function(a){
-    a.addEventListener('click', function(){ if(!isDesktop()) closeMobile(); });
-  });
 })();
 </script>
 
 <div class="main">
+  {% if pending_task_count > 0 %}
+  <div class="reminder-bar no-print">
+    <i class="fas fa-clock"></i>
+    <span>You have <strong>{{ pending_task_count }} job card(s)</strong> with incomplete tasks. <a href="{% url 'services:list' %}?status=in_progress" style="color:var(--blue);font-weight:700;text-decoration:underline;white-space:nowrap">Review now →</a></span>
+  </div>
+  {% endif %}
+  
   <div class="topbar">
     <div class="topbar-l">
       <button class="hamburger" id="hamburger" aria-label="Menu"><i class="fas fa-bars"></i></button>
@@ -332,7 +328,7 @@
       <a href="{% url 'services:create' %}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New Job</a>
       <a href="{% url 'clients:create' %}"  class="btn btn-outline btn-sm d-xs-none"><i class="fas fa-user-plus"></i> Client</a>
       <span class="kb-hint d-xs-none" onclick="window.txShowShortcuts&&window.txShowShortcuts()" title="Keyboard shortcuts">
-        <kbd>Ctrl+/</kbd> Shortcuts
+        <kbd>Alt+/</kbd> Shortcuts
       </span>
     </div>
   </div>
@@ -357,36 +353,48 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="{% static 'js/app.js' %}?v=3"></script>
+<script src="{% static 'js/app.js' %}?v=4"></script>
 {% block extra_js %}{% endblock %}
 
 <!-- PWA: Service Worker + Install Prompt -->
 <script>
+/* Only show install banner if NOT already running as installed PWA */
+var _isInstalled = window.matchMedia('(display-mode: standalone)').matches
+  || window.navigator.standalone === true  /* iOS Safari */
+  || document.referrer.includes('android-app://');
+
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
-    navigator.serviceWorker.register('/sw.js',{scope:'/'}).then(function(r){
-      console.log('[SW] registered:',r.scope);
-    }).catch(function(e){ console.log('[SW] failed:',e); });
+    navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(function(e){
+      console.log('[SW] failed:',e);
+    });
   });
 }
-var _pwaPrompt=null;
-window.addEventListener('beforeinstallprompt',function(e){
-  e.preventDefault(); _pwaPrompt=e;
-  var b=document.getElementById('pwa-banner');
-  if(b)b.style.display='flex';
+
+var _pwaPrompt = null;
+
+if(!_isInstalled){
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    _pwaPrompt = e;
+    var b = document.getElementById('pwa-banner');
+    if(b) b.style.display = 'flex';
+  });
+}
+
+window.addEventListener('appinstalled', function(){
+  var b = document.getElementById('pwa-banner');
+  if(b) b.style.display = 'none';
+  _pwaPrompt = null;
 });
-window.addEventListener('appinstalled',function(){
-  var b=document.getElementById('pwa-banner');
-  if(b)b.style.display='none';
-  _pwaPrompt=null;
-});
+
 function pwaInstall(){
-  if(!_pwaPrompt)return;
+  if(!_pwaPrompt) return;
   _pwaPrompt.prompt();
   _pwaPrompt.userChoice.then(function(){
-    _pwaPrompt=null;
-    var b=document.getElementById('pwa-banner');
-    if(b)b.style.display='none';
+    _pwaPrompt = null;
+    var b = document.getElementById('pwa-banner');
+    if(b) b.style.display = 'none';
   });
 }
 </script>

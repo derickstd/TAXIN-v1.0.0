@@ -16,13 +16,13 @@
         </div>
         <div>
           <label class="form-label">Category <span class="req">*</span></label>
-          <select name="category" class="form-ctrl s2" data-ph="Search categories..." required>
+          <select name="category" id="categorySelect" class="form-ctrl s2" data-ph="Search categories..." required>
             <option value="">Select category...</option>
             {% for cat in form.fields.category.queryset %}
             <option value="{{ cat.pk }}">{{ cat.name }}</option>
             {% endfor %}
           </select>
-          <div class="form-hint"><a href="/admin/expenses/expensecategory/add/" target="_blank"><i class="fas fa-plus"></i> Add new category</a></div>
+          <div class="form-hint"><a href="#" onclick="openCategoryModal();return false;"><i class="fas fa-plus"></i> Add new category</a></div>
         </div>
         <div class="field-span-2">
           <label class="form-label">Description <span class="req">*</span></label>
@@ -74,7 +74,96 @@
   </div>
 </div>
 </div>
+
+<!-- Category Modal -->
+<div id="categoryModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;width:90%;max-width:500px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+    <div style="padding:1.2rem 1.5rem;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
+      <h5 style="margin:0;font-size:1.1rem;color:#1A3C6E;"><i class="fas fa-tag"></i> Add New Category</h5>
+      <button onclick="closeCategoryModal()" style="background:none;border:none;font-size:1.5rem;color:#999;cursor:pointer;line-height:1;">&times;</button>
+    </div>
+    <div style="padding:1.5rem;">
+      <form id="categoryForm" onsubmit="saveCategoryModal(event)">
+        <div class="form-group">
+          <label class="form-label">Category Name <span class="req">*</span></label>
+          <input type="text" id="catName" class="form-control" placeholder="e.g. Office Supplies" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea id="catDesc" class="form-control" rows="2" placeholder="Brief description of what this category covers"></textarea>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">
+            <input type="checkbox" id="catActive" checked>
+            <span>Active (visible in expense forms)</span>
+          </label>
+        </div>
+        <div class="form-actions" style="margin-top:1.2rem;">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save Category</button>
+          <button type="button" onclick="closeCategoryModal()" class="btn btn-outline">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 {% block extra_js %}
-<script>$(document).ready(function(){$('.s2').select2({theme:'bootstrap-5',allowClear:false,placeholder:function(){return $(this).data('ph')||'Search...';}});});</script>
+<script>
+$(document).ready(function(){
+  $('.s2').select2({theme:'bootstrap-5',allowClear:false,placeholder:function(){return $(this).data('ph')||'Search...';}});
+});
+
+function openCategoryModal() {
+  document.getElementById('categoryModal').style.display = 'flex';
+  document.getElementById('catName').focus();
+}
+
+function closeCategoryModal() {
+  document.getElementById('categoryModal').style.display = 'none';
+  document.getElementById('categoryForm').reset();
+}
+
+function saveCategoryModal(e) {
+  e.preventDefault();
+  var name = document.getElementById('catName').value.trim();
+  var desc = document.getElementById('catDesc').value.trim();
+  var active = document.getElementById('catActive').checked;
+  
+  if (!name) {
+    alert('Category name is required');
+    return;
+  }
+  
+  $.ajax({
+    url: '{% url "expenses:category_create" %}',
+    method: 'POST',
+    data: {
+      name: name,
+      description: desc,
+      is_active: active,
+      csrfmiddlewaretoken: '{{ csrf_token }}'
+    },
+    success: function(response) {
+      if (response.success) {
+        var select = $('#categorySelect');
+        var newOption = new Option(response.category.name, response.category.id, true, true);
+        select.append(newOption).trigger('change');
+        closeCategoryModal();
+        alert('Category created successfully!');
+      } else {
+        alert('Error: ' + (response.error || 'Failed to create category'));
+      }
+    },
+    error: function() {
+      alert('Failed to create category. Please try again.');
+    }
+  });
+}
+
+// Close modal on ESC key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeCategoryModal();
+});
+</script>
 {% endblock %}

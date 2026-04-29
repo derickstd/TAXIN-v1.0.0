@@ -9,6 +9,7 @@ from compliance.models import ComplianceDeadline
 from expenses.models import Expense
 from notifications.models import NotificationLog
 from credentials.models import ClientCredential
+from core.automation import get_automation_status, get_automation_recommendations
 
 @login_required
 def index(request):
@@ -79,6 +80,10 @@ def index(request):
 
     # Recent notifications
     recent_notifications = NotificationLog.objects.order_by('-created_at')[:5]
+    
+    # Automation status and recommendations
+    automation_status = get_automation_status()
+    automation_recommendations = get_automation_recommendations()
 
     ctx = {
         'invoiced_month': invoiced_month, 'collected_month': collected_month,
@@ -90,6 +95,8 @@ def index(request):
         'cred_alerts': cred_alerts, 'staff_perf': staff_perf,
         'rev_labels': rev_labels, 'rev_invoiced': rev_invoiced, 'rev_collected': rev_collected,
         'recent_notifications': recent_notifications,
+        'automation_status': automation_status,
+        'automation_recommendations': automation_recommendations,
         'today': today,
     }
     return render(request, 'dashboard/index.html', ctx)

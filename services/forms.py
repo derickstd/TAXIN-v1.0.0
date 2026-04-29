@@ -82,6 +82,6 @@ class ServiceTypeForm(forms.ModelForm):
 LineItemFormSet = inlineformset_factory(
     JobCard, JobCardLineItem,
     form=JobCardLineItemForm,
-    extra=3,
+    extra=1,
     can_delete=True,
 )

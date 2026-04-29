@@ -38,7 +38,6 @@
       <tr><td><code>full_name</code></td><td><span class="badge badge-suspended">Yes</span></td><td>Kampala Traders Ltd</td></tr>
       <tr><td><code>phone_primary</code></td><td><span class="badge badge-suspended">Yes</span></td><td>+256700100001</td></tr>
       <tr><td><code>client_type</code></td><td><span class="badge badge-dormant">No</span></td><td>individual / company / ngo</td></tr>
-      <tr><td><code>trading_name</code></td><td><span class="badge badge-dormant">No</span></td><td>KT Ltd</td></tr>
       <tr><td><code>tin</code></td><td><span class="badge badge-dormant">No</span></td><td>1001234567</td></tr>
       <tr><td><code>email</code></td><td><span class="badge badge-dormant">No</span></td><td>client@mail.com</td></tr>
       <tr><td><code>phone_whatsapp</code></td><td><span class="badge badge-dormant">No</span></td><td>+256700100001</td></tr>
@@ -51,9 +50,9 @@
 </div>
 <script>
 function downloadTemplate(){
-  var csv='full_name,phone_primary,client_type,trading_name,tin,email,phone_whatsapp,district\n'+
-    'Kampala Traders Ltd,+256700100001,company,KT Ltd,1001234567,info@kt.co.ug,+256700100001,Kampala\n'+
-    'Sarah Namukasa,+256700200002,individual,,1009876543,sarah@mail.com,,Wakiso\n';
+  var csv='full_name,phone_primary,client_type,tin,email,phone_whatsapp,district\n'+
+    'Kampala Traders Ltd,+256700100001,company,1001234567,info@kt.co.ug,+256700100001,Kampala\n'+
+    'Sarah Namukasa,+256700200002,individual,1009876543,sarah@mail.com,,Wakiso\n';
   var a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
   a.download='taxman256_clients_template.csv';

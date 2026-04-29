@@ -38,7 +38,7 @@ class Client(models.Model):
         super().save(*args, **kwargs)
 
     def get_display_name(self):
-        return self.trading_name or self.full_name
+        return self.full_name
 
     def __str__(self):
         return f"{self.client_id} — {self.get_display_name()}"

@@ -17,8 +17,7 @@ def invoice_list(request):
         invoices = invoices.filter(status=status)
     if q:
         invoices = invoices.filter(
-            Q(invoice_number__icontains=q) | Q(client__full_name__icontains=q) |
-            Q(client__trading_name__icontains=q))
+            Q(invoice_number__icontains=q) | Q(client__full_name__icontains=q))
     today = timezone.now().date()
     invoices.filter(status__in=['sent', 'partially_paid'], due_date__lt=today).update(status='overdue')
     agg = invoices.aggregate(total_invoiced=Sum('grand_total'), total_paid=Sum('amount_paid'))

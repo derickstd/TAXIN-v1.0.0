@@ -9,13 +9,12 @@
     <span style="color:#aaa;font-size:.8rem">{{ job.client.get_display_name }} &bull; {{ job.get_period_label }}</span>
   </div>
   <div class="d-flex gap-2 flex-wrap align-items-center">
-    <span class="badge badge-{{ job.status }}" style="padding:.35rem .9rem;font-size:.78rem">{{ job.get_status_display }}</span>
-    <form method="post" action="{% url 'services:update_status' job.pk %}" style="display:flex;gap:.4rem">
+    <form method="post" action="{% url 'services:update_status' job.pk %}" style="display:flex;gap:.4rem;align-items:center">
       {% csrf_token %}
+      <span class="fs-sm text-muted">Status:</span>
       <select name="status" class="form-select" style="width:auto;font-size:.83rem">
         {% for val,label in job.STATUS %}<option value="{{ val }}" {% if val == job.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
       </select>
-      <button class="btn btn-primary btn-sm">Update</button>
     </form>
     {% if job.invoice %}<a href="{% url 'billing:detail' job.invoice.pk %}" class="btn btn-gold btn-sm"><i class="fas fa-file-invoice"></i> Invoice</a>{% endif %}
   </div>
@@ -42,7 +41,6 @@
                   <select name="status" class="form-select" style="width:auto;font-size:.78rem">
                     {% for val,label in item.ITEM_STATUS %}<option value="{{ val }}" {% if val == item.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
                   </select>
-                  <button class="btn btn-outline btn-sm">✓</button>
                 </form>
               </td>
             </tr>
@@ -104,10 +102,24 @@
     </div>
     {% endif %}
 
-    {% if job.notes %}
-    <div class="alert-note mt-2">{{ job.notes }}</div>
-    {% endif %}
-  </div>
+  {% if job.notes %}
+  <div class="alert-note mt-2">{{ job.notes }}</div>
+  {% endif %}
 </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+// Auto-submit status forms on change
+document.querySelectorAll('form select[name="status"]').forEach(function(select){
+  select.addEventListener('change', function(){
+    var form = this.closest('form');
+    if(form){
+      // Auto-submit the form
+      form.submit();
+    }
+  });
+});
+</script>
 {% endblock %}
 

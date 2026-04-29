@@ -7,6 +7,7 @@ from .models import Expense, ExpenseCategory
 from django import forms
 from clients.models import Client
 from services.models import JobCard
+from core.decorators import manager_or_admin_required
 import datetime
 
 
@@ -79,3 +80,88 @@ def approve_expense(request, pk):
     else:
         messages.error(request, 'Only managers can approve expenses.')
     return redirect('expenses:list')
+
+
+class ExpenseCategoryForm(forms.ModelForm):
+    class Meta:
+        model = ExpenseCategory
+        fields = ['name', 'description', 'is_active']
+        widgets = {'description': forms.Textarea(attrs={'rows': 2})}
+
+
+@manager_or_admin_required
+def category_list(request):
+    categories = ExpenseCategory.objects.all().order_by('name')
+    return render(request, 'expenses/category_list.html', {'categories': categories})
+
+
+@login_required
+def category_create(request):
+    if request.method == 'POST':
+        # Check if it's an AJAX request
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from django.http import JsonResponse
+            name = request.POST.get('name', '').strip()
+            description = request.POST.get('description', '').strip()
+            is_active = request.POST.get('is_active') == 'true'
+            
+            if not name:
+                return JsonResponse({'success': False, 'error': 'Category name is required'})
+            
+            if ExpenseCategory.objects.filter(name=name).exists():
+                return JsonResponse({'success': False, 'error': 'Category with this name already exists'})
+            
+            category = ExpenseCategory.objects.create(
+                name=name,
+                description=description,
+                is_active=is_active
+            )
+            return JsonResponse({
+                'success': True,
+                'category': {
+                    'id': category.pk,
+                    'name': category.name,
+                    'description': category.description
+                }
+            })
+        
+        # Regular form submission
+        if not request.user.is_manager_or_admin():
+            messages.error(request, 'Only managers can manage categories.')
+            return redirect('expenses:list')
+        
+        form = ExpenseCategoryForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Expense category created.')
+            return redirect('expenses:category_list')
+    else:
+        if not request.user.is_manager_or_admin():
+            messages.error(request, 'Only managers can manage categories.')
+            return redirect('expenses:list')
+        form = ExpenseCategoryForm()
+    return render(request, 'expenses/category_form.html', {'form': form, 'action': 'Create'})
+
+
+@manager_or_admin_required
+def category_edit(request, pk):
+    cat = get_object_or_404(ExpenseCategory, pk=pk)
+    if request.method == 'POST':
+        form = ExpenseCategoryForm(request.POST, instance=cat)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Category updated.')
+            return redirect('expenses:category_list')
+    else:
+        form = ExpenseCategoryForm(instance=cat)
+    return render(request, 'expenses/category_form.html', {'form': form, 'action': 'Edit', 'category': cat})
+
+
+@manager_or_admin_required
+def category_delete(request, pk):
+    cat = get_object_or_404(ExpenseCategory, pk=pk)
+    if request.method == 'POST':
+        cat.delete()
+        messages.success(request, 'Category deleted.')
+        return redirect('expenses:category_list')
+    return render(request, 'expenses/category_confirm_delete.html', {'category': cat})

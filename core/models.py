@@ -10,16 +10,7 @@ class User(AbstractUser):
         ('admin',        'Admin'),
     ]
     THEME_CHOICES = [
-        ('classic',  'Classic Blue'),
-        ('forest',   'Forest Ledger'),
-        ('sunset',   'Sunset Copper'),
-        ('midnight', 'Midnight Slate'),
-        ('dark',     'Dark Mode'),
         ('ocean',    'Ocean Teal'),
-        ('rose',     'Rose Gold'),
-        ('charcoal', 'Charcoal Pro'),
-        ('violet',   'Violet Dusk'),
-        ('earth',    'Earth Brown'),
     ]
     role              = models.CharField(max_length=20, choices=ROLE_CHOICES, default='tax_officer')
     phone_whatsapp    = models.CharField(max_length=20, blank=True,
@@ -32,7 +23,7 @@ class User(AbstractUser):
                                                help_text='Receive Saturday/Monday debt reports')
     receive_task_reminders = models.BooleanField(default=True,
                                                   help_text='Receive reminders for incomplete tasks')
-    ui_theme          = models.CharField(max_length=20, choices=THEME_CHOICES, default='classic')
+    ui_theme          = models.CharField(max_length=20, choices=THEME_CHOICES, default='ocean')
 
     def is_manager_or_admin(self):
         return self.role in ('manager', 'admin')

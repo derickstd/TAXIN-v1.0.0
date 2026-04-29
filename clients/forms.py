@@ -7,7 +7,7 @@ class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
         fields = [
-            'client_type', 'full_name', 'trading_name', 'tin',
+            'client_type', 'full_name', 'tin',
             'phone_primary', 'phone_whatsapp', 'email',
             'physical_address', 'district',
             'referred_by', 'assigned_officer', 'notes',
@@ -20,7 +20,6 @@ class ClientForm(forms.ModelForm):
         self.fields['assigned_officer'].queryset = User.objects.filter(
             is_active_staff=True, is_active=True).order_by('first_name')
         self.fields['assigned_officer'].required = False
-        self.fields['trading_name'].required = False
         self.fields['tin'].required = False
         self.fields['phone_whatsapp'].required = False
         self.fields['email'].required = False

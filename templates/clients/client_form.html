@@ -25,10 +25,6 @@
             {% for e in form.full_name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
           </div>
           <div>
-            <label class="form-label">Trading Name</label>
-            <input type="text" name="trading_name" value="{{ form.trading_name.value|default:'' }}" class="form-control" placeholder="If different from full name">
-          </div>
-          <div>
             <label class="form-label">TIN (Tax ID)</label>
             <input type="text" name="tin" value="{{ form.tin.value|default:'' }}" class="form-control" placeholder="e.g. 1001234567">
             <div class="form-hint">Required before URA filing</div>

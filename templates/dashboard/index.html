@@ -16,6 +16,54 @@
   <div class="kpi green"><div class="kpi-label">Jobs Completed</div><div class="kpi-value">{{ jobs_completed }}</div><div class="kpi-sub">This month</div></div>
 </div>
 
+<!-- Automation Status -->
+{% if automation_status %}
+<div class="card-box card-compact" style="margin-bottom:1rem;border-left:4px solid var(--gold)">
+  <div class="card-head">
+    <span><i class="fas fa-robot"></i>Automation Status</span>
+    <span style="font-size:.72rem;color:var(--muted)">Last run: {{ automation_status.last_run }}</span>
+  </div>
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.85rem">
+      <div style="text-align:center;padding:.5rem">
+        <div style="font-size:1.5rem;font-weight:800;color:var(--blue)">{{ automation_status.overdue_invoices_updated }}</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">Overdue Updated Today</div>
+      </div>
+      <div style="text-align:center;padding:.5rem">
+        <div style="font-size:1.5rem;font-weight:800;color:var(--red)">{{ automation_status.suspended_clients }}</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">Suspended Clients</div>
+      </div>
+      <div style="text-align:center;padding:.5rem">
+        <div style="font-size:1.5rem;font-weight:800;color:var(--orange)">{{ automation_status.upcoming_deadlines }}</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">Deadlines (7 days)</div>
+      </div>
+      <div style="text-align:center;padding:.5rem">
+        <div style="font-size:1.5rem;font-weight:800;color:var(--green)">{{ automation_status.auto_generated_jobs_today }}</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">Auto-Generated Today</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Smart Recommendations -->
+{% if automation_recommendations %}
+<div class="card-box card-compact" style="margin-bottom:1rem">
+  <div class="card-head"><i class="fas fa-lightbulb"></i>Smart Recommendations</div>
+  <div class="card-body p0">
+    {% for rec in automation_recommendations %}
+    <div class="alert alert-{{ rec.type }}" style="margin:.5rem;border-radius:6px">
+      <div style="flex:1">
+        <strong>{{ rec.title }}</strong>
+        <div style="font-size:.78rem;margin-top:.2rem">{{ rec.action }}</div>
+      </div>
+      <a href="{{ rec.url }}" class="btn btn-sm btn-outline">Review</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <div class="layout-main-sidebar" style="margin-bottom:1rem">
   <!-- Revenue chart -->
   <div>

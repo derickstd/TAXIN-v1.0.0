@@ -66,6 +66,28 @@ Open: **http://127.0.0.1:8000**
 
 ## Key Feature Guide
 
+### 🤖 Automation (NEW!)
+The system now includes **comprehensive automation** to minimize manual work:
+
+**Real-Time Automations:**
+- ✅ **Auto-Invoice Generation** — Invoices created automatically when job cards are saved
+- ✅ **Smart Status Updates** — Job card and invoice statuses update based on progress
+- ✅ **Payment Processing** — Client balances and line items update when payments recorded
+- ✅ **Client Status Management** — Auto-suspend clients with 60+ day overdue debt
+
+**Scheduled Automations (Daily):**
+- ✅ **Overdue Detection** — Automatically marks invoices as overdue
+- ✅ **Recurring Jobs** — Auto-generates monthly job cards for recurring services
+- ✅ **Compliance Reminders** — WhatsApp alerts 7 days before deadlines
+- ✅ **Status Cleanup** — Marks dormant clients, reactivates paid accounts
+
+**Dashboard Insights:**
+- 📊 Automation status widget shows last run time and activity
+- 💡 Smart recommendations highlight issues needing attention
+- 🔧 Manual triggers for generating missing invoices
+
+**Setup:** See `AUTOMATION_GUIDE.md` for full details and setup instructions.
+
 ### Price List
 - Sidebar → **Price List** (direct link, always visible)
 - Shows all 16 services grouped by category with Uganda pricing

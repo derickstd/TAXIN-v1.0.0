@@ -1,7 +1,17 @@
 import logging
 from django.utils import timezone
+from django.core.management import call_command
 
 logger = logging.getLogger(__name__)
+
+
+def run_daily_automation():
+    """Master automation task - runs all daily maintenance"""
+    try:
+        call_command('run_automation')
+        logger.info("Daily automation completed successfully")
+    except Exception as e:
+        logger.error(f"Daily automation failed: {e}")
 
 
 def update_client_statuses():

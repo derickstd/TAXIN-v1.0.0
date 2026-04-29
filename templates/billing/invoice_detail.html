@@ -13,7 +13,6 @@
     <span class="fs-sm text-muted">{{ invoice.client.get_display_name }} &bull; {{ invoice.date_issued }}</span>
   </div>
   <div class="flex gap-2 flex-wrap no-print">
-    <span class="badge badge-{{ invoice.status }}" style="padding:.3rem .8rem;font-size:.76rem">{{ invoice.get_status_display }}</span>
     {% if invoice.document_type != 'invoice' %}
     <form method="post" action="{% url 'billing:convert' invoice.pk %}">{% csrf_token %}
       <button class="btn btn-primary btn-sm" data-confirm="Convert to Tax Invoice? This cannot be undone.">
@@ -67,7 +66,6 @@
                 <th>Description</th><th>Period</th>
                 <th style="text-align:right">List Rate</th>
                 <th style="text-align:right">Your Price</th>
-                <th>Status</th>
                 <th style="text-align:right">Total</th>
               </tr>
             </thead>
@@ -79,30 +77,24 @@
                   <td class="fs-xs text-muted">{{ item.period_label|default:"—" }}</td>
                   <td class="ugx text-r fs-xs text-muted">{{ item.default_price|floatformat:0|intcomma }}</td>
                   <td class="ugx text-r fw-7">{{ item.negotiated_price|floatformat:0|intcomma }}</td>
-                  <td>
-                    {% if item.status == 'handled_paid' %}<span style="color:var(--green);font-size:.73rem;font-weight:700">✓ Filed &amp; Paid</span>
-                    {% elif item.status == 'handled_not_paid' %}<span style="color:var(--orange);font-size:.73rem;font-weight:700">✓ Filed — Awaiting Payment</span>
-                    {% else %}<span class="fs-xs text-muted">Pending</span>{% endif %}
-                  </td>
                   <td class="ugx text-r fw-7">{{ item.line_total|floatformat:0|intcomma }}</td>
                 </tr>
                 {% endfor %}
               {% else %}
               <tr>
-                <td colspan="4" class="fw-6">{{ invoice.notes|default:"Professional Services" }}</td>
-                <td>—</td>
+                <td colspan="3" class="fw-6">{{ invoice.notes|default:"Professional Services" }}</td>
                 <td class="ugx text-r fw-7">{{ invoice.grand_total|floatformat:0|intcomma }}</td>
               </tr>
               {% endif %}
             </tbody>
             <tfoot>
-              <tr style="background:#f8f9fb"><td colspan="5" class="text-r fw-7" style="padding:.6rem .85rem">Subtotal</td><td class="ugx text-r fw-7" style="padding:.6rem .85rem">UGX {{ invoice.subtotal|floatformat:0|intcomma }}</td></tr>
-              {% if invoice.vat_total > 0 %}<tr><td colspan="5" class="text-r" style="padding:.5rem .85rem">VAT (18%)</td><td class="ugx text-r" style="padding:.5rem .85rem">UGX {{ invoice.vat_total|floatformat:0|intcomma }}</td></tr>{% endif %}
-              <tr style="background:var(--blue)"><td colspan="5" class="text-r fw-8" style="color:#fff;padding:.65rem .85rem">GRAND TOTAL</td><td class="ugx text-r fw-8" style="color:#fff;padding:.65rem .85rem;font-size:1.05rem">UGX {{ invoice.grand_total|floatformat:0|intcomma }}</td></tr>
+              <tr style="background:#f8f9fb"><td colspan="4" class="text-r fw-7" style="padding:.6rem .85rem">Subtotal</td><td class="ugx text-r fw-7" style="padding:.6rem .85rem">UGX {{ invoice.subtotal|floatformat:0|intcomma }}</td></tr>
+              {% if invoice.vat_total > 0 %}<tr><td colspan="4" class="text-r" style="padding:.5rem .85rem">VAT (18%)</td><td class="ugx text-r" style="padding:.5rem .85rem">UGX {{ invoice.vat_total|floatformat:0|intcomma }}</td></tr>{% endif %}
+              <tr style="background:var(--blue)"><td colspan="4" class="text-r fw-8" style="color:#fff;padding:.65rem .85rem">GRAND TOTAL</td><td class="ugx text-r fw-8" style="color:#fff;padding:.65rem .85rem;font-size:1.05rem">UGX {{ invoice.grand_total|floatformat:0|intcomma }}</td></tr>
               {% if invoice.document_type == 'invoice' %}
-              <tr style="background:#d4edda"><td colspan="5" class="text-r" style="color:#155724;padding:.6rem .85rem">Amount Paid</td><td class="ugx text-r fw-7" style="color:var(--green);padding:.6rem .85rem">(UGX {{ invoice.amount_paid|floatformat:0|intcomma }})</td></tr>
+              <tr style="background:#d4edda"><td colspan="4" class="text-r" style="color:#155724;padding:.6rem .85rem">Amount Paid</td><td class="ugx text-r fw-7" style="color:var(--green);padding:.6rem .85rem">(UGX {{ invoice.amount_paid|floatformat:0|intcomma }})</td></tr>
               <tr style="background:{% if invoice.balance_due > 0 %}#f8d7da{% else %}#d4edda{% endif %}">
-                <td colspan="5" class="text-r fw-8" style="padding:.7rem .85rem;{% if invoice.balance_due > 0 %}color:#721c24{% else %}color:#155724{% endif %}">BALANCE DUE</td>
+                <td colspan="4" class="text-r fw-8" style="padding:.7rem .85rem;{% if invoice.balance_due > 0 %}color:#721c24{% else %}color:#155724{% endif %}">BALANCE DUE</td>
                 <td class="ugx text-r fw-8" style="padding:.7rem .85rem;font-size:1.1rem;{% if invoice.balance_due > 0 %}color:var(--red){% else %}color:var(--green){% endif %}">UGX {{ invoice.balance_due|floatformat:0|intcomma }}</td>
               </tr>
               {% endif %}

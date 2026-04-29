@@ -14,3 +14,6 @@ def role_required(roles):
             return view_func(request, *args, **kwargs)
         return wrapper
     return decorator
+
+def manager_or_admin_required(view_func):
+    return role_required(['manager', 'admin'])(view_func)

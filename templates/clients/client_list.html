@@ -60,4 +60,108 @@
   <div class="empty-state"><i class="fas fa-users"></i><p>No clients found. <a href="{% url 'clients:create' %}">Add the first client</a></p></div>
   {% endif %}
 </div>
+
+<!-- Bottom Action Buttons -->
+<div class="mt-3" style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap">
+  <button type="button" class="btn btn-outline" id="openWalkinBtn">
+    <i class="fas fa-door-open"></i> Walk-in Visit
+  </button>
+  <button type="button" class="btn btn-outline" id="openBatchImportBtn">
+    <i class="fas fa-file-import"></i> Batch Import
+  </button>
+</div>
+
+<!-- Walk-in Visit Modal -->
+<div class="modal-overlay" id="walkinModal">
+  <div class="modal-box" style="max-width:500px">
+    <div class="modal-hd">
+      <h5><i class="fas fa-door-open"></i> Walk-in Client Intake</h5>
+      <button type="button" class="modal-close" id="closeWalkin">&times;</button>
+    </div>
+    <form method="post" action="{% url 'clients:walkin' %}" novalidate>
+      {% csrf_token %}
+      <div class="form-stack">
+        <div>
+          <label class="form-label">Client Name <span class="req">*</span></label>
+          <input type="text" name="full_name" class="form-control" placeholder="Full name" required>
+        </div>
+        <div>
+          <label class="form-label">Phone <span class="req">*</span></label>
+          <input type="text" name="phone" class="form-control" placeholder="+256 ..." required>
+        </div>
+        <div>
+          <label class="form-label">Service Needed</label>
+          <select name="service_type" class="form-control">
+            <option value="">Select service...</option>
+            <option value="registration">New Registration</option>
+            <option value="filing">Tax Filing</option>
+            <option value="consultation">Consultation</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Notes</label>
+          <textarea name="notes" class="form-control" rows="2" placeholder="Brief notes..."></textarea>
+        </div>
+      </div>
+      <div class="form-actions mt-3">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Walk-in</button>
+        <button type="button" class="btn btn-outline" id="closeWalkin2">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Batch Import Modal -->
+<div class="modal-overlay" id="batchImportModal">
+  <div class="modal-box" style="max-width:600px">
+    <div class="modal-hd">
+      <h5><i class="fas fa-file-import"></i> Batch Import Clients</h5>
+      <button type="button" class="modal-close" id="closeBatchImport">&times;</button>
+    </div>
+    <form method="post" action="{% url 'clients:import' %}" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      <div class="alert-note mb-3" style="font-size:.78rem">
+        <i class="fas fa-info-circle"></i> Upload a CSV file with columns: name, tin, phone, email, etc.
+      </div>
+      <div class="form-stack">
+        <div>
+          <label class="form-label">CSV File <span class="req">*</span></label>
+          <input type="file" name="file" accept=".csv" class="form-control" required>
+        </div>
+        <div id="importPreview"></div>
+      </div>
+      <div class="form-actions mt-3">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Import</button>
+        <button type="button" class="btn btn-outline" id="closeBatchImport2">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function(){
+  /* Walk-in Modal */
+  var walkinModal = document.getElementById('walkinModal');
+  document.getElementById('openWalkinBtn').addEventListener('click', function(){
+    walkinModal.classList.add('open');
+  });
+  function closeWalkin(){ walkinModal.classList.remove('open'); }
+  document.getElementById('closeWalkin').addEventListener('click', closeWalkin);
+  document.getElementById('closeWalkin2').addEventListener('click', closeWalkin);
+  walkinModal.addEventListener('click', function(e){ if(e.target===walkinModal) closeWalkin(); });
+
+  /* Batch Import Modal */
+  var batchModal = document.getElementById('batchImportModal');
+  document.getElementById('openBatchImportBtn').addEventListener('click', function(){
+    batchModal.classList.add('open');
+  });
+  function closeBatch(){ batchModal.classList.remove('open'); }
+  document.getElementById('closeBatchImport').addEventListener('click', closeBatch);
+  document.getElementById('closeBatchImport2').addEventListener('click', closeBatch);
+  batchModal.addEventListener('click', function(e){ if(e.target===batchModal) closeBatch(); });
+});
+</script>
 {% endblock %}
