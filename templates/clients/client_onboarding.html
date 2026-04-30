@@ -98,6 +98,7 @@
   </div>
 
   <div class="stack">
+    {% if import_section_active == 'walkin' %}
     <div class="card-box card-compact" id="walkin-section">
       <div class="card-head"><i class="fas fa-door-open"></i>Walk-in Intake</div>
       <div class="card-body">
@@ -140,11 +141,14 @@
           </div>
           <div class="form-actions mt-3">
             <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Record Visit</button>
+            <a href="{% url 'clients:list' %}" class="btn btn-outline">Skip & Go to Clients</a>
           </div>
         </form>
       </div>
     </div>
+    {% endif %}
 
+    {% if import_section_active == 'batch_import' %}
     <div class="card-box card-compact" id="import-section">
       <div class="card-head"><i class="fas fa-file-import"></i>Batch Import</div>
       <div class="card-body">
@@ -188,6 +192,7 @@
         </form>
       </div>
     </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

@@ -133,13 +133,21 @@ def client_create(request):
     if request.method == 'POST':
         form = ClientForm(request.POST)
         if form.is_valid():
+            from core.email_utils import send_welcome_email
+            
             client = form.save(commit=False)
             client.created_by = request.user
             # Handle district from POST directly since it's a free select
             client.district = request.POST.get('district', 'Kampala')
             client.save()
+            
+            # Send welcome email
+            if client.email:
+                send_welcome_email(client)
+            
             messages.success(request, f'Client {client.client_id} — {client.get_display_name()} created.')
-            return redirect('clients:detail', pk=client.pk)
+            # Redirect to walk-in intake with the new client pre-selected
+            return redirect(f"{request.path}?section=walkin&client={client.pk}")
         return _render_client_onboarding(
             request,
             client_form=form,
@@ -147,7 +155,14 @@ def client_create(request):
         )
     form = ClientForm()
     section = request.GET.get('section', 'new_client')
-    return _render_client_onboarding(request, client_form=form, import_section_active=section)
+    client_id = request.GET.get('client')
+    walkin_form = WalkInIntakeForm(initial={'client': client_id} if client_id else {})
+    return _render_client_onboarding(
+        request, 
+        client_form=form, 
+        walkin_form=walkin_form,
+        import_section_active=section
+    )
 
 @login_required
 def client_edit(request, pk):

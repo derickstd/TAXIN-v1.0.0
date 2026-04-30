@@ -88,6 +88,25 @@ The system now includes **comprehensive automation** to minimize manual work:
 
 **Setup:** See `AUTOMATION_GUIDE.md` for full details and setup instructions.
 
+### 📧 Email Notifications (NEW!)
+Professional HTML email templates for all client communications:
+
+**Automated Emails:**
+- ✅ **Invoice Delivery** — Sent when "Send via WhatsApp" is clicked
+- ✅ **Payment Receipts** — Auto-sent when payment is recorded
+- ✅ **Welcome Emails** — Sent to new clients on registration
+- ✅ **Debt Reminders** — Scheduled bulk sending to clients with outstanding balances
+- ✅ **Compliance Reminders** — Tax deadline alerts 7 days in advance
+
+**Email Features:**
+- Professional Ocean Teal branding matching system theme
+- Responsive design for mobile and desktop
+- HTML + plain text fallback
+- Works with Gmail, SendGrid, AWS SES, or any SMTP provider
+- Console mode for development (no SMTP needed)
+
+**Setup:** See `EMAIL_SYSTEM.md` for complete configuration guide.
+
 ### Price List
 - Sidebar → **Price List** (direct link, always visible)
 - Shows all 16 services grouped by category with Uganda pricing
@@ -104,18 +123,19 @@ All dropdowns support **live search** — just start typing:
 - Invoices are **auto-generated** when you save a job card
 - Standalone invoice: Sidebar → **Manual Invoice**
 - Record payments from the invoice detail page
-- **Send via WhatsApp** button on every invoice (demo mode logs it; live with Twilio)
+- **Send via WhatsApp & Email** button on every invoice
+- Automatic payment receipts sent via email
 
-### WhatsApp Reminders (Automated)
+### WhatsApp & Email Reminders (Automated)
 | Schedule            | Action                                          |
 |---------------------|-------------------------------------------------|
-| Every Friday 8AM    | Debt reminder to every client with unpaid invoices |
-| Every Saturday 8AM  | Full debt report list to manager (+256785230670)   |
+| Every Friday 8AM    | Debt reminder via WhatsApp + Email to clients with unpaid invoices |
+| Every Saturday 8AM  | Full debt report to manager (+256785230670)   |
 | Every Monday 8AM    | Same manager debt report                           |
 
 Manual trigger: **Notifications** → "Send Debt Reminders Now"
 
-In demo mode (Twilio not configured), messages are **logged** in Notifications but not sent. To enable live sending, add Twilio credentials to `.env`.
+In demo mode, messages are **logged** in Notifications. Configure Twilio (WhatsApp) and SMTP (Email) in `.env` for live sending.
 
 ### Compliance Calendar
 - All VAT/PAYE/NSSF/NSSF deadlines auto-calculated (15th of following month)
@@ -169,13 +189,39 @@ Update `.env`:
 DATABASE_URL=postgresql://taxman256user:StrongPassword123!@localhost:5432/taxman256
 ```
 
-### 2. WhatsApp (Twilio)
+### 2. WhatsApp & Email (Twilio + SMTP)
+
+**WhatsApp via Twilio:**
 ```env
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
 MANAGER_WHATSAPP=+256785230670
 ```
+
+**Email via Gmail (recommended for small setups):**
+```env
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-email@gmail.com
+EMAIL_HOST_PASSWORD=your-16-char-app-password
+DEFAULT_FROM_EMAIL=Taxman256 <noreply@taxman256.ug>
+```
+
+**Email via SendGrid (recommended for production):**
+```env
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.sendgrid.net
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=apikey
+EMAIL_HOST_PASSWORD=SG.your-sendgrid-api-key
+DEFAULT_FROM_EMAIL=Taxman256 <noreply@taxman256.ug>
+```
+
+See `EMAIL_SYSTEM.md` for full email configuration guide.
 
 ### 3. Run with Waitress (Windows production server)
 ```bash

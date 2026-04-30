@@ -1,0 +1,57 @@
+{% extends 'emails/base_email.html' %}
+{% load humanize %}
+
+{% block content %}
+<h2 style="color: #f59e0b; margin-top: 0;">Payment Reminder</h2>
+
+<p>Dear {{ client.get_display_name }},</p>
+
+<p>This is a friendly reminder that you have outstanding invoices with us.</p>
+
+<div class="warning-box">
+    <p style="margin: 0; font-size: 16px;"><strong>Total Outstanding:</strong> <span style="color: #dc2626; font-size: 20px; font-weight: 700;">UGX {{ client.total_outstanding|floatformat:0|intcomma }}</span></p>
+</div>
+
+<h3 style="color: #333; margin-top: 25px;">Outstanding Invoices</h3>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Invoice #</th>
+            <th>Due Date</th>
+            <th style="text-align: right;">Amount</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invoice in invoices %}
+        <tr>
+            <td>{{ invoice.invoice_number }}</td>
+            <td>{{ invoice.due_date|date:"d M Y" }}</td>
+            <td style="text-align: right;">UGX {{ invoice.balance|floatformat:0|intcomma }}</td>
+            <td>
+                {% if invoice.is_overdue %}
+                <span style="color: #dc2626; font-weight: 600;">Overdue</span>
+                {% else %}
+                <span style="color: #f59e0b;">Pending</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3 style="color: #333; margin-top: 25px;">Payment Information</h3>
+<div class="info-box">
+    <p style="margin: 0 0 10px;"><strong>Payment Methods:</strong></p>
+    <ul style="margin: 0; padding-left: 20px;">
+        <li>Mobile Money: MTN/Airtel Money</li>
+        <li>Bank Transfer</li>
+        <li>Cash at Office</li>
+    </ul>
+    <p style="margin: 15px 0 0;">Please contact us for payment details or to arrange a payment plan.</p>
+</div>
+
+<p style="margin-top: 25px;">We value your business and look forward to continuing our partnership. If you have already made payment, please disregard this reminder.</p>
+
+<p style="margin-top: 20px;">Best regards,<br><strong>Taxman256 Team</strong></p>
+{% endblock %}

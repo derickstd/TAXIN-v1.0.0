@@ -12,8 +12,11 @@ def notification_list(request):
 @login_required
 def send_reminders_now(request):
     if request.method == 'POST':
-        send_debt_reminders()
-        messages.success(request, 'Debt reminders sent (or queued).')
+        result = send_debt_reminders()
+        if isinstance(result, dict):
+            messages.success(request, f'Debt reminders sent: {result["whatsapp"]} WhatsApp, {result["email"]} Email.')
+        else:
+            messages.success(request, 'Debt reminders sent (or queued).')
     return redirect('notifications:list')
 
 @login_required

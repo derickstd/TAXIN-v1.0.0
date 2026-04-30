@@ -87,7 +87,9 @@ class Command(BaseCommand):
         self.stdout.write(f'  → {suspended_count} clients suspended, {dormant_count} marked dormant, {reactivated} reactivated')
 
     def send_compliance_reminders(self):
-        """Send reminders for upcoming compliance deadlines"""
+        """Send reminders for upcoming compliance deadlines via WhatsApp and Email"""
+        from core.email_utils import send_bulk_compliance_reminders
+        
         today = timezone.now().date()
         upcoming = today + timezone.timedelta(days=7)
         
@@ -97,7 +99,7 @@ class Command(BaseCommand):
             status='upcoming'
         ).select_related('obligation__client', 'obligation__service_type')
         
-        sent_count = 0
+        whatsapp_sent = 0
         for deadline in deadlines:
             days_left = (deadline.due_date - today).days
             client = deadline.obligation.client
@@ -105,9 +107,12 @@ class Command(BaseCommand):
             msg = f"📅 Reminder: {service_name} for {deadline.period_label} is due in {days_left} days ({deadline.due_date}). Please prepare your documents."
             
             if send_whatsapp_message(client.get_whatsapp_number(), msg):
-                sent_count += 1
+                whatsapp_sent += 1
         
-        self.stdout.write(f'  → {sent_count} compliance reminders sent')
+        # Send email reminders
+        email_sent = send_bulk_compliance_reminders()
+        
+        self.stdout.write(f'  → {whatsapp_sent} WhatsApp + {email_sent} email compliance reminders sent')
 
     def generate_recurring_jobs(self):
         """Auto-generate job cards for recurring services"""

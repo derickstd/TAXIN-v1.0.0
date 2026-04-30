@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.utils import timezone
+from django.core.mail import send_mail
 from .models import NotificationLog
 
 
@@ -26,6 +27,42 @@ def get_firm_sender():
         'email': (admin.email_notify if admin else '') or getattr(settings, 'FIRM_EMAIL', 'taxissues.go@gmail.com'),
         'name': getattr(settings, 'FIRM_NAME', 'Taxman256'),
     }
+
+
+def send_email_notification(to_email, subject, message, client=None, msg_type='debt_reminder', triggered_by=None):
+    """Send email notification to client or staff."""
+    if not to_email:
+        return False
+    
+    log = NotificationLog.objects.create(
+        client=client,
+        recipient_number=to_email,  # Store email in recipient_number field
+        message_type=msg_type,
+        message_body=message,
+        triggered_by=triggered_by,
+        status='queued',
+    )
+    
+    sender = get_firm_sender()
+    from_email = sender['email']
+    
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=from_email,
+            recipient_list=[to_email],
+            fail_silently=False,
+        )
+        log.status = 'sent'
+        log.sent_at = timezone.now()
+        log.save()
+        return True
+    except Exception as e:
+        log.status = 'failed'
+        log.error_message = str(e)
+        log.save()
+        return False
 
 
 def send_whatsapp_message(to_number, message, client=None, msg_type='debt_reminder',
@@ -63,25 +100,27 @@ def send_whatsapp_message(to_number, message, client=None, msg_type='debt_remind
 
 
 def send_debt_reminders():
-    """Friday: send debt reminder to every client with outstanding balance."""
+    """Friday: send debt reminder to every client with outstanding balance via WhatsApp AND Email."""
     from billing.models import Invoice
     from clients.models import Client
     from django.db.models import Sum
     sender = get_firm_sender()
     clients_with_debt = Client.objects.filter(
         invoices__status__in=['overdue', 'partially_paid', 'sent']).distinct()
-    sent = 0
+    sent_whatsapp = 0
+    sent_email = 0
+    
     for client in clients_with_debt:
         out = Invoice.objects.filter(client=client).exclude(status__in=['paid','written_off']).aggregate(s=Sum('grand_total'))['s'] or 0
         paid = Invoice.objects.filter(client=client).aggregate(s=Sum('amount_paid'))['s'] or 0
         balance = out - paid
         if balance <= 0:
             continue
-        wa = client.get_whatsapp_number()
-        if not wa:
-            continue
+        
         inv_nums = ', '.join(Invoice.objects.filter(client=client).exclude(
             status__in=['paid','written_off']).values_list('invoice_number', flat=True)[:4])
+        
+        # Prepare message
         msg = (f"Dear {client.get_display_name()},\n\n"
                f"Friendly reminder from {sender['name']}.\n\n"
                f"Outstanding balance: UGX {balance:,.0f}\n"
@@ -89,9 +128,20 @@ def send_debt_reminders():
                f"Please make payment to avoid service interruption.\n"
                f"Pay to: {sender['whatsapp']} (Mobile Money)\n"
                f"Email: {sender['email']}\n\nThank you.")
-        send_whatsapp_message(wa, msg, client=client, msg_type='debt_reminder')
-        sent += 1
-    return sent
+        
+        # Send WhatsApp
+        wa = client.get_whatsapp_number()
+        if wa:
+            send_whatsapp_message(wa, msg, client=client, msg_type='debt_reminder')
+            sent_whatsapp += 1
+        
+        # Send Email
+        if client.email:
+            subject = f"Payment Reminder - Outstanding Balance UGX {balance:,.0f}"
+            send_email_notification(client.email, subject, msg, client=client, msg_type='debt_reminder')
+            sent_email += 1
+    
+    return {'whatsapp': sent_whatsapp, 'email': sent_email}
 
 
 def send_manager_debt_report():

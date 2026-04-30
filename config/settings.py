@@ -7,7 +7,7 @@ environ.Env.read_env(BASE_DIR / '.env')
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['127.0.0.1','*.primeserver.space','primeserver.space','www.primeserver.space']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -78,6 +78,16 @@ FIRM_NAME = env('FIRM_NAME', default='Taxman256')
 FIRM_ADDRESS = env('FIRM_ADDRESS', default='Kampala, Uganda')
 FIRM_PHONE = env('FIRM_PHONE', default='+256785230670')
 FIRM_EMAIL = env('FIRM_EMAIL', default='info@taxman256.ug')
+
+# Email Configuration
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = env('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Taxman256 <noreply@taxman256.ug>')
+SERVER_EMAIL = env('SERVER_EMAIL', default='noreply@taxman256.ug')
+
 SESSION_COOKIE_AGE = 14400
 APSCHEDULER_DATETIME_FORMAT = "N j, Y, f:s a"

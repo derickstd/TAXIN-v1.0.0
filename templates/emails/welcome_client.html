@@ -1,0 +1,66 @@
+{% extends 'emails/base_email.html' %}
+
+{% block content %}
+<h2 style="color: #0e7490; margin-top: 0;">Welcome to Taxman256!</h2>
+
+<p>Dear {{ client.get_display_name }},</p>
+
+<p>Thank you for choosing Taxman256 Professional Management Services. We're excited to partner with you for all your tax and compliance needs.</p>
+
+<div class="info-box">
+    <p style="margin: 0 0 10px;"><strong>Your Client Details:</strong></p>
+    <table style="width: 100%; border: none;">
+        <tr>
+            <td style="border: none; padding: 5px 0;"><strong>Client ID:</strong></td>
+            <td style="border: none; padding: 5px 0;">{{ client.client_id }}</td>
+        </tr>
+        <tr>
+            <td style="border: none; padding: 5px 0;"><strong>Client Type:</strong></td>
+            <td style="border: none; padding: 5px 0;">{{ client.get_client_type_display }}</td>
+        </tr>
+        {% if client.tin %}
+        <tr>
+            <td style="border: none; padding: 5px 0;"><strong>TIN:</strong></td>
+            <td style="border: none; padding: 5px 0;">{{ client.tin }}</td>
+        </tr>
+        {% endif %}
+        {% if client.assigned_officer %}
+        <tr>
+            <td style="border: none; padding: 5px 0;"><strong>Assigned Officer:</strong></td>
+            <td style="border: none; padding: 5px 0;">{{ client.assigned_officer.get_full_name }}</td>
+        </tr>
+        {% endif %}
+    </table>
+</div>
+
+<h3 style="color: #333; margin-top: 25px;">Our Services</h3>
+<ul style="line-height: 1.8;">
+    <li><strong>VAT Returns</strong> - Monthly filing and compliance</li>
+    <li><strong>PAYE Management</strong> - Employee tax administration</li>
+    <li><strong>Income Tax</strong> - Annual returns and planning</li>
+    <li><strong>NSSF Compliance</strong> - Social security contributions</li>
+    <li><strong>Business Registration</strong> - URSB services</li>
+    <li><strong>Tax Advisory</strong> - Professional consultation</li>
+</ul>
+
+<h3 style="color: #333; margin-top: 25px;">What's Next?</h3>
+<div class="info-box">
+    <ol style="margin: 0; padding-left: 20px; line-height: 1.8;">
+        <li>Your assigned officer will contact you within 24 hours</li>
+        <li>We'll review your tax compliance requirements</li>
+        <li>Set up your service schedule and deadlines</li>
+        <li>Begin managing your tax obligations</li>
+    </ol>
+</div>
+
+<h3 style="color: #333; margin-top: 25px;">Contact Us</h3>
+<p style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 0;">
+    <strong>Phone:</strong> +256 785 230 670<br>
+    <strong>Location:</strong> Kampala, Uganda<br>
+    <strong>Office Hours:</strong> Monday - Friday, 8:00 AM - 5:00 PM
+</p>
+
+<p style="margin-top: 25px;">We look forward to serving you!</p>
+
+<p style="margin-top: 20px;">Best regards,<br><strong>Taxman256 Team</strong></p>
+{% endblock %}

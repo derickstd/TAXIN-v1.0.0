@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+        .container { max-width: 600px; margin: 20px auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #0e7490 0%, #0891b2 100%); color: #fff; padding: 30px 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+        .header p { margin: 5px 0 0; font-size: 14px; opacity: 0.9; }
+        .content { padding: 30px 20px; }
+        .footer { background: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #666; border-top: 1px solid #e0e0e0; }
+        .btn { display: inline-block; padding: 12px 24px; background: #0e7490; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 10px 0; }
+        .btn:hover { background: #0891b2; }
+        .info-box { background: #ecfeff; border-left: 4px solid #0e7490; padding: 15px; margin: 15px 0; border-radius: 4px; }
+        .warning-box { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 15px 0; border-radius: 4px; }
+        .table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        .table th, .table td { padding: 10px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+        .table th { background: #f8f9fa; font-weight: 600; }
+        .amount { font-size: 20px; font-weight: 700; color: #0e7490; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Taxman256 PMS</h1>
+            <p>Professional Tax Management Services</p>
+        </div>
+        <div class="content">
+            {% block content %}{% endblock %}
+        </div>
+        <div class="footer">
+            <p><strong>Taxman256 Professional Management Services</strong></p>
+            <p>Kampala, Uganda | +256 785 230 670</p>
+            <p style="margin-top: 10px; font-size: 11px; color: #999;">
+                This is an automated message. Please do not reply to this email.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

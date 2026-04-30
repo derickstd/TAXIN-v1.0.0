@@ -1,0 +1,67 @@
+{% extends 'emails/base_email.html' %}
+{% load humanize %}
+
+{% block content %}
+<h2 style="color: #0e7490; margin-top: 0;">Payment Receipt</h2>
+
+<p>Dear {{ payment.invoice.client.get_display_name }},</p>
+
+<p>Thank you for your payment. This email confirms that we have received your payment.</p>
+
+<div class="info-box">
+    <table style="width: 100%; border: none;">
+        <tr>
+            <td style="border: none; padding: 5px 0;"><strong>Receipt Number:</strong></td>
+            <td style="border: none; padding: 5px 0;">{{ payment.receipt_number }}</td>
+        </tr>
+        <tr>
+            <td style="border: none; padding: 5px 0;"><strong>Payment Date:</strong></td>
+            <td style="border: none; padding: 5px 0;">{{ payment.payment_date|date:"d M Y" }}</td>
+        </tr>
+        <tr>
+            <td style="border: none; padding: 5px 0;"><strong>Invoice Number:</strong></td>
+            <td style="border: none; padding: 5px 0;">{{ payment.invoice.invoice_number }}</td>
+        </tr>
+        <tr>
+            <td style="border: none; padding: 5px 0;"><strong>Payment Method:</strong></td>
+            <td style="border: none; padding: 5px 0;">{{ payment.get_payment_method_display }}</td>
+        </tr>
+    </table>
+</div>
+
+<h3 style="color: #333; margin-top: 25px;">Payment Details</h3>
+<table class="table">
+    <tr>
+        <td><strong>Amount Paid</strong></td>
+        <td style="text-align: right;"><span class="amount">UGX {{ payment.amount|floatformat:0|intcomma }}</span></td>
+    </tr>
+    <tr>
+        <td>Invoice Total</td>
+        <td style="text-align: right;">UGX {{ payment.invoice.grand_total|floatformat:0|intcomma }}</td>
+    </tr>
+    <tr style="background: #ecfeff;">
+        <td><strong>Remaining Balance</strong></td>
+        <td style="text-align: right;"><strong>UGX {{ payment.invoice.balance|floatformat:0|intcomma }}</strong></td>
+    </tr>
+</table>
+
+{% if payment.invoice.balance == 0 %}
+<div class="info-box">
+    <p style="margin: 0; color: #059669; font-weight: 600;">✓ Invoice Fully Paid</p>
+</div>
+{% else %}
+<div class="warning-box">
+    <p style="margin: 0;"><strong>Outstanding Balance:</strong> UGX {{ payment.invoice.balance|floatformat:0|intcomma }}</p>
+    <p style="margin: 5px 0 0; font-size: 13px;">Please settle the remaining balance by {{ payment.invoice.due_date|date:"d M Y" }}</p>
+</div>
+{% endif %}
+
+{% if payment.notes %}
+<h3 style="color: #333; margin-top: 25px;">Notes</h3>
+<p style="background: #f8f9fa; padding: 15px; border-radius: 4px;">{{ payment.notes }}</p>
+{% endif %}
+
+<p style="margin-top: 25px;">Thank you for your business!</p>
+
+<p style="margin-top: 20px;">Best regards,<br><strong>Taxman256 Team</strong></p>
+{% endblock %}
