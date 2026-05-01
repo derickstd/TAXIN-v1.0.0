@@ -23,24 +23,25 @@
       <div class="card-body">
         <div class="alert-note mb-3">Add complete client details here before creating job cards, invoices, or credentials.</div>
         
-        <!-- Tab Navigation -->
-        <div class="tab-nav" style="display:flex;gap:.5rem;margin-bottom:1.5rem;border-bottom:2px solid var(--border);padding-bottom:0">
-          <button type="button" class="tab-btn active" data-tab="basic" style="padding:.6rem 1.2rem;border:none;background:none;cursor:pointer;font-weight:600;color:var(--text-muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s">
-            <i class="fas fa-user"></i> Basic Info
-          </button>
-          <button type="button" class="tab-btn" data-tab="services" style="padding:.6rem 1.2rem;border:none;background:none;cursor:pointer;font-weight:600;color:var(--text-muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s">
-            <i class="fas fa-briefcase"></i> Services
-          </button>
-          <button type="button" class="tab-btn" data-tab="credentials" style="padding:.6rem 1.2rem;border:none;background:none;cursor:pointer;font-weight:600;color:var(--text-muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s">
-            <i class="fas fa-key"></i> Credentials
-          </button>
+        {% if messages %}
+        <div class="messages-container" style="margin-bottom:1rem">
+          {% for message in messages %}
+          <div class="alert alert-{{ message.tags }}" style="padding:.8rem 1rem;margin-bottom:.5rem;border-radius:6px;{% if message.tags == 'error' %}background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;{% elif message.tags == 'success' %}background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;{% elif message.tags == 'warning' %}background:#fef3c7;color:#92400e;border:1px solid #fcd34d;{% else %}background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;{% endif %}">
+            <i class="fas {% if message.tags == 'error' %}fa-exclamation-circle{% elif message.tags == 'success' %}fa-check-circle{% elif message.tags == 'warning' %}fa-exclamation-triangle{% else %}fa-info-circle{% endif %}"></i>
+            {{ message }}
+          </div>
+          {% endfor %}
         </div>
+        {% endif %}
         
         <form method="post" novalidate>
           {% csrf_token %}
           
-          <!-- Tab 1: Basic Info -->
-          <div class="tab-content" data-tab="basic">
+          <!-- Basic Info Section -->
+          <div class="form-section">
+            <h5 style="margin-bottom:1rem;font-size:.95rem;color:var(--text-primary);border-bottom:2px solid var(--border);padding-bottom:.5rem">
+              <i class="fas fa-user"></i> Basic Information
+            </h5>
             <div class="form-grid-2">
               <div>
                 <label class="form-label">Client Type <span class="req">*</span></label>
@@ -92,52 +93,60 @@
             </div>
           </div>
           
-          <!-- Tab 2: Services -->
-          <div class="tab-content" data-tab="services" style="display:none">
-            <div class="alert-note mb-3" style="font-size:.85rem">
-              <strong>💡 Assign services to auto-generate:</strong> Monthly job cards • Compliance obligations • Compliance deadlines<br>
-              <span style="color:#dc2626;font-weight:600">⚠️ No services = No compliance deadlines</span>
+          <!-- Services and Credentials Side by Side -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem" class="services-credentials-grid">
+            
+            <!-- Services Section -->
+            <div class="form-section">
+              <h5 style="margin-bottom:1rem;font-size:.95rem;color:var(--text-primary);border-bottom:2px solid var(--border);padding-bottom:.5rem">
+                <i class="fas fa-briefcase"></i> Client Services (Optional)
+              </h5>
+              <div class="alert-note mb-3" style="font-size:.78rem">
+                <strong>💡 Assign services to auto-generate:</strong> Monthly job cards • Compliance obligations • Compliance deadlines<br>
+                <span style="color:#dc2626;font-weight:600">⚠️ No services = No compliance deadlines</span>
+              </div>
+              
+              <div id="servicesContainer">
+                <!-- Service fields will be added here dynamically -->
+              </div>
+              
+              <button type="button" class="btn btn-outline btn-sm" id="addServiceBtn" style="width:100%">
+                <i class="fas fa-plus"></i> Add Service
+              </button>
             </div>
             
-            <div id="servicesContainer">
-              <!-- Service fields will be added here dynamically -->
+            <!-- Credentials Section -->
+            <div class="form-section">
+              <h5 style="margin-bottom:1rem;font-size:.95rem;color:var(--text-primary);border-bottom:2px solid var(--border);padding-bottom:.5rem">
+                <i class="fas fa-key"></i> Client Credentials (Optional)
+              </h5>
+              <div class="alert-note mb-3" style="font-size:.78rem">
+                🔒 Add URA, NSSF, or other login credentials. All passwords are encrypted with AES-256.
+              </div>
+              
+              <div id="credentialsContainer">
+                <!-- Credential fields will be added here dynamically -->
+              </div>
+              
+              <button type="button" class="btn btn-outline btn-sm" id="addCredentialBtn" style="width:100%">
+                <i class="fas fa-plus"></i> Add Credential
+              </button>
             </div>
             
-            <button type="button" class="btn btn-outline btn-sm" id="addServiceBtn" style="width:100%">
-              <i class="fas fa-plus"></i> Add Service
-            </button>
           </div>
           
-          <!-- Tab 3: Credentials -->
-          <div class="tab-content" data-tab="credentials" style="display:none">
-            <div class="alert-note mb-3" style="font-size:.85rem">
-              🔒 Add URA, NSSF, or other login credentials. All passwords are encrypted with AES-256.
-            </div>
-            
-            <div id="credentialsContainer">
-              <!-- Credential fields will be added here dynamically -->
-            </div>
-            
-            <button type="button" class="btn btn-outline btn-sm" id="addCredentialBtn" style="width:100%">
-              <i class="fas fa-plus"></i> Add Credential
-            </button>
-          </div>
+          <style>
+            /* Responsive: Stack on mobile */
+            @media (max-width: 768px) {
+              .services-credentials-grid {
+                grid-template-columns: 1fr !important;
+              }
+            }
+          </style>
           
-          <div class="form-actions mt-3" style="display:flex;gap:.8rem;justify-content:space-between;align-items:center">
-            <div>
-              <button type="button" class="btn btn-outline" id="prevTabBtn" style="display:none">
-                <i class="fas fa-arrow-left"></i> Previous
-              </button>
-            </div>
-            <div style="display:flex;gap:.8rem">
-              <button type="button" class="btn btn-primary" id="nextTabBtn">
-                Next <i class="fas fa-arrow-right"></i>
-              </button>
-              <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" style="display:none">
-                <i class="fas fa-save"></i> Save Client
-              </button>
-              <a href="{% url 'clients:list' %}" class="btn btn-outline">Cancel</a>
-            </div>
+          <div class="form-actions mt-3">
+            <button type="submit" class="btn btn-primary btn-lg" id="saveClientBtn"><i class="fas fa-save"></i> Save Client</button>
+            <a href="{% url 'clients:list' %}" class="btn btn-outline btn-lg">Cancel</a>
           </div>
         </form>
       </div>
@@ -262,55 +271,68 @@ var serviceTypes = {{ service_types_json|safe }};
 $(document).ready(function(){
   $('.s2').select2({theme:'bootstrap-5',width:'100%',allowClear:true,placeholder:function(){return $(this).data('ph')||'Search...';}});
   
-  // Tab navigation
-  let currentTab = 0;
-  const tabs = ['basic', 'services', 'credentials'];
-  
-  function showTab(index) {
-    $('.tab-content').hide();
-    $('.tab-btn').removeClass('active').css({'color':'var(--text-muted)','border-bottom-color':'transparent'});
+  // Form validation before submit
+  $('form').on('submit', function(e){
+    var errors = [];
+    var firstErrorField = null;
     
-    $(`.tab-content[data-tab="${tabs[index]}"]`).show();
-    $(`.tab-btn[data-tab="${tabs[index]}"]`).addClass('active').css({'color':'var(--primary)','border-bottom-color':'var(--primary)'});
+    // Check required fields
+    var fullName = $('input[name="full_name"]').val().trim();
+    var phone = $('input[name="phone_primary"]').val().trim();
+    var clientType = $('select[name="client_type"]').val();
     
-    // Show/hide navigation buttons
-    if(index === 0) {
-      $('#prevTabBtn').hide();
-      $('#nextTabBtn').show();
-      $('#submitBtn').hide();
-    } else if(index === tabs.length - 1) {
-      $('#prevTabBtn').show();
-      $('#nextTabBtn').hide();
-      $('#submitBtn').show();
-    } else {
-      $('#prevTabBtn').show();
-      $('#nextTabBtn').show();
-      $('#submitBtn').hide();
+    if(!clientType) {
+      errors.push('• Client Type is required');
+      if(!firstErrorField) firstErrorField = $('select[name="client_type"]');
     }
     
-    currentTab = index;
-  }
-  
-  $('.tab-btn').on('click', function(){
-    const tab = $(this).data('tab');
-    const index = tabs.indexOf(tab);
-    showTab(index);
-  });
-  
-  $('#nextTabBtn').on('click', function(){
-    if(currentTab < tabs.length - 1) {
-      showTab(currentTab + 1);
+    if(!fullName) {
+      errors.push('• Full Name / Company Name is required');
+      if(!firstErrorField) firstErrorField = $('input[name="full_name"]');
     }
-  });
-  
-  $('#prevTabBtn').on('click', function(){
-    if(currentTab > 0) {
-      showTab(currentTab - 1);
+    
+    if(!phone) {
+      errors.push('• Primary Phone is required');
+      if(!firstErrorField) firstErrorField = $('input[name="phone_primary"]');
+    } else if(phone.length < 10) {
+      errors.push('• Primary Phone must be at least 10 digits');
+      if(!firstErrorField) firstErrorField = $('input[name="phone_primary"]');
     }
+    
+    // Validate email format if provided
+    var email = $('input[name="email"]').val().trim();
+    if(email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      errors.push('• Email address format is invalid');
+      if(!firstErrorField) firstErrorField = $('input[name="email"]');
+    }
+    
+    if(errors.length > 0) {
+      e.preventDefault();
+      
+      // Show error alert
+      var errorMsg = '❌ Please fix the following errors:\n\n' + errors.join('\n');
+      alert(errorMsg);
+      
+      // Scroll to and focus first error field
+      if(firstErrorField) {
+        $('html, body').animate({
+          scrollTop: firstErrorField.offset().top - 100
+        }, 300);
+        firstErrorField.focus();
+        firstErrorField.addClass('is-invalid');
+      }
+      
+      return false;
+    }
+    
+    // Remove any previous error styling
+    $('.is-invalid').removeClass('is-invalid');
   });
   
-  // Initialize first tab
-  showTab(0);
+  // Remove error styling on input
+  $('input, select, textarea').on('input change', function(){
+    $(this).removeClass('is-invalid');
+  });
   
   // Add service button
   $('#addServiceBtn').on('click', function(){
@@ -369,7 +391,7 @@ function addServiceField(){
         </div>
         <div>
           <label class="form-label fs-xs">Agreed Price (UGX)</label>
-          <input type="number" name="service_price_${serviceCount}" class="form-control service-price-${serviceCount}" style="font-size:.83rem" placeholder="0" min="0" step="1000">
+          <input type="number" name="service_price_${serviceCount}" class="form-control service-price-${serviceCount}" style="font-size:.83rem" placeholder="Leave blank to use default price" min="0" step="1000">
         </div>
         <div>
           <label class="form-label fs-xs">Frequency</label>
@@ -386,9 +408,15 @@ function addServiceField(){
   
   // Add change event to auto-fill price
   $(`.service-select[data-index="${serviceCount}"]`).on('change', function(){
-    var price = $(this).find('option:selected').data('price');
+    var selectedOption = $(this).find('option:selected');
+    var price = selectedOption.data('price');
+    var serviceName = selectedOption.text();
+    
     if(price){
+      // Auto-fill the price field
       $(`.service-price-${serviceCount}`).val(price);
+      // Update placeholder to show default price
+      $(`.service-price-${serviceCount}`).attr('placeholder', `Default: UGX ${price.toLocaleString()}`);
     }
   });
   

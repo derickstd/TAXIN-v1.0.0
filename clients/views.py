@@ -244,12 +244,17 @@ def client_create(request):
                     
                     print(f"Found service: type_id={service_type_id}, price={price}, freq={frequency}")
                     
-                    if service_type_id and price:
+                    if service_type_id:
                         try:
                             from compliance.models import ComplianceObligation
                             
                             service_type = ServiceType.objects.get(pk=service_type_id)
                             print(f"  Service type found: {service_type.name}")
+                            
+                            # Use default price if no price provided
+                            if not price or price == '0':
+                                price = str(service_type.default_price)
+                                print(f"  Using default price: {price}")
                             
                             # Create service subscription (no frequency field)
                             subscription = ClientServiceSubscription.objects.create(
@@ -348,11 +353,27 @@ def client_create(request):
             
             # Redirect to client detail page
             return redirect('clients:detail', pk=client.pk)
-        return _render_client_onboarding(
-            request,
-            client_form=form,
-            import_section_active='new_client',
-        )
+        else:
+            # Form validation failed - collect all errors
+            error_messages = []
+            for field, errors in form.errors.items():
+                field_label = form.fields[field].label if field in form.fields else field.replace('_', ' ').title()
+                for error in errors:
+                    error_messages.append(f"{field_label}: {error}")
+            
+            # Show detailed error message
+            if error_messages:
+                messages.error(request, f'❌ Registration failed. Please fix the following errors:')
+                for error_msg in error_messages:
+                    messages.warning(request, f'• {error_msg}')
+            else:
+                messages.error(request, '❌ Please correct the errors below and try again.')
+            
+            return _render_client_onboarding(
+                request,
+                client_form=form,
+                import_section_active='new_client',
+            )
     form = ClientForm()
     section = request.GET.get('section', 'new_client')
     client_id = request.GET.get('client')
