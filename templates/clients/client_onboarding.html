@@ -98,6 +98,36 @@
   </div>
 
   <div class="stack">
+    <div class="card-box card-compact">
+      <div class="card-head"><i class="fas fa-briefcase"></i>Client Services (Optional)</div>
+      <div class="card-body">
+        <div class="alert-note mb-3" style="font-size:.78rem">Assign recurring services to this client. These will auto-generate monthly job cards.</div>
+        
+        <div id="servicesContainer">
+          <!-- Service fields will be added here dynamically -->
+        </div>
+        
+        <button type="button" class="btn btn-outline btn-sm" id="addServiceBtn" style="width:100%">
+          <i class="fas fa-plus"></i> Add Service
+        </button>
+      </div>
+    </div>
+    
+    <div class="card-box card-compact">
+      <div class="card-head"><i class="fas fa-key"></i>Client Credentials (Optional)</div>
+      <div class="card-body">
+        <div class="alert-note mb-3" style="font-size:.78rem">Add URA, NSSF, or other login credentials. These are encrypted and can be added later.</div>
+        
+        <div id="credentialsContainer">
+          <!-- Credential fields will be added here dynamically -->
+        </div>
+        
+        <button type="button" class="btn btn-outline btn-sm" id="addCredentialBtn" style="width:100%">
+          <i class="fas fa-plus"></i> Add Credential
+        </button>
+      </div>
+    </div>
+    
     {% if import_section_active == 'walkin' %}
     <div class="card-box card-compact" id="walkin-section">
       <div class="card-head"><i class="fas fa-door-open"></i>Walk-in Intake</div>
@@ -208,8 +238,22 @@
 {% endblock %}
 {% block extra_js %}
 <script>
+var credentialCount = 0;
+var serviceCount = 0;
+var serviceTypes = {{ service_types_json|safe }};
+
 $(document).ready(function(){
   $('.s2').select2({theme:'bootstrap-5',width:'100%',allowClear:true,placeholder:function(){return $(this).data('ph')||'Search...';}});
+  
+  // Add service button
+  $('#addServiceBtn').on('click', function(){
+    addServiceField();
+  });
+  
+  // Add credential button
+  $('#addCredentialBtn').on('click', function(){
+    addCredentialField();
+  });
   
   // Handle service purpose dropdown
   $('#servicePurpose').on('change', function(){
@@ -237,6 +281,109 @@ $(document).ready(function(){
     }
   }
 });
+
+function addServiceField(){
+  var serviceOptions = '<option value="">Select service...</option>';
+  serviceTypes.forEach(function(service){
+    serviceOptions += `<option value="${service.id}" data-price="${service.price}">${service.name} (UGX ${service.price.toLocaleString()})</option>`;
+  });
+  
+  var html = `
+    <div class="service-item" style="background:#f8f9fb;border:1px solid var(--border);border-radius:8px;padding:.85rem;margin-bottom:.7rem;position:relative">
+      <button type="button" class="btn btn-sm" onclick="removeService(this)" style="position:absolute;top:.5rem;right:.5rem;padding:.2rem .5rem;background:#fee2e2;color:#dc2626;border:none">
+        <i class="fas fa-times"></i>
+      </button>
+      <div class="form-stack" style="gap:.6rem">
+        <div>
+          <label class="form-label fs-xs">Service Type</label>
+          <select name="service_type_${serviceCount}" class="form-control service-select" data-index="${serviceCount}" style="font-size:.83rem">
+            ${serviceOptions}
+          </select>
+        </div>
+        <div>
+          <label class="form-label fs-xs">Agreed Price (UGX)</label>
+          <input type="number" name="service_price_${serviceCount}" class="form-control service-price-${serviceCount}" style="font-size:.83rem" placeholder="0" min="0" step="1000">
+        </div>
+        <div>
+          <label class="form-label fs-xs">Frequency</label>
+          <select name="service_frequency_${serviceCount}" class="form-control" style="font-size:.83rem">
+            <option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option>
+            <option value="annual">Annual</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#servicesContainer').append(html);
+  
+  // Add change event to auto-fill price
+  $(`.service-select[data-index="${serviceCount}"]`).on('change', function(){
+    var price = $(this).find('option:selected').data('price');
+    if(price){
+      $(`.service-price-${serviceCount}`).val(price);
+    }
+  });
+  
+  serviceCount++;
+}
+
+function removeService(btn){
+  $(btn).closest('.service-item').remove();
+}
+
+function addCredentialField(){
+  var tin = $('input[name="tin"]').val() || '';
+  
+  var html = `
+    <div class="credential-item" style="background:#f8f9fb;border:1px solid var(--border);border-radius:8px;padding:.85rem;margin-bottom:.7rem;position:relative">
+      <button type="button" class="btn btn-sm" onclick="removeCredential(this)" style="position:absolute;top:.5rem;right:.5rem;padding:.2rem .5rem;background:#fee2e2;color:#dc2626;border:none">
+        <i class="fas fa-times"></i>
+      </button>
+      <div class="form-stack" style="gap:.6rem">
+        <div>
+          <label class="form-label fs-xs">Platform</label>
+          <select name="cred_platform_${credentialCount}" class="form-control cred-platform" data-index="${credentialCount}" style="font-size:.83rem">
+            <option value="">Select platform...</option>
+            <option value="URA">URA (Uganda Revenue Authority)</option>
+            <option value="NSSF">NSSF (Social Security)</option>
+            <option value="URSB">URSB (Business Registration)</option>
+            <option value="ASYCUDA">ASYCUDA (Customs)</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label fs-xs">Username / Email</label>
+          <input type="text" name="cred_username_${credentialCount}" class="form-control cred-username-${credentialCount}" style="font-size:.83rem" placeholder="Login username or email">
+        </div>
+        <div>
+          <label class="form-label fs-xs">Password</label>
+          <input type="password" name="cred_password_${credentialCount}" class="form-control" style="font-size:.83rem" placeholder="Login password">
+        </div>
+        <div>
+          <label class="form-label fs-xs">Notes</label>
+          <input type="text" name="cred_notes_${credentialCount}" class="form-control" style="font-size:.83rem" placeholder="Any additional info">
+        </div>
+      </div>
+    </div>
+  `;
+  $('#credentialsContainer').append(html);
+  
+  // Add change event to auto-fill TIN for URA
+  $(`.cred-platform[data-index="${credentialCount}"]`).on('change', function(){
+    var platform = $(this).val();
+    var index = $(this).data('index');
+    if(platform === 'URA' && tin){
+      $(`.cred-username-${index}`).val(tin);
+    }
+  });
+  
+  credentialCount++;
+}
+
+function removeCredential(btn){
+  $(btn).closest('.credential-item').remove();
+}
 
 function downloadTemplate(){
   var csv='full_name,phone_primary,client_type,tin,email,phone_whatsapp,district\n'+

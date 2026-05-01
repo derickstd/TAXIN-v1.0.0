@@ -132,6 +132,35 @@ def update_line_status(request, pk):
                 action=f'"{item.get_description()}" → {item.get_status_display()}'
             )
             job = item.job_card
+            
+            # Auto-update job card status based on line items
+            all_items = list(job.line_items.all())
+            if all_items:
+                all_paid = all(li.status == 'handled_paid' for li in all_items)
+                any_in_progress = any(li.status in ('handled_paid', 'handled_not_paid') for li in all_items)
+                any_pending = any(li.status == 'not_handled' for li in all_items)
+                
+                # Update job card status
+                old_status = job.status
+                if all_paid:
+                    job.status = 'completed'
+                    job.completed_at = timezone.now()
+                    job.save(update_fields=['status', 'completed_at'])
+                    if old_status != 'completed':
+                        StaffActivityLog.objects.create(
+                            job_card=job, staff=request.user,
+                            action='Job card auto-completed (all items paid and handled)'
+                        )
+                elif any_in_progress:
+                    if job.status == 'open':
+                        job.status = 'in_progress'
+                        job.save(update_fields=['status'])
+                        StaffActivityLog.objects.create(
+                            job_card=job, staff=request.user,
+                            action='Job card moved to in progress'
+                        )
+            
+            # Update invoice status
             if hasattr(job, 'invoice'):
                 inv = job.invoice
                 all_items = list(job.line_items.all())
@@ -155,19 +184,9 @@ def update_line_status(request, pk):
 
 @login_required
 def update_jobcard_status(request, pk):
+    """Job card status is now auto-updated based on line items. Manual updates disabled."""
     job = get_object_or_404(JobCard, pk=pk)
-    if request.method == 'POST':
-        new_status = request.POST.get('status')
-        if new_status == 'completed':
-            if hasattr(job, 'invoice') and job.invoice.status not in ('paid','written_off'):
-                messages.error(request, '❌ Cannot complete job — invoice must be fully paid first.')
-                return redirect('services:detail', pk=pk)
-            job.completed_at = timezone.now()
-        job.status = new_status
-        job.save()
-        StaffActivityLog.objects.create(job_card=job, staff=request.user,
-            action=f'Status changed to {job.get_status_display()}')
-        messages.success(request, f'Status updated to {job.get_status_display()}.')
+    messages.info(request, 'Job card status is automatically updated based on line item progress. Update individual line items to change job status.')
     return redirect('services:detail', pk=pk)
 
 @login_required

@@ -19,22 +19,97 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write('Starting automated tasks...')
         
-        # Task 1: Update overdue invoices
+        # Task 1: Generate monthly compliance deadlines (1st of month)
+        self.generate_monthly_compliance_deadlines()
+        
+        # Task 2: Update overdue invoices
         self.update_overdue_invoices()
         
-        # Task 2: Update client statuses
+        # Task 3: Update client statuses
         self.update_client_statuses()
         
-        # Task 3: Send compliance reminders
+        # Task 4: Send compliance reminders
         self.send_compliance_reminders()
         
-        # Task 4: Generate recurring job cards
+        # Task 5: Generate recurring job cards
         self.generate_recurring_jobs()
         
-        # Task 5: Clean up old notifications
+        # Task 6: Clean up old notifications
         self.cleanup_old_notifications()
         
         self.stdout.write(self.style.SUCCESS('✓ All automated tasks completed'))
+
+    def generate_monthly_compliance_deadlines(self):
+        """Generate compliance deadlines for all clients with active obligations on 1st of month"""
+        from compliance.models import ComplianceObligation, ComplianceDeadline
+        from services.models import ServiceType
+        import calendar
+        
+        today = timezone.now().date()
+        
+        # Only run on the 1st of each month
+        if today.day != 1:
+            return
+        
+        current_month = today.month
+        current_year = today.year
+        
+        # Get previous month for period label
+        if current_month == 1:
+            prev_month = 12
+            prev_year = current_year - 1
+        else:
+            prev_month = current_month - 1
+            prev_year = current_year
+        
+        # Period label (e.g., "January 2026")
+        period_label = f"{calendar.month_name[prev_month]} {prev_year}"
+        
+        # Due date is 15th of current month
+        due_date = today.replace(day=15)
+        
+        # Get monthly tax services (PAYE, VAT, Excise Duty, NSSF)
+        monthly_services = ServiceType.objects.filter(
+            Q(name__iexact='PAYE') | 
+            Q(name__iexact='VAT Return') | Q(name__iexact='VAT') |
+            Q(name__iexact='Excise Duty') | Q(name__iexact='Excise') |
+            Q(name__iexact='NSSF'),
+            is_active=True
+        )
+        
+        created_count = 0
+        
+        # Get all active clients
+        active_clients = Client.objects.filter(status='active')
+        
+        for client in active_clients:
+            for service in monthly_services:
+                # Check if client has an obligation for this service
+                obligation, created = ComplianceObligation.objects.get_or_create(
+                    client=client,
+                    service_type=service,
+                    defaults={
+                        'frequency': 'monthly',
+                        'is_active': True
+                    }
+                )
+                
+                # Check if deadline already exists for this period
+                deadline_exists = ComplianceDeadline.objects.filter(
+                    obligation=obligation,
+                    period_label=period_label
+                ).exists()
+                
+                if not deadline_exists:
+                    ComplianceDeadline.objects.create(
+                        obligation=obligation,
+                        period_label=period_label,
+                        due_date=due_date,
+                        status='upcoming'
+                    )
+                    created_count += 1
+        
+        self.stdout.write(f'  → {created_count} monthly compliance deadlines generated')
 
     def update_overdue_invoices(self):
         """Mark invoices as overdue when due date passes"""

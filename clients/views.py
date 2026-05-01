@@ -14,6 +14,59 @@ UGANDA_DISTRICTS = [
 ]
 
 
+def _generate_client_compliance_deadlines(client):
+    """
+    Generate compliance deadlines for a new client based on their obligations
+    Returns count of deadlines created
+    """
+    from compliance.models import ComplianceObligation, ComplianceDeadline
+    import calendar
+    
+    today = timezone.now().date()
+    current_month = today.month
+    current_year = today.year
+    
+    # Get previous month for period label
+    if current_month == 1:
+        prev_month = 12
+        prev_year = current_year - 1
+    else:
+        prev_month = current_month - 1
+        prev_year = current_year
+    
+    # Period label (e.g., "January 2026")
+    period_label = f"{calendar.month_name[prev_month]} {prev_year}"
+    
+    # Due date is 15th of current month
+    due_date = today.replace(day=15)
+    
+    # Get all active obligations for this client
+    obligations = ComplianceObligation.objects.filter(
+        client=client,
+        is_active=True
+    )
+    
+    created_count = 0
+    
+    for obligation in obligations:
+        # Check if deadline already exists for this period
+        deadline_exists = ComplianceDeadline.objects.filter(
+            obligation=obligation,
+            period_label=period_label
+        ).exists()
+        
+        if not deadline_exists:
+            ComplianceDeadline.objects.create(
+                obligation=obligation,
+                period_label=period_label,
+                due_date=due_date,
+                status='upcoming'
+            )
+            created_count += 1
+    
+    return created_count
+
+
 def _client_onboarding_context(
     *,
     client_form=None,
@@ -22,6 +75,16 @@ def _client_onboarding_context(
     import_created=0,
     import_section_active=None,
 ):
+    from services.models import ServiceType
+    import json
+    
+    # Get active service types for the service dropdown
+    service_types = ServiceType.objects.filter(is_active=True).order_by('category', 'name')
+    service_types_json = json.dumps([
+        {'id': st.id, 'name': st.name, 'price': float(st.default_price)}
+        for st in service_types
+    ])
+    
     return {
         'client_form': client_form or ClientForm(),
         'walkin_form': walkin_form or WalkInIntakeForm(),
@@ -29,6 +92,7 @@ def _client_onboarding_context(
         'import_errors': import_errors or [],
         'import_created': import_created,
         'import_section_active': import_section_active or 'new_client',
+        'service_types_json': service_types_json,
     }
 
 
@@ -134,6 +198,11 @@ def client_create(request):
         form = ClientForm(request.POST)
         if form.is_valid():
             from core.email_utils import send_welcome_email
+            from credentials.models import ClientCredential
+            from services.models import ClientServiceSubscription, ServiceType
+            from cryptography.fernet import Fernet
+            from django.conf import settings
+            from decimal import Decimal
             
             client = form.save(commit=False)
             client.created_by = request.user
@@ -141,11 +210,86 @@ def client_create(request):
             client.district = request.POST.get('district', 'Kampala')
             client.save()
             
+            # Process services and create obligations
+            service_count = 0
+            for key in request.POST:
+                if key.startswith('service_type_'):
+                    index = key.split('_')[-1]
+                    service_type_id = request.POST.get(f'service_type_{index}', '').strip()
+                    price = request.POST.get(f'service_price_{index}', '').strip()
+                    frequency = request.POST.get(f'service_frequency_{index}', 'monthly').strip()
+                    
+                    if service_type_id and price:
+                        try:
+                            from compliance.models import ComplianceObligation
+                            
+                            service_type = ServiceType.objects.get(pk=service_type_id)
+                            
+                            # Create service subscription
+                            ClientServiceSubscription.objects.create(
+                                client=client,
+                                service_type=service_type,
+                                negotiated_price=Decimal(price),
+                                frequency=frequency,
+                                is_active=True
+                            )
+                            
+                            # Create compliance obligation for this service
+                            ComplianceObligation.objects.get_or_create(
+                                client=client,
+                                service_type=service_type,
+                                defaults={
+                                    'frequency': frequency,
+                                    'is_active': True
+                                }
+                            )
+                            
+                            service_count += 1
+                        except (ServiceType.DoesNotExist, ValueError):
+                            pass
+            
+            # Process credentials
+            credential_count = 0
+            fernet = Fernet(settings.CREDENTIAL_FERNET_KEY.encode())
+            
+            for key in request.POST:
+                if key.startswith('cred_platform_'):
+                    index = key.split('_')[-1]
+                    platform = request.POST.get(f'cred_platform_{index}', '').strip()
+                    username = request.POST.get(f'cred_username_{index}', '').strip()
+                    password = request.POST.get(f'cred_password_{index}', '').strip()
+                    notes = request.POST.get(f'cred_notes_{index}', '').strip()
+                    
+                    if platform and username and password:
+                        # Encrypt password
+                        encrypted_password = fernet.encrypt(password.encode()).decode()
+                        
+                        ClientCredential.objects.create(
+                            client=client,
+                            platform=platform,
+                            username=username,
+                            encrypted_password=encrypted_password,
+                            notes=notes,
+                            created_by=request.user
+                        )
+                        credential_count += 1
+            
+            # Auto-generate compliance deadlines for current month
+            compliance_count = _generate_client_compliance_deadlines(client)
+            
             # Send welcome email
             if client.email:
                 send_welcome_email(client)
             
-            messages.success(request, f'Client {client.client_id} — {client.get_display_name()} created.')
+            success_msg = f'Client {client.client_id} — {client.get_display_name()} created.'
+            if service_count > 0:
+                success_msg += f' {service_count} service(s) assigned.'
+            if credential_count > 0:
+                success_msg += f' {credential_count} credential(s) added.'
+            if compliance_count > 0:
+                success_msg += f' {compliance_count} compliance deadline(s) generated.'
+            messages.success(request, success_msg)
+            
             # Redirect to walk-in intake with the new client pre-selected
             return redirect(f"{request.path}?section=walkin&client={client.pk}")
         return _render_client_onboarding(
