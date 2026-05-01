@@ -23,22 +23,36 @@ def _generate_client_compliance_deadlines(client):
     import calendar
     
     today = timezone.now().date()
-    current_month = today.month
-    current_year = today.year
     
-    # Get previous month for period label
-    if current_month == 1:
-        prev_month = 12
-        prev_year = current_year - 1
+    # If today is past the 15th, generate for next month; otherwise current month
+    if today.day > 15:
+        if today.month == 12:
+            target_month = 1
+            target_year = today.year + 1
+        else:
+            target_month = today.month + 1
+            target_year = today.year
     else:
-        prev_month = current_month - 1
-        prev_year = current_year
+        target_month = today.month
+        target_year = today.year
     
-    # Period label (e.g., "January 2026")
-    period_label = f"{calendar.month_name[prev_month]} {prev_year}"
+    # Period label is for the previous month (e.g., filing January returns in February)
+    if target_month == 1:
+        period_month = 12
+        period_year = target_year - 1
+    else:
+        period_month = target_month - 1
+        period_year = target_year
     
-    # Due date is 15th of current month
-    due_date = today.replace(day=15)
+    period_label = f"{calendar.month_name[period_month]} {period_year}"
+    
+    # Create due date for 15th of target month
+    try:
+        due_date = today.replace(year=target_year, month=target_month, day=15)
+    except ValueError:
+        # Handle edge case if day doesn't exist in target month
+        import datetime
+        due_date = datetime.date(target_year, target_month, 15)
     
     # Get all active obligations for this client
     obligations = ComplianceObligation.objects.filter(

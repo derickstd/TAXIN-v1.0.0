@@ -22,75 +22,122 @@
       <div class="card-head"><i class="fas fa-id-card"></i>New Client Registration</div>
       <div class="card-body">
         <div class="alert-note mb-3">Add complete client details here before creating job cards, invoices, or credentials.</div>
+        
+        <!-- Tab Navigation -->
+        <div class="tab-nav" style="display:flex;gap:.5rem;margin-bottom:1.5rem;border-bottom:2px solid var(--border);padding-bottom:0">
+          <button type="button" class="tab-btn active" data-tab="basic" style="padding:.6rem 1.2rem;border:none;background:none;cursor:pointer;font-weight:600;color:var(--text-muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s">
+            <i class="fas fa-user"></i> Basic Info
+          </button>
+          <button type="button" class="tab-btn" data-tab="services" style="padding:.6rem 1.2rem;border:none;background:none;cursor:pointer;font-weight:600;color:var(--text-muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s">
+            <i class="fas fa-briefcase"></i> Services
+          </button>
+          <button type="button" class="tab-btn" data-tab="credentials" style="padding:.6rem 1.2rem;border:none;background:none;cursor:pointer;font-weight:600;color:var(--text-muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s">
+            <i class="fas fa-key"></i> Credentials
+          </button>
+        </div>
+        
         <form method="post" novalidate>
           {% csrf_token %}
-          <div class="form-grid-2">
-            <div>
-              <label class="form-label">Client Type <span class="req">*</span></label>
-              <select name="client_type" class="form-select s2" data-ph="Select type">
-                {% for val,label in client_form.fields.client_type.choices %}<option value="{{ val }}" {% if client_form.client_type.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-              </select>
-            </div>
-            <div>
-              <label class="form-label">Full Name / Company Name <span class="req">*</span></label>
-              <input type="text" name="full_name" value="{{ client_form.full_name.value|default:'' }}" class="form-control {% if client_form.full_name.errors %}is-invalid{% endif %}" placeholder="Full legal or registered name" required>
-              {% for e in client_form.full_name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
-            </div>
-            <div>
-              <label class="form-label">TIN (Tax ID)</label>
-              <input type="text" name="tin" value="{{ client_form.tin.value|default:'' }}" class="form-control" placeholder="e.g. 1001234567">
-              <div class="form-hint">Required before URA filing</div>
-            </div>
-            <div>
-              <label class="form-label">Primary Phone <span class="req">*</span></label>
-              <input type="text" name="phone_primary" value="{{ client_form.phone_primary.value|default:'' }}" class="form-control {% if client_form.phone_primary.errors %}is-invalid{% endif %}" placeholder="+256 700 000 000" required>
-              {% for e in client_form.phone_primary.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
-            </div>
-            <div>
-              <label class="form-label">WhatsApp Number</label>
-              <input type="text" name="phone_whatsapp" value="{{ client_form.phone_whatsapp.value|default:'' }}" class="form-control" placeholder="+256 700 000 000">
-              <div class="form-hint">Used for automated debt reminders. Leave blank if same.</div>
-            </div>
-            <div>
-              <label class="form-label">Email Address</label>
-              <input type="email" name="email" value="{{ client_form.email.value|default:'' }}" class="form-control" placeholder="client@email.com">
-            </div>
-            <div>
-              <label class="form-label">District</label>
-              <select name="district" class="form-select s2" data-ph="Select district">
-                {% for d in districts %}<option value="{{ d }}" {% if client_form.district.value == d %}selected{% elif not client_form.district.value and d == 'Kampala' %}selected{% endif %}>{{ d }}</option>{% endfor %}
-              </select>
-            </div>
-            <div class="field-span-2">
-              <label class="form-label">Physical Address</label>
-              <input type="text" name="physical_address" value="{{ client_form.physical_address.value|default:'' }}" class="form-control" placeholder="Plot No., Street, Area">
-            </div>
-            <div>
-              <label class="form-label">Assigned Officer</label>
-              <select name="assigned_officer" class="form-select s2" data-ph="Search staff...">
-                <option value="">— Unassigned —</option>
-                {% for u in client_form.fields.assigned_officer.queryset %}
-                <option value="{{ u.pk }}" {% if client_form.assigned_officer.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }} ({{ u.get_role_display }})</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div>
-              <label class="form-label">Referred By</label>
-              <select name="referred_by" class="form-select s2" data-ph="Search clients...">
-                <option value="">— None —</option>
-                {% for c in client_form.fields.referred_by.queryset %}
-                <option value="{{ c.pk }}" {% if client_form.referred_by.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.client_id }} — {{ c.get_display_name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="field-span-2">
-              <label class="form-label">Notes</label>
-              <textarea name="notes" class="form-control" rows="2" placeholder="Any extra information">{{ client_form.notes.value|default:'' }}</textarea>
+          
+          <!-- Tab 1: Basic Info -->
+          <div class="tab-content" data-tab="basic">
+            <div class="form-grid-2">
+              <div>
+                <label class="form-label">Client Type <span class="req">*</span></label>
+                <select name="client_type" class="form-select s2" data-ph="Select type">
+                  {% for val,label in client_form.fields.client_type.choices %}<option value="{{ val }}" {% if client_form.client_type.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="form-label">Full Name / Company Name <span class="req">*</span></label>
+                <input type="text" name="full_name" value="{{ client_form.full_name.value|default:'' }}" class="form-control {% if client_form.full_name.errors %}is-invalid{% endif %}" placeholder="Full legal or registered name" required>
+                {% for e in client_form.full_name.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+              </div>
+              <div>
+                <label class="form-label">TIN (Tax ID)</label>
+                <input type="text" name="tin" value="{{ client_form.tin.value|default:'' }}" class="form-control" placeholder="e.g. 1001234567">
+              </div>
+              <div>
+                <label class="form-label">Primary Phone <span class="req">*</span></label>
+                <input type="text" name="phone_primary" value="{{ client_form.phone_primary.value|default:'' }}" class="form-control {% if client_form.phone_primary.errors %}is-invalid{% endif %}" placeholder="+256 700 000 000" required>
+                {% for e in client_form.phone_primary.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+              </div>
+              <div>
+                <label class="form-label">WhatsApp Number</label>
+                <input type="text" name="phone_whatsapp" value="{{ client_form.phone_whatsapp.value|default:'' }}" class="form-control" placeholder="Leave blank if same">
+              </div>
+              <div>
+                <label class="form-label">Email Address</label>
+                <input type="email" name="email" value="{{ client_form.email.value|default:'' }}" class="form-control" placeholder="client@email.com">
+              </div>
+              <div>
+                <label class="form-label">District</label>
+                <select name="district" class="form-select s2" data-ph="Select district">
+                  {% for d in districts %}<option value="{{ d }}" {% if client_form.district.value == d %}selected{% elif not client_form.district.value and d == 'Kampala' %}selected{% endif %}>{{ d }}</option>{% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="form-label">Assigned Officer</label>
+                <select name="assigned_officer" class="form-select s2" data-ph="Search staff...">
+                  <option value="">— Unassigned —</option>
+                  {% for u in client_form.fields.assigned_officer.queryset %}
+                  <option value="{{ u.pk }}" {% if client_form.assigned_officer.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field-span-2">
+                <label class="form-label">Physical Address</label>
+                <input type="text" name="physical_address" value="{{ client_form.physical_address.value|default:'' }}" class="form-control" placeholder="Plot No., Street, Area">
+              </div>
             </div>
           </div>
-          <div class="form-actions mt-3">
-            <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Save Client</button>
-            <a href="{% url 'clients:list' %}" class="btn btn-outline btn-lg">Cancel</a>
+          
+          <!-- Tab 2: Services -->
+          <div class="tab-content" data-tab="services" style="display:none">
+            <div class="alert-note mb-3" style="font-size:.85rem">
+              <strong>💡 Assign services to auto-generate:</strong> Monthly job cards • Compliance obligations • Compliance deadlines<br>
+              <span style="color:#dc2626;font-weight:600">⚠️ No services = No compliance deadlines</span>
+            </div>
+            
+            <div id="servicesContainer">
+              <!-- Service fields will be added here dynamically -->
+            </div>
+            
+            <button type="button" class="btn btn-outline btn-sm" id="addServiceBtn" style="width:100%">
+              <i class="fas fa-plus"></i> Add Service
+            </button>
+          </div>
+          
+          <!-- Tab 3: Credentials -->
+          <div class="tab-content" data-tab="credentials" style="display:none">
+            <div class="alert-note mb-3" style="font-size:.85rem">
+              🔒 Add URA, NSSF, or other login credentials. All passwords are encrypted with AES-256.
+            </div>
+            
+            <div id="credentialsContainer">
+              <!-- Credential fields will be added here dynamically -->
+            </div>
+            
+            <button type="button" class="btn btn-outline btn-sm" id="addCredentialBtn" style="width:100%">
+              <i class="fas fa-plus"></i> Add Credential
+            </button>
+          </div>
+          
+          <div class="form-actions mt-3" style="display:flex;gap:.8rem;justify-content:space-between;align-items:center">
+            <div>
+              <button type="button" class="btn btn-outline" id="prevTabBtn" style="display:none">
+                <i class="fas fa-arrow-left"></i> Previous
+              </button>
+            </div>
+            <div style="display:flex;gap:.8rem">
+              <button type="button" class="btn btn-primary" id="nextTabBtn">
+                Next <i class="fas fa-arrow-right"></i>
+              </button>
+              <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" style="display:none">
+                <i class="fas fa-save"></i> Save Client
+              </button>
+              <a href="{% url 'clients:list' %}" class="btn btn-outline">Cancel</a>
+            </div>
           </div>
         </form>
       </div>
@@ -98,36 +145,6 @@
   </div>
 
   <div class="stack">
-    <div class="card-box card-compact">
-      <div class="card-head"><i class="fas fa-briefcase"></i>Client Services (Optional)</div>
-      <div class="card-body">
-        <div class="alert-note mb-3" style="font-size:.78rem">Assign recurring services to this client. These will auto-generate monthly job cards.</div>
-        
-        <div id="servicesContainer">
-          <!-- Service fields will be added here dynamically -->
-        </div>
-        
-        <button type="button" class="btn btn-outline btn-sm" id="addServiceBtn" style="width:100%">
-          <i class="fas fa-plus"></i> Add Service
-        </button>
-      </div>
-    </div>
-    
-    <div class="card-box card-compact">
-      <div class="card-head"><i class="fas fa-key"></i>Client Credentials (Optional)</div>
-      <div class="card-body">
-        <div class="alert-note mb-3" style="font-size:.78rem">Add URA, NSSF, or other login credentials. These are encrypted and can be added later.</div>
-        
-        <div id="credentialsContainer">
-          <!-- Credential fields will be added here dynamically -->
-        </div>
-        
-        <button type="button" class="btn btn-outline btn-sm" id="addCredentialBtn" style="width:100%">
-          <i class="fas fa-plus"></i> Add Credential
-        </button>
-      </div>
-    </div>
-    
     {% if import_section_active == 'walkin' %}
     <div class="card-box card-compact" id="walkin-section">
       <div class="card-head"><i class="fas fa-door-open"></i>Walk-in Intake</div>
@@ -244,6 +261,56 @@ var serviceTypes = {{ service_types_json|safe }};
 
 $(document).ready(function(){
   $('.s2').select2({theme:'bootstrap-5',width:'100%',allowClear:true,placeholder:function(){return $(this).data('ph')||'Search...';}});
+  
+  // Tab navigation
+  let currentTab = 0;
+  const tabs = ['basic', 'services', 'credentials'];
+  
+  function showTab(index) {
+    $('.tab-content').hide();
+    $('.tab-btn').removeClass('active').css({'color':'var(--text-muted)','border-bottom-color':'transparent'});
+    
+    $(`.tab-content[data-tab="${tabs[index]}"]`).show();
+    $(`.tab-btn[data-tab="${tabs[index]}"]`).addClass('active').css({'color':'var(--primary)','border-bottom-color':'var(--primary)'});
+    
+    // Show/hide navigation buttons
+    if(index === 0) {
+      $('#prevTabBtn').hide();
+      $('#nextTabBtn').show();
+      $('#submitBtn').hide();
+    } else if(index === tabs.length - 1) {
+      $('#prevTabBtn').show();
+      $('#nextTabBtn').hide();
+      $('#submitBtn').show();
+    } else {
+      $('#prevTabBtn').show();
+      $('#nextTabBtn').show();
+      $('#submitBtn').hide();
+    }
+    
+    currentTab = index;
+  }
+  
+  $('.tab-btn').on('click', function(){
+    const tab = $(this).data('tab');
+    const index = tabs.indexOf(tab);
+    showTab(index);
+  });
+  
+  $('#nextTabBtn').on('click', function(){
+    if(currentTab < tabs.length - 1) {
+      showTab(currentTab + 1);
+    }
+  });
+  
+  $('#prevTabBtn').on('click', function(){
+    if(currentTab > 0) {
+      showTab(currentTab - 1);
+    }
+  });
+  
+  // Initialize first tab
+  showTab(0);
   
   // Add service button
   $('#addServiceBtn').on('click', function(){
