@@ -209,6 +209,14 @@ def client_detail(request, pk):
 @login_required
 def client_create(request):
     if request.method == 'POST':
+        # Debug: Check what service fields are in POST
+        service_fields = [key for key in request.POST.keys() if 'service' in key.lower()]
+        print(f"\n=== DEBUG: Service fields in POST ===")
+        print(f"Service fields found: {service_fields}")
+        for field in service_fields:
+            print(f"  {field} = {request.POST.get(field)}")
+        print(f"=== END DEBUG ===")
+        
         form = ClientForm(request.POST)
         if form.is_valid():
             from core.email_utils import send_welcome_email
@@ -226,6 +234,7 @@ def client_create(request):
             
             # Process services and create obligations
             service_count = 0
+            print(f"\n=== Processing services ===")
             for key in request.POST:
                 if key.startswith('service_type_'):
                     index = key.split('_')[-1]
@@ -233,23 +242,26 @@ def client_create(request):
                     price = request.POST.get(f'service_price_{index}', '').strip()
                     frequency = request.POST.get(f'service_frequency_{index}', 'monthly').strip()
                     
+                    print(f"Found service: type_id={service_type_id}, price={price}, freq={frequency}")
+                    
                     if service_type_id and price:
                         try:
                             from compliance.models import ComplianceObligation
                             
                             service_type = ServiceType.objects.get(pk=service_type_id)
+                            print(f"  Service type found: {service_type.name}")
                             
-                            # Create service subscription
-                            ClientServiceSubscription.objects.create(
+                            # Create service subscription (no frequency field)
+                            subscription = ClientServiceSubscription.objects.create(
                                 client=client,
                                 service_type=service_type,
                                 negotiated_price=Decimal(price),
-                                frequency=frequency,
                                 is_active=True
                             )
+                            print(f"  Subscription created: {subscription.id}")
                             
                             # Create compliance obligation for this service
-                            ComplianceObligation.objects.get_or_create(
+                            obligation, created = ComplianceObligation.objects.get_or_create(
                                 client=client,
                                 service_type=service_type,
                                 defaults={
@@ -257,10 +269,17 @@ def client_create(request):
                                     'is_active': True
                                 }
                             )
+                            print(f"  Obligation created: {obligation.id} (new={created})")
                             
                             service_count += 1
-                        except (ServiceType.DoesNotExist, ValueError):
-                            pass
+                        except ServiceType.DoesNotExist:
+                            print(f"  ERROR: ServiceType {service_type_id} not found")
+                        except ValueError as e:
+                            print(f"  ERROR: ValueError - {e}")
+                        except Exception as e:
+                            print(f"  ERROR: {type(e).__name__} - {e}")
+            print(f"Total services processed: {service_count}")
+            print(f"=== End processing services ===")
             
             # Process credentials
             credential_count = 0
