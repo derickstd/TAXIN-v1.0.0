@@ -292,20 +292,33 @@ def client_create(request):
             compliance_count = _generate_client_compliance_deadlines(client)
             
             # Send welcome email
+            email_sent = False
             if client.email:
-                send_welcome_email(client)
+                try:
+                    send_welcome_email(client)
+                    email_sent = True
+                except:
+                    pass
             
-            success_msg = f'Client {client.client_id} — {client.get_display_name()} created.'
+            # Build detailed success message
+            success_msg = f'✅ Client registered successfully: {client.client_id} — {client.get_display_name()}'
+            details = []
             if service_count > 0:
-                success_msg += f' {service_count} service(s) assigned.'
+                details.append(f'{service_count} service(s) assigned')
             if credential_count > 0:
-                success_msg += f' {credential_count} credential(s) added.'
+                details.append(f'{credential_count} credential(s) added')
             if compliance_count > 0:
-                success_msg += f' {compliance_count} compliance deadline(s) generated.'
+                details.append(f'{compliance_count} compliance deadline(s) generated')
+            if email_sent:
+                details.append('welcome email sent')
+            
+            if details:
+                success_msg += ' | ' + ' • '.join(details)
+            
             messages.success(request, success_msg)
             
-            # Redirect to walk-in intake with the new client pre-selected
-            return redirect(f"{request.path}?section=walkin&client={client.pk}")
+            # Redirect to client detail page
+            return redirect('clients:detail', pk=client.pk)
         return _render_client_onboarding(
             request,
             client_form=form,
