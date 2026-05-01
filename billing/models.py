@@ -86,10 +86,20 @@ class Invoice(models.Model):
         return self.grand_total - self.amount_paid
 
     @property
+    def balance(self):
+        """Alias for balance_due for consistency"""
+        return self.balance_due
+
+    @property
     def days_overdue(self):
         if self.balance_due > 0 and timezone.now().date() > self.due_date:
             return (timezone.now().date() - self.due_date).days
         return 0
+
+    @property
+    def is_overdue(self):
+        """Check if invoice is overdue"""
+        return self.days_overdue > 0
 
     def aging_bucket(self):
         d = self.days_overdue
@@ -132,6 +142,15 @@ class Payment(models.Model):
     received_by   = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     notes         = models.TextField(blank=True)
     created_at    = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def receipt_number(self):
+        """Generate receipt number from payment ID"""
+        return f"RCT-{self.payment_date.year}-{self.pk:05d}"
+
+    def get_payment_method_display(self):
+        """Get human-readable payment method"""
+        return dict(self.METHOD).get(self.method, self.method)
 
     def __str__(self):
         return f"UGX {self.amount:,.0f} → {self.invoice.invoice_number}"

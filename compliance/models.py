@@ -55,6 +55,14 @@ class ComplianceDeadline(models.Model):
     @property
     def is_filed(self):
         return self.status in ('filed_and_paid', 'filed_not_paid')
+    
+    @property
+    def days_until_due(self):
+        """Calculate days until due date"""
+        from django.utils import timezone
+        today = timezone.now().date()
+        delta = (self.due_date - today).days
+        return delta
 
     def __str__(self):
         return f"{self.obligation.client} — {self.obligation.service_type.name} — {self.period_label}"
