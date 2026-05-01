@@ -264,7 +264,6 @@ def client_create(request):
             
             # Process credentials
             credential_count = 0
-            fernet = Fernet(settings.CREDENTIAL_FERNET_KEY.encode())
             
             for key in request.POST:
                 if key.startswith('cred_platform_'):
@@ -275,17 +274,28 @@ def client_create(request):
                     notes = request.POST.get(f'cred_notes_{index}', '').strip()
                     
                     if platform and username and password:
-                        # Encrypt password
-                        encrypted_password = fernet.encrypt(password.encode()).decode()
+                        # Map platform to credential_type
+                        platform_map = {
+                            'URA': 'ura_etax',
+                            'NSSF': 'nssf',
+                            'URSB': 'ursb',
+                            'ASYCUDA': 'customs',
+                            'Other': 'custom'
+                        }
                         
-                        ClientCredential.objects.create(
+                        credential = ClientCredential(
                             client=client,
-                            platform=platform,
-                            username=username,
-                            encrypted_password=encrypted_password,
-                            notes=notes,
+                            credential_type=platform_map.get(platform, 'custom'),
+                            label=f"{platform} Login",
+                            status='active',
                             created_by=request.user
                         )
+                        credential.set_username(username)
+                        credential.set_password(password)
+                        if notes:
+                            credential.set_notes(notes)
+                        credential.save()
+                        
                         credential_count += 1
             
             # Auto-generate compliance deadlines for current month
