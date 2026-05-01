@@ -10,10 +10,26 @@
 
 <!-- KPIs -->
 <div class="stats-grid" style="margin-bottom:1rem">
-  <div class="kpi"><div class="kpi-label">Invoiced This Month</div><div class="kpi-value" style="font-size:1.1rem">UGX {{ invoiced_month|floatformat:0|intcomma }}</div><div class="kpi-sub">Total billed</div></div>
-  <div class="kpi gold"><div class="kpi-label">Collected This Month</div><div class="kpi-value" style="font-size:1.1rem">UGX {{ collected_month|floatformat:0|intcomma }}</div><div class="kpi-sub">{{ collection_rate }}% collection rate</div></div>
-  <div class="kpi red"><div class="kpi-label">Total Outstanding</div><div class="kpi-value" style="font-size:1.1rem">UGX {{ total_outstanding|floatformat:0|intcomma }}</div><div class="kpi-sub">All unpaid balances</div></div>
-  <div class="kpi green"><div class="kpi-label">Jobs Completed</div><div class="kpi-value">{{ jobs_completed }}</div><div class="kpi-sub">This month</div></div>
+  <a href="{% url 'billing:list' %}" class="kpi" style="text-decoration:none;cursor:pointer;transition:transform .2s,box-shadow .2s">
+    <div class="kpi-label">Invoiced This Month</div>
+    <div class="kpi-value" style="font-size:1.1rem">UGX {{ invoiced_month|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">Total billed</div>
+  </a>
+  <a href="{% url 'billing:list' %}?status=paid" class="kpi gold" style="text-decoration:none;cursor:pointer;transition:transform .2s,box-shadow .2s">
+    <div class="kpi-label">Collected This Month</div>
+    <div class="kpi-value" style="font-size:1.1rem">UGX {{ collected_month|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">{{ collection_rate }}% collection rate</div>
+  </a>
+  <a href="{% url 'billing:aging' %}" class="kpi red" style="text-decoration:none;cursor:pointer;transition:transform .2s,box-shadow .2s">
+    <div class="kpi-label">Total Outstanding</div>
+    <div class="kpi-value" style="font-size:1.1rem">UGX {{ total_outstanding|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">All unpaid balances</div>
+  </a>
+  <a href="{% url 'services:list' %}?status=completed" class="kpi green" style="text-decoration:none;cursor:pointer;transition:transform .2s,box-shadow .2s">
+    <div class="kpi-label">Jobs Completed</div>
+    <div class="kpi-value">{{ jobs_completed }}</div>
+    <div class="kpi-sub">This month</div>
+  </a>
 </div>
 
 <!-- Automation Status -->
@@ -25,22 +41,22 @@
   </div>
   <div class="card-body">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.85rem">
-      <div style="text-align:center;padding:.5rem">
+      <a href="{% url 'billing:list' %}?status=overdue" style="text-decoration:none;color:inherit;text-align:center;padding:.5rem;border-radius:6px;transition:background .2s;cursor:pointer" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='transparent'">
         <div style="font-size:1.5rem;font-weight:800;color:var(--blue)">{{ automation_status.overdue_invoices_updated }}</div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">Overdue Updated Today</div>
-      </div>
-      <div style="text-align:center;padding:.5rem">
+      </a>
+      <a href="{% url 'clients:list' %}?status=suspended" style="text-decoration:none;color:inherit;text-align:center;padding:.5rem;border-radius:6px;transition:background .2s;cursor:pointer" onmouseover="this.style.background='#fef3c7'" onmouseout="this.style.background='transparent'">
         <div style="font-size:1.5rem;font-weight:800;color:var(--red)">{{ automation_status.suspended_clients }}</div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">Suspended Clients</div>
-      </div>
-      <div style="text-align:center;padding:.5rem">
+      </a>
+      <a href="{% url 'compliance:list' %}" style="text-decoration:none;color:inherit;text-align:center;padding:.5rem;border-radius:6px;transition:background .2s;cursor:pointer" onmouseover="this.style.background='#fef3c7'" onmouseout="this.style.background='transparent'">
         <div style="font-size:1.5rem;font-weight:800;color:var(--orange)">{{ automation_status.upcoming_deadlines }}</div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">Deadlines (7 days)</div>
-      </div>
-      <div style="text-align:center;padding:.5rem">
+      </a>
+      <a href="{% url 'services:list' %}" style="text-decoration:none;color:inherit;text-align:center;padding:.5rem;border-radius:6px;transition:background .2s;cursor:pointer" onmouseover="this.style.background='#ecfeff'" onmouseout="this.style.background='transparent'">
         <div style="font-size:1.5rem;font-weight:800;color:var(--green)">{{ automation_status.auto_generated_jobs_today }}</div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">Auto-Generated Today</div>
-      </div>
+      </a>
     </div>
   </div>
 </div>

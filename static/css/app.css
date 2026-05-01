@@ -422,6 +422,7 @@ img{max-width:100%}
 .kpi.green,.kpi-card.green{border-left-color:var(--green)}
 .kpi.red,.kpi-card.red{border-left-color:var(--red)}
 .kpi.purple,.kpi-card.purple{border-left-color:var(--purple)}
+a.kpi:hover,a.kpi-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(14,116,144,.15)}
 .kpi-lbl,.kpi-label{font-size:.67rem;color:var(--muted);text-transform:uppercase;
   letter-spacing:.8px;font-weight:700;margin-bottom:.25rem}
 .kpi-val,.kpi-value{font-size:1.35rem;font-weight:800;color:var(--blue);line-height:1.1}
