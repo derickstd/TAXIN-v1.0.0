@@ -30,12 +30,17 @@ class ClientForm(forms.ModelForm):
 class WalkInIntakeForm(forms.ModelForm):
     class Meta:
         model = WalkInIntake
-        fields = ['client', 'purpose', 'assigned_staff', 'notes', 'outcome']
+        fields = ['client', 'service_type', 'purpose', 'assigned_staff', 'notes', 'outcome']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        from services.models import ServiceType
+        
         self.fields['client'].queryset = Client.objects.order_by('full_name')
+        self.fields['service_type'].queryset = ServiceType.objects.filter(is_active=True).order_by('category', 'name')
+        self.fields['service_type'].required = False
         self.fields['assigned_staff'].queryset = User.objects.filter(
             is_active_staff=True, is_active=True).order_by('first_name')
         self.fields['assigned_staff'].required = False
+        self.fields['purpose'].required = False
         self.fields['notes'].required = False

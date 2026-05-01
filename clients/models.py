@@ -50,7 +50,8 @@ class WalkInIntake(models.Model):
     OUTCOME = [('pending','Pending'),('job_created','Job Created'),('declined','Declined'),('referred','Referred')]
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='walkin_intakes')
     visit_date = models.DateTimeField(auto_now_add=True)
-    purpose = models.TextField()
+    service_type = models.ForeignKey('services.ServiceType', on_delete=models.SET_NULL, null=True, blank=True)
+    purpose = models.TextField(blank=True)
     assigned_staff = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     notes = models.TextField(blank=True)
     outcome = models.CharField(max_length=20, choices=OUTCOME, default='pending')

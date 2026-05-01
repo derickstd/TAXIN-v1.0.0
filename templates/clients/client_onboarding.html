@@ -116,8 +116,18 @@
             </div>
             <div>
               <label class="form-label">Purpose of Visit <span class="req">*</span></label>
-              <textarea name="purpose" class="form-control" rows="3" placeholder="Why has the client come in today?" required>{{ walkin_form.purpose.value|default:'' }}</textarea>
-              {% for e in walkin_form.purpose.errors %}<div class="err-msg">{{ e }}</div>{% endfor %}
+              <select name="service_type" id="servicePurpose" class="form-select s2" data-ph="Select service…" required>
+                <option value="">Select service…</option>
+                {% for st in walkin_form.fields.service_type.queryset %}
+                <option value="{{ st.pk }}" {% if walkin_form.service_type.value|stringformat:"s" == st.pk|stringformat:"s" %}selected{% endif %}>{{ st.name }}</option>
+                {% endfor %}
+                <option value="add_new" style="background:#ecfeff;font-weight:600;color:#0e7490;">+ Add New Service</option>
+              </select>
+              {% for e in walkin_form.service_type.errors %}<div class="err-msg">{{ e }}</div>{% endfor %}
+            </div>
+            <div id="customPurposeDiv" style="display:none;">
+              <label class="form-label">Describe Purpose</label>
+              <textarea name="purpose" id="customPurpose" class="form-control" rows="2" placeholder="Describe the service needed…">{{ walkin_form.purpose.value|default:'' }}</textarea>
             </div>
             <div class="form-grid-2">
               <div>
@@ -200,6 +210,21 @@
 <script>
 $(document).ready(function(){
   $('.s2').select2({theme:'bootstrap-5',width:'100%',allowClear:true,placeholder:function(){return $(this).data('ph')||'Search...';}});
+  
+  // Handle service purpose dropdown
+  $('#servicePurpose').on('change', function(){
+    var val = $(this).val();
+    if(val === 'add_new'){
+      $('#customPurposeDiv').show();
+      $('#customPurpose').prop('required', true);
+      // Open service catalogue in new tab
+      window.open('{% url "services:catalogue" %}', '_blank');
+    } else {
+      $('#customPurposeDiv').hide();
+      $('#customPurpose').prop('required', false);
+    }
+  });
+  
   var target = '{{ import_section_active }}';
   var ids = {
     walkin: '#walkin-section',

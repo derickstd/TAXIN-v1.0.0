@@ -189,6 +189,11 @@ def walkin_create(request):
         if form.is_valid():
             intake = form.save(commit=False)
             intake.assigned_staff = form.cleaned_data.get('assigned_staff') or request.user
+            
+            # If service_type is selected, use service name as purpose
+            if intake.service_type and not intake.purpose:
+                intake.purpose = intake.service_type.name
+            
             intake.save()
             messages.success(request, f'Walk-in recorded for {intake.client.get_display_name()}.')
             return redirect('clients:detail', pk=intake.client.pk)
