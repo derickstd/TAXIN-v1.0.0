@@ -136,7 +136,7 @@ class Command(BaseCommand):
                 client=created_clients[1], period_month=today.month, period_year=today.year,
                 assigned_to=officer, status='completed', created_by=admin,
                 due_date=today - datetime.timedelta(days=5),
-                completed_at=timezone.now() - datetime.timedelta(days=2),
+                completed_at=timezone.now() - timezone.timedelta(days=2),
             )
             JobCardLineItem.objects.create(
                 job_card=job2, service_type=income_tax, default_price=300000,
