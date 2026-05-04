@@ -5,6 +5,10 @@ class CoreConfig(AppConfig):
     name = 'core'
 
     def ready(self):
+        import os
+        if os.environ.get('RUN_MAIN') != 'true':
+            return
+
         try:
             self._start_scheduler()
         except Exception as e:

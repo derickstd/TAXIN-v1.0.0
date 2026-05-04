@@ -55,7 +55,7 @@ TEMPLATES = [{
     },
 }]
 
-DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
+DATABASES = {'default': {'ENGINE': 'django.db.backends.postgresql', 'NAME': 'primeserver','USER' : 'postgres', 'HOST' : 'localhost', 'PORT': 5432,'PASSWORD' : '@Developer25'}}
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Africa/Kampala'
