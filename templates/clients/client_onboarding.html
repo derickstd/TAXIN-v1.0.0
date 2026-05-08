@@ -34,7 +34,7 @@
         </div>
         {% endif %}
         
-        <form method="post" novalidate>
+        <form method="post" action="{% url 'clients:create' %}" novalidate>
           {% csrf_token %}
           
           <!-- Basic Info Section -->

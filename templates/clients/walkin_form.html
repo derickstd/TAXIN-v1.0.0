@@ -21,7 +21,10 @@
         </div>
         <div class="field-span-2">
         <label class="form-label">Purpose of Visit <span class="req">*</span></label>
-        <textarea name="purpose" class="form-control" rows="3" placeholder="Why has the client come in today?" required>{{ form.purpose.value|default:'' }}</textarea>
+        <select name="service_type" class="form-select s2" data-ph="Select service…" required>
+          <option value="">Select service…</option>
+          {% for s in form.fields.service_type.queryset %}<option value="{{ s.pk }}" {% if form.service_type.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.get_category_display }} — {{ s.name }}</option>{% endfor %}
+        </select>
         </div>
         <div>
           <label class="form-label">Assigned Staff</label>

@@ -1,9 +1,11 @@
 {% extends 'base.html' %}
-{% block title %}Compliance{% endblock %}
+{% block title %}Compliance & Credentials{% endblock %}
 {% block nav_comp %}active{% endblock %}
-{% block breadcrumbs %}<li class="active">Compliance</li>{% endblock %}
+{% block breadcrumbs %}<li class="active">Compliance & Credentials</li>{% endblock %}
 {% block content %}
-<div class="page-header"><h4 class="page-title"><i class="fas fa-calendar-check"></i>Compliance Deadlines</h4></div>
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-calendar-check"></i>Compliance & Credentials Management</h4>
+</div>
 
 {% if upcoming %}
 <div class="card-box" style="margin-bottom:1rem;border-left:4px solid #e74c3c">
@@ -128,6 +130,92 @@
         </tr>
         {% empty %}
         <tr><td colspan="7"><div class="empty-state"><i class="fas fa-calendar"></i><p>No compliance deadlines configured yet</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Client Credentials Section -->
+<div class="card-box" style="margin-top:2rem">
+  <div class="card-head">
+    <span><i class="fas fa-key"></i>Client Credentials</span>
+    <a href="{% url 'credentials:create' %}" class="btn btn-primary btn-sm" style="margin-left:auto"><i class="fas fa-plus"></i> Add Credential</a>
+  </div>
+  
+  <div class="card-body" style="padding:.65rem 1rem">
+    <form method="get" class="flex gap-2 flex-wrap items-center" style="margin-bottom:1rem">
+      <input type="text" name="q" value="{{ q }}" class="form-ctrl" style="max-width:280px" placeholder="Search client name...">
+      <button class="btn btn-primary btn-sm"><i class="fas fa-search"></i></button>
+      <a href="{% url 'compliance:list' %}" class="btn btn-outline btn-sm">Clear</a>
+    </form>
+  </div>
+  
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Client</th>
+          <th>Type</th>
+          <th>Credentials</th>
+          <th>Visit</th>
+          <th>Expiry</th>
+          <th>Status</th>
+          <th>Mark Handled</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cred in credentials %}
+        <tr class="cred-row" data-pk="{{ cred.pk }}">
+          <td><a href="{% url 'clients:detail' cred.client.pk %}" class="fw-7">{{ cred.client.get_display_name|truncatechars:22 }}</a></td>
+          <td><span class="badge badge-open fs-xs">{{ cred.get_credential_type_display }}</span></td>
+          <td class="fs-sm" style="font-family:monospace">
+            <span class="fw-6">{{ cred.get_username|default:cred.label }}</span>
+            <span style="color:var(--muted);margin:0 .3rem">:</span>
+            <span style="letter-spacing:2px">••••••••</span>
+          </td>
+          <td>
+            {% with website_url=cred.get_website_url %}
+            {% if website_url %}
+            <a href="{{ website_url }}" target="_blank" class="btn btn-outline btn-sm" title="Visit {{ cred.get_credential_type_display }} portal">
+              <i class="fas fa-external-link-alt"></i> Visit
+            </a>
+            {% else %}
+            <span class="fs-xs text-muted">—</span>
+            {% endif %}
+            {% endwith %}
+          </td>
+          <td class="fs-sm {% if cred.expiry_date and cred.expiry_date <= today %}text-danger fw-7{% endif %}">
+            {{ cred.expiry_date|default:"—" }}{% if cred.expiry_date and cred.expiry_date <= today %} ⚠️{% endif %}
+          </td>
+          <td>
+            {% if cred.status == 'active' %}
+              <span class="badge" style="background:#27ae60;color:white">Active</span>
+            {% elif cred.status == 'pending' %}
+              <span class="badge badge-pending_payment">Pending</span>
+            {% elif cred.status == 'needs_reset' %}
+              <span class="badge badge-overdue">Needs Reset</span>
+            {% else %}
+              <span class="badge badge-{{ cred.status }}">{{ cred.get_status_display }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <form method="post" action="{% url 'compliance:mark_credential_handled' cred.pk %}" style="display:inline">
+              {% csrf_token %}
+              {% if cred.status == 'active' %}
+                <button type="submit" class="btn btn-outline btn-sm" title="Mark as handled">
+                  <i class="fas fa-check"></i> Handled
+                </button>
+              {% else %}
+                <button type="submit" name="activate" class="btn btn-primary btn-sm" title="Mark as active">
+                  <i class="fas fa-check-circle"></i> Activate
+                </button>
+              {% endif %}
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7"><div class="empty-state"><i class="fas fa-key"></i><p>No credentials stored yet.</p></div></td></tr>
         {% endfor %}
       </tbody>
     </table>

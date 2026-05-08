@@ -5,7 +5,15 @@
 {% block content %}
 <div class="page-header">
   <h4 class="page-title"><i class="fas fa-users"></i>Clients</h4>
-  <a href="{% url 'clients:create' %}" class="btn btn-primary"><i class="fas fa-user-plus"></i>New Client</a>
+  <div style="display:flex;gap:.5rem">
+    <form method="post" action="{% url 'billing:refresh_balances' %}" style="display:inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline btn-sm" title="Refresh outstanding balances">
+        <i class="fas fa-sync"></i> Refresh Balances
+      </button>
+    </form>
+    <a href="{% url 'clients:create' %}" class="btn btn-primary"><i class="fas fa-user-plus"></i>New Client</a>
+  </div>
 </div>
 
 <!-- Status chips -->
@@ -49,7 +57,7 @@
   <div class="tbl-wrap">
     <table class="tbl">
       <thead>
-        <tr><th>ID</th><th>Name</th><th>Type</th><th>TIN</th><th>Phone</th><th>Status</th><th>Officer</th><th>Outstanding</th><th></th></tr>
+        <tr><th>ID</th><th>Name</th><th>Walk-in</th><th>TIN</th><th>Phone</th><th>Status</th><th>Officer</th><th>Outstanding</th><th></th></tr>
       </thead>
       <tbody id="client-tbody">
         {% include 'clients/partials/client_rows.html' %}

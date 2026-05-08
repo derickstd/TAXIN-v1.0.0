@@ -37,10 +37,14 @@ class WalkInIntakeForm(forms.ModelForm):
         from services.models import ServiceType
         
         self.fields['client'].queryset = Client.objects.order_by('full_name')
+        self.fields['client'].required = True
         self.fields['service_type'].queryset = ServiceType.objects.filter(is_active=True).order_by('category', 'name')
-        self.fields['service_type'].required = False
+        self.fields['service_type'].required = True
+        self.fields['service_type'].label = 'Purpose of Visit'
+        self.fields['purpose'].required = False
+        self.fields['purpose'].widget = forms.HiddenInput()
         self.fields['assigned_staff'].queryset = User.objects.filter(
             is_active_staff=True, is_active=True).order_by('first_name')
         self.fields['assigned_staff'].required = False
-        self.fields['purpose'].required = False
         self.fields['notes'].required = False
+        self.fields['outcome'].required = False

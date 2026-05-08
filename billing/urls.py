@@ -11,4 +11,5 @@ urlpatterns = [
     path('<int:pk>/whatsapp/',  views.send_invoice_whatsapp, name='whatsapp'),
     path('<int:pk>/convert/',   views.convert_to_invoice,    name='convert'),
     path('aging/',              views.aging_report,          name='aging'),
+    path('refresh-balances/',   views.refresh_outstanding_balances, name='refresh_balances'),
 ]

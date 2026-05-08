@@ -138,19 +138,6 @@
       </div>
     </div>
 
-    <!-- Security -->
-    <div class="sb-group" id="grp-security">
-      <button type="button" class="sb-group-hd" data-grp="grp-security" data-href="{% url 'credentials:list' %}" title="Security">
-        <i class="fas fa-shield-alt"></i>
-        <span class="sb-lbl">Security</span>
-        <i class="fas fa-chevron-down sb-arrow"></i>
-      </button>
-      <div class="sb-sub" id="sub-security">
-        <a href="{% url 'credentials:list' %}"   class="sb-link {% block nav_cred %}{% endblock %}" title="Credentials"><i class="fas fa-key"></i><span class="sb-lbl">Credentials</span></a>
-        <a href="{% url 'credentials:create' %}" class="sb-link" title="Add Credential"><i class="fas fa-lock"></i><span class="sb-lbl">Add Credential</span></a>
-      </div>
-    </div>
-
     <!-- Reports -->
     <div class="sb-group" id="grp-reports">
       <button type="button" class="sb-group-hd" data-grp="grp-reports" data-href="{% url 'documents:price_list' %}" title="Reports">

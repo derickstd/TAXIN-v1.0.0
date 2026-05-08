@@ -186,10 +186,15 @@ def send_bulk_debt_reminders():
     return sent_count
 
 
-def send_bulk_compliance_reminders():
+def send_bulk_compliance_reminders(days_ahead=15):
     """
-    Send compliance reminders to clients with upcoming deadlines (within 7 days)
-    Returns count of emails sent
+    Send compliance reminders to clients with upcoming deadlines
+    
+    Args:
+        days_ahead: Number of days ahead to check for deadlines (default: 15)
+    
+    Returns:
+        Count of emails sent
     """
     from compliance.models import ComplianceDeadline
     from django.utils import timezone
@@ -197,30 +202,32 @@ def send_bulk_compliance_reminders():
     
     sent_count = 0
     today = timezone.now().date()
-    week_ahead = today + timedelta(days=7)
+    target_date = today + timedelta(days=days_ahead)
     
-    # Get upcoming deadlines
-    upcoming = ComplianceDeadline.objects.filter(
-        due_date__gte=today,
-        due_date__lte=week_ahead,
-        status='upcoming'
-    ).select_related('obligation__client', 'obligation__service_type')
+    # Get deadlines for specific dates (15, 7, 3 days ahead)
+    reminder_dates = [today + timedelta(days=d) for d in [15, 7, 3] if d <= days_ahead]
     
-    # Group by client
-    client_deadlines = {}
-    for deadline in upcoming:
-        client = deadline.obligation.client
-        if client not in client_deadlines:
-            client_deadlines[client] = []
-        client_deadlines[client].append(deadline)
-    
-    # Send emails
-    for client, deadlines in client_deadlines.items():
-        if not client.email:
-            continue
+    for reminder_date in reminder_dates:
+        upcoming = ComplianceDeadline.objects.filter(
+            due_date=reminder_date,
+            status='upcoming'
+        ).select_related('obligation__client', 'obligation__service_type')
         
-        if send_compliance_reminder(client, deadlines):
-            sent_count += 1
+        # Group by client
+        client_deadlines = {}
+        for deadline in upcoming:
+            client = deadline.obligation.client
+            if client not in client_deadlines:
+                client_deadlines[client] = []
+            client_deadlines[client].append(deadline)
+        
+        # Send emails
+        for client, deadlines in client_deadlines.items():
+            if not client.email:
+                continue
+            
+            if send_compliance_reminder(client, deadlines):
+                sent_count += 1
     
-    logger.info(f"Bulk compliance reminders sent: {sent_count} emails")
+    logger.info(f"Bulk compliance reminders sent: {sent_count} emails ({days_ahead} days ahead)")
     return sent_count

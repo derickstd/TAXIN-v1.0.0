@@ -2,7 +2,11 @@
 <tr>
   <td><span style="font-size:.75rem;color:#aaa;font-weight:700">{{ c.client_id }}</span></td>
   <td><a href="{% url 'clients:detail' c.pk %}" style="font-weight:700;color:#1A3C6E">{{ c.get_display_name }}</a></td>
-  <td><span style="font-size:.75rem;color:#666">{{ c.get_client_type_display }}</span></td>
+  <td>
+    <a href="{% url 'clients:walkin' %}?client={{ c.pk }}" class="btn btn-outline btn-sm" title="Record walk-in visit for {{ c.get_display_name }}">
+      <i class="fas fa-door-open"></i> Walk-in
+    </a>
+  </td>
   <td><span style="font-size:.78rem">{{ c.tin|default:"—" }}</span></td>
   <td><span style="font-size:.78rem">{{ c.phone_primary }}</span></td>
   <td><span class="badge badge-{{ c.status }}">{{ c.get_status_display }}</span></td>
@@ -13,4 +17,3 @@
 {% empty %}
 <tr><td colspan="9" style="text-align:center;padding:2rem;color:#aaa">No clients match your search</td></tr>
 {% endfor %}
-

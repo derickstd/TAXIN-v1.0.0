@@ -5,6 +5,7 @@ from django.utils import timezone
 from .models import ComplianceObligation, ComplianceDeadline
 from billing.models import Invoice, Payment
 from services.models import JobCard, JobCardLineItem
+from credentials.models import ClientCredential
 
 
 @login_required
@@ -18,8 +19,21 @@ def deadline_list(request):
     all_deadlines = ComplianceDeadline.objects.select_related(
         'obligation__client', 'obligation__service_type', 'filed_by', 'invoice'
     ).order_by('due_date')[:100]
+    
+    # Get credentials for compliance section
+    credentials = ClientCredential.objects.select_related('client', 'last_accessed_by').order_by('client__full_name')
+    
+    # Filter credentials if search query
+    q = request.GET.get('q', '')
+    if q:
+        from django.db.models import Q
+        credentials = credentials.filter(
+            Q(client__full_name__icontains=q) | Q(label__icontains=q)
+        )
+    
     return render(request, 'compliance/deadline_list.html', {
         'upcoming': upcoming, 'all_deadlines': all_deadlines, 'today': today,
+        'credentials': credentials, 'q': q,
     })
 
 
@@ -194,3 +208,25 @@ def _create_payment_if_needed(invoice, user):
             received_by=user,
             notes='Payment recorded via compliance action',
         )
+
+
+@login_required
+def mark_credential_handled(request, pk):
+    """Mark a credential as handled or activate it."""
+    if request.method != 'POST':
+        return redirect('compliance:list')
+    
+    credential = get_object_or_404(ClientCredential, pk=pk)
+    
+    if 'activate' in request.POST:
+        # Activate the credential
+        credential.status = 'active'
+        credential.save(update_fields=['status'])
+        messages.success(request, f'{credential.label} for {credential.client.get_display_name()} activated.')
+    else:
+        # Mark as handled (archived)
+        credential.status = 'archived'
+        credential.save(update_fields=['status'])
+        messages.success(request, f'{credential.label} for {credential.client.get_display_name()} marked as handled.')
+    
+    return redirect('compliance:list')

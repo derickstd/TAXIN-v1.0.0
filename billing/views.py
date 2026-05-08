@@ -202,3 +202,24 @@ def convert_to_invoice(request, pk):
         else:
             messages.info(request, 'Already a tax invoice.')
     return redirect('billing:detail', pk=pk)
+
+
+@login_required
+def refresh_outstanding_balances(request):
+    """Manually refresh all client outstanding balances"""
+    if request.method == 'POST':
+        from billing.signals import update_client_outstanding
+        
+        clients = Client.objects.all()
+        updated = 0
+        
+        for client in clients:
+            old_balance = client.total_outstanding
+            update_client_outstanding(client)
+            client.refresh_from_db()
+            if old_balance != client.total_outstanding:
+                updated += 1
+        
+        messages.success(request, f'✅ Refreshed outstanding balances for all clients. {updated} updated.')
+    
+    return redirect('clients:list')

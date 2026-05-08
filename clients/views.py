@@ -209,14 +209,6 @@ def client_detail(request, pk):
 @login_required
 def client_create(request):
     if request.method == 'POST':
-        # Debug: Check what service fields are in POST
-        service_fields = [key for key in request.POST.keys() if 'service' in key.lower()]
-        print(f"\n=== DEBUG: Service fields in POST ===")
-        print(f"Service fields found: {service_fields}")
-        for field in service_fields:
-            print(f"  {field} = {request.POST.get(field)}")
-        print(f"=== END DEBUG ===")
-        
         form = ClientForm(request.POST)
         if form.is_valid():
             from core.email_utils import send_welcome_email
@@ -234,7 +226,6 @@ def client_create(request):
             
             # Process services and create obligations
             service_count = 0
-            print(f"\n=== Processing services ===")
             for key in request.POST:
                 if key.startswith('service_type_'):
                     index = key.split('_')[-1]
@@ -242,28 +233,23 @@ def client_create(request):
                     price = request.POST.get(f'service_price_{index}', '').strip()
                     frequency = request.POST.get(f'service_frequency_{index}', 'monthly').strip()
                     
-                    print(f"Found service: type_id={service_type_id}, price={price}, freq={frequency}")
-                    
                     if service_type_id:
                         try:
                             from compliance.models import ComplianceObligation
                             
                             service_type = ServiceType.objects.get(pk=service_type_id)
-                            print(f"  Service type found: {service_type.name}")
                             
                             # Use default price if no price provided
                             if not price or price == '0':
                                 price = str(service_type.default_price)
-                                print(f"  Using default price: {price}")
                             
-                            # Create service subscription (no frequency field)
+                            # Create service subscription
                             subscription = ClientServiceSubscription.objects.create(
                                 client=client,
                                 service_type=service_type,
                                 negotiated_price=Decimal(price),
                                 is_active=True
                             )
-                            print(f"  Subscription created: {subscription.id}")
                             
                             # Create compliance obligation for this service
                             obligation, created = ComplianceObligation.objects.get_or_create(
@@ -274,17 +260,14 @@ def client_create(request):
                                     'is_active': True
                                 }
                             )
-                            print(f"  Obligation created: {obligation.id} (new={created})")
                             
                             service_count += 1
                         except ServiceType.DoesNotExist:
-                            print(f"  ERROR: ServiceType {service_type_id} not found")
-                        except ValueError as e:
-                            print(f"  ERROR: ValueError - {e}")
-                        except Exception as e:
-                            print(f"  ERROR: {type(e).__name__} - {e}")
-            print(f"Total services processed: {service_count}")
-            print(f"=== End processing services ===")
+                            pass
+                        except ValueError:
+                            pass
+                        except Exception:
+                            pass
             
             # Process credentials
             credential_count = 0
@@ -409,23 +392,23 @@ def walkin_create(request):
         form = WalkInIntakeForm(request.POST)
         if form.is_valid():
             intake = form.save(commit=False)
-            intake.assigned_staff = form.cleaned_data.get('assigned_staff') or request.user
-            
-            # If service_type is selected, use service name as purpose
-            if intake.service_type and not intake.purpose:
-                intake.purpose = intake.service_type.name
-            
+            # Set assigned staff to current user if not specified
+            if not intake.assigned_staff:
+                intake.assigned_staff = request.user
             intake.save()
-            messages.success(request, f'Walk-in recorded for {intake.client.get_display_name()}.')
+            messages.success(request, f'Walk-in visit recorded for {intake.client.get_display_name()}.')
             return redirect('clients:detail', pk=intake.client.pk)
-        return _render_client_onboarding(
-            request,
-            walkin_form=form,
-            import_section_active='walkin',
-        )
+        else:
+            # Show validation errors
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f'{field}: {error}')
+            return render(request, 'clients/walkin_form.html', {'form': form})
+    
+    # GET request - show form
     client_id = request.GET.get('client')
     form = WalkInIntakeForm(initial={'client': client_id} if client_id else {})
-    return _render_client_onboarding(request, walkin_form=form, import_section_active='walkin')
+    return render(request, 'clients/walkin_form.html', {'form': form})
 
 @login_required
 def client_search_api(request):

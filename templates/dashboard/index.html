@@ -113,8 +113,8 @@
               <td style="font-size:.78rem">{{ d.obligation.service_type.name|truncatechars:20 }}</td>
               <td><span style="font-size:.78rem;color:{% if d.due_date <= today %}#e74c3c{% else %}#555{% endif %};font-weight:{% if d.due_date <= today %}700{% else %}400{% endif %}">{{ d.due_date|date:"d M" }}</span></td>
               <td>
-                <form method="post" action="{% url 'compliance:mark_filed' d.pk %}">{% csrf_token %}
-                  <button class="btn btn-success btn-sm">Filed</button>
+                <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_and_paid' %}" style="display:inline">{% csrf_token %}
+                  <button class="btn btn-success btn-sm" style="font-size:.75rem;padding:.25rem .5rem">Mark Filed</button>
                 </form>
               </td>
             </tr>
