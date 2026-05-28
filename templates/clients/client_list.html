@@ -16,57 +16,100 @@
   </div>
 </div>
 
+<!-- Filter bar -->
+<div class="card card-compact mb-2">
+  <div class="card-bd" style="padding:.6rem .9rem">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+      <!-- Instant search -->
+      <input type="text" id="clientSearch" value="{{ q }}"
+        class="form-ctrl" style="max-width:280px;font-size:.85rem"
+        placeholder="Search name, TIN, phone, ID…"
+        autocomplete="off">
+
+      <!-- Status -->
+      <select id="filterStatus" class="form-ctrl" style="width:auto;font-size:.83rem">
+        <option value="">All Statuses</option>
+        {% for val,label in status_choices %}
+        <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <!-- Type -->
+      <select id="filterType" class="form-ctrl" style="width:auto;font-size:.83rem">
+        <option value="">All Types</option>
+        {% for val,label in type_choices %}
+        <option value="{{ val }}" {% if ctype == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <!-- Debt filter -->
+      <select id="filterDebt" class="form-ctrl" style="width:auto;font-size:.83rem">
+        <option value="">All Clients</option>
+        <option value="indebted" {% if debt_filter == 'indebted' %}selected{% endif %}>Indebted (Balance &gt; 0)</option>
+        <option value="uncleared_invoices" {% if debt_filter == 'uncleared_invoices' %}selected{% endif %}>Uncleared Invoices</option>
+        <option value="cleared" {% if debt_filter == 'cleared' %}selected{% endif %}>Fully Cleared</option>
+      </select>
+
+      <a href="{% url 'clients:list' %}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i> Clear</a>
+      <span id="visibleCount" style="font-size:.78rem;color:#888;margin-left:.3rem"></span>
+    </div>
+  </div>
+</div>
+
 <!-- Status chips -->
-<div class="d-flex gap-2 flex-wrap" style="margin-bottom:.8rem">
-  <a href="{% url 'clients:list' %}" class="btn btn-sm {% if not status %}btn-primary{% else %}btn-outline{% endif %}">All ({{ clients.count }})</a>
+<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.7rem">
+  <a href="{% url 'clients:list' %}" class="btn btn-sm {% if not status %}btn-primary{% else %}btn-outline{% endif %}">All</a>
   {% for val,label in status_choices %}
-  <a href="?status={{ val }}" class="btn btn-sm {% if status == val %}btn-primary{% else %}btn-outline{% endif %}">{{ label }} ({{ counts|dictsort:val }})</a>
+  <a href="?status={{ val }}{% if ctype %}&type={{ ctype }}{% endif %}{% if debt_filter %}&debt={{ debt_filter }}{% endif %}"
+     class="btn btn-sm {% if status == val %}btn-primary{% else %}btn-outline{% endif %}">
+    {{ label }} <span style="opacity:.7">({{ counts|dictsort:val }})</span>
+  </a>
   {% endfor %}
+  <!-- Debt quick chips -->
+  <a href="?debt=indebted{% if status %}&status={{ status }}{% endif %}"
+     class="btn btn-sm {% if debt_filter == 'indebted' %}btn-primary{% else %}btn-outline{% endif %}" style="{% if debt_filter == 'indebted' %}{% else %}color:var(--red){% endif %}">
+    <i class="fas fa-exclamation-circle"></i> Indebted
+  </a>
+  <a href="?debt=uncleared_invoices{% if status %}&status={{ status }}{% endif %}"
+     class="btn btn-sm {% if debt_filter == 'uncleared_invoices' %}btn-primary{% else %}btn-outline{% endif %}">
+    <i class="fas fa-file-invoice-dollar"></i> Uncleared Invoices
+  </a>
 </div>
 
-<div class="layout-main-sidebar" style="margin-bottom:.9rem">
-  <div class="card-box card-compact">
-    <div class="card-body" style="padding:.7rem .9rem">
-      <form method="get" style="display:flex;gap:.6rem;flex-wrap:wrap">
-        <input type="hidden" name="status" value="{{ status }}">
-        <input type="text" name="q" value="{{ q }}" class="form-control"
-          style="max-width:340px" placeholder="Search name, TIN, phone, client ID…"
-          hx-get="{% url 'clients:list' %}" hx-trigger="keyup changed delay:300ms"
-          hx-target="#client-tbody" hx-include="[name=status]">
-        <select name="type" class="form-select" style="width:auto" onchange="this.form.submit()">
-          <option value="">All Types</option>
-          {% for val,label in type_choices %}<option value="{{ val }}" {% if ctype == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-        </select>
-        <button class="btn btn-primary"><i class="fas fa-search"></i></button>
-        <a href="{% url 'clients:list' %}" class="btn btn-outline"><i class="fas fa-times"></i> Clear</a>
-      </form>
-    </div>
-  </div>
-
-  <div class="card-box card-compact">
-    <div class="card-head"><i class="fas fa-chart-simple"></i>List Summary</div>
-    <div class="card-body">
-      <div class="stat-row"><span>Visible Clients</span><span class="fw-7">{{ clients|length }}</span></div>
-      <div class="stat-row"><span>Status</span><span class="text-muted">{{ status|default:"All" }}</span></div>
-      <div class="stat-row"><span>Type</span><span class="text-muted">{{ ctype|default:"All" }}</span></div>
-    </div>
-  </div>
-</div>
-
-<div class="card-box card-compact">
+<div class="card card-compact">
   <div class="tbl-wrap">
-    <table class="tbl">
+    <table class="tbl" id="clientTable">
       <thead>
-        <tr><th>ID</th><th>Name</th><th>Walk-in</th><th>TIN</th><th>Phone</th><th>Status</th><th>Officer</th><th>Outstanding</th><th></th></tr>
+        <tr><th>ID</th><th>Name</th><th>TIN</th><th>Phone</th><th>Type</th><th>Status</th><th>Officer</th><th>Outstanding</th><th></th></tr>
       </thead>
       <tbody id="client-tbody">
-        {% include 'clients/partials/client_rows.html' %}
+        {% for client in clients %}
+        <tr class="client-row"
+            data-name="{{ client.full_name|lower }}"
+            data-id="{{ client.client_id|lower }}"
+            data-tin="{{ client.tin|lower }}"
+            data-phone="{{ client.phone_primary|lower }}"
+            data-status="{{ client.status }}"
+            data-type="{{ client.client_type }}"
+            data-outstanding="{{ client.total_outstanding }}">
+          <td style="font-size:.78rem;color:#888">{{ client.client_id }}</td>
+          <td><a href="{% url 'clients:detail' client.pk %}" style="font-weight:600">{{ client.get_display_name }}</a></td>
+          <td style="font-size:.78rem">{{ client.tin|default:"—" }}</td>
+          <td style="font-size:.78rem">{{ client.phone_primary }}</td>
+          <td><span class="badge badge-open" style="font-size:.65rem">{{ client.get_client_type_display }}</span></td>
+          <td><span class="badge badge-{{ client.status }}" style="font-size:.65rem">{{ client.get_status_display }}</span></td>
+          <td style="font-size:.78rem">{{ client.assigned_officer.get_full_name|default:"—" }}</td>
+          <td class="{% if client.total_outstanding > 0 %}ugx-red{% else %}ugx-green{% endif %}" style="font-weight:700;font-size:.82rem">
+            {{ client.total_outstanding|floatformat:0|intcomma }}
+          </td>
+          <td><a href="{% url 'clients:detail' client.pk %}" class="btn btn-outline btn-sm">View</a></td>
+        </tr>
+        {% empty %}
+        <tr id="emptyRow"><td colspan="9" style="text-align:center;color:#aaa;padding:2rem">No clients found.</td></tr>
+        {% endfor %}
       </tbody>
     </table>
   </div>
-  {% if not clients %}
-  <div class="empty-state"><i class="fas fa-users"></i><p>No clients found. <a href="{% url 'clients:create' %}">Add the first client</a></p></div>
-  {% endif %}
 </div>
 
 <!-- Bottom Action Buttons -->
@@ -135,9 +178,8 @@
       <div class="form-stack">
         <div>
           <label class="form-label">CSV File <span class="req">*</span></label>
-          <input type="file" name="file" accept=".csv" class="form-control" required>
+          <input type="file" name="csv_file" accept=".csv" class="form-control" required>
         </div>
-        <div id="importPreview"></div>
       </div>
       <div class="form-actions mt-3">
         <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Import</button>
@@ -150,26 +192,65 @@
 
 {% block extra_js %}
 <script>
-$(document).ready(function(){
-  /* Walk-in Modal */
-  var walkinModal = document.getElementById('walkinModal');
-  document.getElementById('openWalkinBtn').addEventListener('click', function(){
-    walkinModal.classList.add('open');
-  });
-  function closeWalkin(){ walkinModal.classList.remove('open'); }
-  document.getElementById('closeWalkin').addEventListener('click', closeWalkin);
-  document.getElementById('closeWalkin2').addEventListener('click', closeWalkin);
-  walkinModal.addEventListener('click', function(e){ if(e.target===walkinModal) closeWalkin(); });
+(function(){
+  var searchInput  = document.getElementById('clientSearch');
+  var filterStatus = document.getElementById('filterStatus');
+  var filterType   = document.getElementById('filterType');
+  var filterDebt   = document.getElementById('filterDebt');
+  var countEl      = document.getElementById('visibleCount');
+  var rows         = document.querySelectorAll('.client-row');
 
-  /* Batch Import Modal */
-  var batchModal = document.getElementById('batchImportModal');
-  document.getElementById('openBatchImportBtn').addEventListener('click', function(){
-    batchModal.classList.add('open');
-  });
-  function closeBatch(){ batchModal.classList.remove('open'); }
-  document.getElementById('closeBatchImport').addEventListener('click', closeBatch);
-  document.getElementById('closeBatchImport2').addEventListener('click', closeBatch);
-  batchModal.addEventListener('click', function(e){ if(e.target===batchModal) closeBatch(); });
-});
+  function applyFilters() {
+    var q       = searchInput.value.toLowerCase().trim();
+    var status  = filterStatus.value;
+    var type    = filterType.value;
+    var debt    = filterDebt.value;
+    var visible = 0;
+
+    rows.forEach(function(row) {
+      var matchQ = !q || (
+        row.dataset.name.includes(q) ||
+        row.dataset.id.includes(q) ||
+        row.dataset.tin.includes(q) ||
+        row.dataset.phone.includes(q)
+      );
+      var matchStatus = !status || row.dataset.status === status;
+      var matchType   = !type   || row.dataset.type === type;
+      var outstanding = parseFloat(row.dataset.outstanding) || 0;
+      var matchDebt = true;
+      if (debt === 'indebted')          matchDebt = outstanding > 0;
+      else if (debt === 'cleared')      matchDebt = outstanding === 0;
+      else if (debt === 'uncleared_invoices') matchDebt = outstanding > 0;
+
+      var show = matchQ && matchStatus && matchType && matchDebt;
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    countEl.textContent = visible + ' client' + (visible !== 1 ? 's' : '');
+  }
+
+  // Instant — fires on every keystroke with no delay
+  searchInput.addEventListener('input', applyFilters);
+  filterStatus.addEventListener('change', applyFilters);
+  filterType.addEventListener('change', applyFilters);
+  filterDebt.addEventListener('change', applyFilters);
+
+  // Run on load to reflect server-side filters
+  applyFilters();
+
+  // Modals
+  function modal(openId, closeIds, overlayId) {
+    var el = document.getElementById(overlayId);
+    document.getElementById(openId).addEventListener('click', function(){ el.classList.add('open'); });
+    closeIds.forEach(function(id){
+      var btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', function(){ el.classList.remove('open'); });
+    });
+    el.addEventListener('click', function(e){ if(e.target===el) el.classList.remove('open'); });
+  }
+  modal('openWalkinBtn',      ['closeWalkin','closeWalkin2'],           'walkinModal');
+  modal('openBatchImportBtn', ['closeBatchImport','closeBatchImport2'], 'batchImportModal');
+})();
 </script>
 {% endblock %}

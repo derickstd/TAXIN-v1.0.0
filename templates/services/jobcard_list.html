@@ -126,17 +126,17 @@ function toggleKanbanCol(val) {
 // Restore saved collapse state on load
 (function(){
   var s = loadState();
-  // Kanban columns
+  // Kanban columns — collapsed by default unless user has explicitly opened them
   {% for s_val,s_label,col_jobs in kanban_cols %}
-  if (s['kcol-{{ s_val }}'] === false) {
+  if (s['kcol-{{ s_val }}'] !== true) {
     var b = document.getElementById('kcol-body-{{ s_val }}');
     var i = document.getElementById('kcol-icon-{{ s_val }}');
     if (b) b.style.display = 'none';
     if (i) i.style.transform = 'rotate(180deg)';
   }
   {% endfor %}
-  // Table list
-  if (s['joblist'] === false || s['joblist'] === undefined) {
+  // Table list — collapsed by default unless user has explicitly opened it
+  if (s['joblist'] !== true) {
     var b = document.getElementById('joblist');
     var i = document.getElementById('joblist-icon');
     if (b) b.style.display = 'none';

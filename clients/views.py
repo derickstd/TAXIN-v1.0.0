@@ -152,26 +152,38 @@ def _process_client_import_file(uploaded_file, user):
 @login_required
 def client_list(request):
     clients = Client.objects.select_related('assigned_officer').all()
-    q = request.GET.get('q','')
-    status = request.GET.get('status','')
-    ctype = request.GET.get('type','')
+    q = request.GET.get('q', '')
+    status = request.GET.get('status', '')
+    ctype = request.GET.get('type', '')
+    debt_filter = request.GET.get('debt', '')
+
     if q:
         clients = clients.filter(
-            Q(full_name__icontains=q)|
-            Q(tin__icontains=q)|Q(phone_primary__icontains=q)|Q(client_id__icontains=q)
+            Q(full_name__icontains=q) |
+            Q(tin__icontains=q) | Q(phone_primary__icontains=q) | Q(client_id__icontains=q)
         )
     if status:
         clients = clients.filter(status=status)
     if ctype:
         clients = clients.filter(client_type=ctype)
-    if request.headers.get("HX-Request"):
+    if debt_filter == 'indebted':
+        clients = clients.filter(total_outstanding__gt=0)
+    elif debt_filter == 'cleared':
+        clients = clients.filter(total_outstanding=0)
+    elif debt_filter == 'uncleared_invoices':
+        clients = clients.filter(
+            invoices__status__in=['sent', 'partially_paid', 'overdue']
+        ).distinct()
+
+    if request.headers.get('HX-Request'):
         return render(request, 'clients/partials/client_rows.html', {'clients': clients})
+
     total_outstanding = clients.aggregate(s=Sum('total_outstanding'))['s'] or 0
     return render(request, 'clients/client_list.html', {
-        'clients': clients, 'q': q, 'status': status, 'ctype': ctype,
+        'clients': clients, 'q': q, 'status': status, 'ctype': ctype, 'debt_filter': debt_filter,
         'status_choices': Client.STATUS, 'type_choices': Client.CLIENT_TYPE,
         'total_outstanding': total_outstanding,
-        'counts': {s: Client.objects.filter(status=s).count() for s,_ in Client.STATUS},
+        'counts': {s: Client.objects.filter(status=s).count() for s, _ in Client.STATUS},
     })
 
 @login_required
@@ -214,6 +226,9 @@ def client_detail(request, pk):
         'new_job_intake': WalkInIntake.objects.select_related('service_type').filter(
             pk=request.GET.get('new_job', 0), client=client
         ).first(),
+        'new_job_reg': request.GET.get('new_job_reg'),
+        'new_job_reg_svc': request.GET.get('svc'),
+        'new_job_reg_price': request.GET.get('price'),
         'service_types_for_job': __import__('services.models', fromlist=['ServiceType']).ServiceType.objects.filter(is_active=True).order_by('category', 'name'),
         'staff_for_job': __import__('core.models', fromlist=['User']).User.objects.filter(is_active_staff=True, is_active=True).order_by('first_name'),
     })
@@ -345,8 +360,21 @@ def client_create(request):
                 success_msg += ' | ' + ' • '.join(details)
             
             messages.success(request, success_msg)
-            
-            # Redirect to client detail page
+
+            # If services were assigned, redirect with flag to trigger job creation popup
+            if service_count > 0:
+                first_svc_id = None
+                first_svc_price = None
+                for key in request.POST:
+                    if key.startswith('service_type_'):
+                        index = key.split('_')[-1]
+                        sid = request.POST.get(f'service_type_{index}', '').strip()
+                        if sid:
+                            first_svc_id = sid
+                            first_svc_price = request.POST.get(f'service_price_{index}', '').strip()
+                            break
+                return redirect(f"/clients/{client.pk}/?new_job_reg=1&svc={first_svc_id or ''}&price={first_svc_price or ''}")
+
             return redirect('clients:detail', pk=client.pk)
         else:
             # Form validation failed - collect all errors

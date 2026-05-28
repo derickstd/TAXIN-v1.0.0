@@ -268,6 +268,158 @@
   </div>
 </div>
 
+{% if new_job_reg %}
+<!-- Auto Job Creation Popup (triggered by new client registration with services) -->
+<div id="newJobRegModal" style="display:flex;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;align-items:center;justify-content:center;overflow-y:auto">
+  <div class="card card-compact" style="width:100%;max-width:520px;margin:1rem">
+    <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;background:var(--blue);color:#fff;border-radius:var(--radius) var(--radius) 0 0">
+      <span><i class="fas fa-briefcase"></i> Create First Job Card</span>
+      <button type="button" onclick="document.getElementById('newJobRegModal').style.display='none'" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:rgba(255,255,255,.7)">&times;</button>
+    </div>
+    <div class="card-bd">
+      <div class="alert alert-note mb-3" style="font-size:.82rem">
+        <i class="fas fa-user-plus"></i>
+        <strong>{{ client.get_display_name }}</strong> has been registered with {{ client.subscriptions.count }} service(s). Create a job card now?
+      </div>
+      <form method="post" action="{% url 'services:create' %}" id="regJobForm" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="client" value="{{ client.pk }}">
+        <input type="hidden" name="new_job_reg" value="1">
+        <input type="hidden" name="period_month" value="">
+        <input type="hidden" name="period_year" value="">
+        <input type="hidden" name="is_periodic" value="">
+        <input type="hidden" name="jobcardlineitem_set-TOTAL_FORMS" value="1">
+        <input type="hidden" name="jobcardlineitem_set-INITIAL_FORMS" value="0">
+        <input type="hidden" name="jobcardlineitem_set-MIN_NUM_FORMS" value="0">
+        <input type="hidden" name="jobcardlineitem_set-MAX_NUM_FORMS" value="1000">
+        <input type="hidden" name="jobcardlineitem_set-0-id" value="">
+        <input type="hidden" name="jobcardlineitem_set-0-job_card" value="">
+        <input type="hidden" name="jobcardlineitem_set-0-default_price" value="{{ new_job_reg_price|default:0 }}">
+        <input type="hidden" name="jobcardlineitem_set-0-custom_description" value="">
+        <input type="hidden" name="jobcardlineitem_set-0-status" value="not_handled">
+        <input type="hidden" name="jobcardlineitem_set-0-period_label" value="">
+        <input type="hidden" name="jobcardlineitem_set-0-notes" value="">
+        <input type="hidden" name="jobcardlineitem_set-0-DELETE" value="">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.8rem">
+          <div>
+            <label class="form-label">Service</label>
+            <select name="jobcardlineitem_set-0-service_type" class="form-ctrl" style="font-size:.83rem">
+              <option value="">— Select service —</option>
+              {% for st in service_types_for_job %}
+              <option value="{{ st.pk }}" data-price="{{ st.default_price }}"
+                {% if st.pk|stringformat:"s" == new_job_reg_svc %}selected{% endif %}>
+                {{ st.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Agreed Price (UGX) <span class="req">*</span></label>
+            <input type="number" name="jobcardlineitem_set-0-negotiated_price" id="regPrice"
+              class="form-ctrl" style="font-size:.83rem"
+              value="{{ new_job_reg_price|default:0 }}" min="0" step="1000">
+            <div id="reg-err-price" style="display:none;color:var(--red);font-size:.75rem;margin-top:.2rem"><i class="fas fa-exclamation-circle"></i> Price must be greater than 0.</div>
+          </div>
+          <div>
+            <label class="form-label">Assigned To</label>
+            <select name="assigned_to" class="form-ctrl" style="font-size:.83rem">
+              <option value="">&mdash; Unassigned &mdash;</option>
+              {% for u in staff_for_job %}
+              <option value="{{ u.pk }}" {% if u == client.assigned_officer %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Priority</label>
+            <select name="priority" class="form-ctrl" style="font-size:.83rem">
+              <option value="normal">Normal</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Due Date</label>
+            <input type="date" name="due_date" class="form-ctrl" style="font-size:.83rem">
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Notes</label>
+          <textarea name="notes" class="form-ctrl" rows="2" style="font-size:.83rem" placeholder="Any special instructions&hellip;"></textarea>
+        </div>
+        <div style="margin-bottom:.8rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.82rem">
+            <input type="checkbox" name="create_invoice" value="yes" checked>
+            <span>Auto-generate invoice on save</span>
+          </label>
+        </div>
+        <!-- Payment section -->
+        <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:.7rem .9rem;margin-bottom:.8rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.82rem;font-weight:600;color:#166534;margin-bottom:.4rem">
+            <input type="checkbox" name="payment_received" value="yes" id="regPayChk" onchange="toggleRegPay(this)">
+            <i class="fas fa-money-bill-wave"></i> Payment already received?
+          </label>
+          <div id="regPayFields" style="display:none;margin-top:.5rem;display:none">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+              <div>
+                <label class="form-label" style="font-size:.75rem">Amount Paid (UGX)</label>
+                <input type="number" name="payment_amount" id="regPayAmount" class="form-ctrl" style="font-size:.83rem" min="0" step="1000" placeholder="Leave blank = full amount">
+              </div>
+              <div>
+                <label class="form-label" style="font-size:.75rem">Payment Method</label>
+                <select name="payment_method" class="form-ctrl" style="font-size:.83rem">
+                  <option value="cash">Cash</option>
+                  <option value="mobile_money">Mobile Money</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                </select>
+              </div>
+              <div style="grid-column:1/-1">
+                <label class="form-label" style="font-size:.75rem">Reference / Receipt No.</label>
+                <input type="text" name="payment_reference" class="form-ctrl" style="font-size:.83rem" placeholder="Optional">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-primary" onclick="submitRegJob()"><i class="fas fa-briefcase"></i> Yes, Create Job Card</button>
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('newJobRegModal').style.display='none'">Skip for Now</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function toggleRegPay(chk) {
+  document.getElementById('regPayFields').style.display = chk.checked ? 'block' : 'none';
+}
+function submitRegJob() {
+  var price = parseFloat(document.getElementById('regPrice').value) || 0;
+  if (price <= 0) {
+    document.getElementById('reg-err-price').style.display = 'block';
+    document.getElementById('regPrice').style.borderColor = 'var(--red)';
+    return;
+  }
+  document.getElementById('reg-err-price').style.display = 'none';
+  document.getElementById('regPrice').style.borderColor = '';
+  document.getElementById('regJobForm').submit();
+}
+document.getElementById('regPrice').addEventListener('input', function(){
+  if (parseFloat(this.value) > 0) {
+    document.getElementById('reg-err-price').style.display = 'none';
+    this.style.borderColor = '';
+  }
+});
+// Auto-fill price when service changes
+document.querySelector('#newJobRegModal select[name="jobcardlineitem_set-0-service_type"]').addEventListener('change', function(){
+  var opt = this.options[this.selectedIndex];
+  var price = opt.getAttribute('data-price');
+  if (price) {
+    document.getElementById('regPrice').value = price;
+    document.getElementById('regPayAmount').placeholder = 'Leave blank = UGX ' + parseInt(price).toLocaleString();
+  }
+});
+</script>
+{% endif %}
+
 {% if new_job_intake %}
 <!-- Auto Job Creation Popup (triggered by walk-in redirect) -->
 <div id="newJobModal" style="display:flex;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;align-items:center;justify-content:center;overflow-y:auto">
@@ -363,7 +515,33 @@
             <span>Auto-generate invoice on save</span>
           </label>
         </div>
-
+        <!-- Payment section -->
+        <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:.7rem .9rem;margin-bottom:.8rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.82rem;font-weight:600;color:#166534;margin-bottom:.4rem">
+            <input type="checkbox" name="payment_received" value="yes" id="wiPayChk" onchange="toggleWiPay(this)">
+            <i class="fas fa-money-bill-wave"></i> Payment already received?
+          </label>
+          <div id="wiPayFields" style="display:none">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+              <div>
+                <label class="form-label" style="font-size:.75rem">Amount Paid (UGX)</label>
+                <input type="number" name="payment_amount" id="wiPayAmount" class="form-ctrl" style="font-size:.83rem" min="0" step="1000" placeholder="Leave blank = full amount">
+              </div>
+              <div>
+                <label class="form-label" style="font-size:.75rem">Payment Method</label>
+                <select name="payment_method" class="form-ctrl" style="font-size:.83rem">
+                  <option value="cash">Cash</option>
+                  <option value="mobile_money">Mobile Money</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                </select>
+              </div>
+              <div style="grid-column:1/-1">
+                <label class="form-label" style="font-size:.75rem">Reference / Receipt No.</label>
+                <input type="text" name="payment_reference" class="form-ctrl" style="font-size:.83rem" placeholder="Optional">
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="flex gap-2">
           <button type="button" class="btn btn-primary" onclick="submitWalkinJob()"><i class="fas fa-briefcase"></i> Yes, Create Job Card</button>
           <button type="button" class="btn btn-outline" onclick="document.getElementById('newJobModal').style.display='none'">Skip for Now</button>
@@ -373,10 +551,11 @@
   </div>
 </div>
 <script>
+function toggleWiPay(chk) {
+  document.getElementById('wiPayFields').style.display = chk.checked ? 'block' : 'none';
+}
 function submitWalkinJob() {
   var valid = true;
-
-  // Validate price > 0
   var price = parseFloat(document.getElementById('wiPrice').value) || 0;
   if (price <= 0) {
     document.getElementById('wi-err-price').style.display = 'block';
@@ -386,12 +565,9 @@ function submitWalkinJob() {
     document.getElementById('wi-err-price').style.display = 'none';
     document.getElementById('wiPrice').style.borderColor = '';
   }
-
   if (!valid) return;
   document.getElementById('walkinJobForm').submit();
 }
-
-// Clear price error on input
 document.getElementById('wiPrice').addEventListener('input', function(){
   if (parseFloat(this.value) > 0) {
     document.getElementById('wi-err-price').style.display = 'none';

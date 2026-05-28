@@ -83,7 +83,7 @@ def jobcard_create(request):
         form = JobCardForm(request.POST)
         formset = LineItemFormSet(request.POST)
         intake_pk = request.POST.get('walkin_intake_pk')
-        from_walkin = bool(intake_pk)
+        from_walkin = bool(intake_pk) or bool(request.POST.get('new_job_reg'))
 
         if form.is_valid() and (formset.is_valid() or from_walkin):
             job = form.save(commit=False)
@@ -142,6 +142,31 @@ def jobcard_create(request):
             invoice = None
             if create_invoice:
                 invoice = _auto_create_invoice(job, request.user)
+            # If payment was received at point of job creation, record it now
+            # The billing signal cascades: updates invoice status, job card line items,
+            # client outstanding balance — all automatically
+            if invoice and request.POST.get('payment_received') == 'yes':
+                from billing.models import Payment
+                price_raw = request.POST.get('jobcardlineitem_set-0-negotiated_price', '0')
+                try:
+                    full_amount = Decimal(price_raw) if price_raw else invoice.grand_total
+                except Exception:
+                    full_amount = invoice.grand_total
+                pay_raw = request.POST.get('payment_amount', '').strip()
+                try:
+                    pay_amount = Decimal(pay_raw) if pay_raw else full_amount
+                except Exception:
+                    pay_amount = full_amount
+                pay_amount = min(max(pay_amount, Decimal('0')), invoice.grand_total)
+                if pay_amount > 0:
+                    Payment.objects.create(
+                        invoice=invoice,
+                        amount=pay_amount,
+                        method=request.POST.get('payment_method', 'cash'),
+                        reference=request.POST.get('payment_reference', ''),
+                        received_by=request.user,
+                        notes='Payment recorded at job card creation',
+                    )
             StaffActivityLog.objects.create(job_card=job, staff=request.user, action='Job card created')
             _auto_log_time(job, request.user, 'Job card created', Decimal('0.25'))
             if intake_pk:
