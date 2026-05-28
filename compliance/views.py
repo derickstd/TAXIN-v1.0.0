@@ -19,18 +19,15 @@ def deadline_list(request):
     all_deadlines = ComplianceDeadline.objects.select_related(
         'obligation__client', 'obligation__service_type', 'filed_by', 'invoice'
     ).order_by('due_date')[:100]
-    
-    # Get credentials for compliance section
+
     credentials = ClientCredential.objects.select_related('client', 'last_accessed_by').order_by('client__full_name')
-    
-    # Filter credentials if search query
     q = request.GET.get('q', '')
     if q:
         from django.db.models import Q
         credentials = credentials.filter(
             Q(client__full_name__icontains=q) | Q(label__icontains=q)
         )
-    
+
     return render(request, 'compliance/deadline_list.html', {
         'upcoming': upcoming, 'all_deadlines': all_deadlines, 'today': today,
         'credentials': credentials, 'q': q,
@@ -57,11 +54,11 @@ def update_status(request, pk, action):
             _update_line_item_status(job_card, service_type, 'handled_paid', deadline.period_label)
         invoice = _get_or_create_invoice(deadline, request.user)
         if invoice:
-            invoice.status = 'paid'
-            invoice.amount_paid = invoice.grand_total
-            invoice.payment_method = 'mixed'
-            invoice.save(update_fields=['status', 'amount_paid', 'payment_method'])
+            # Only set status — Payment creation below will set amount_paid via signal
+            Invoice.objects.filter(pk=invoice.pk).update(payment_method='mixed')
             _create_payment_if_needed(invoice, request.user)
+            # Reload to get signal-updated status
+            invoice.refresh_from_db()
         deadline.job_card = job_card
         deadline.invoice = invoice
         messages.success(request, f'{service_type.name} for {deadline.period_label} marked as filed and paid.')
@@ -78,8 +75,7 @@ def update_status(request, pk, action):
             _update_line_item_status(job_card, service_type, 'handled_not_paid', deadline.period_label)
         invoice = _get_or_create_invoice(deadline, request.user)
         if invoice and invoice.status == 'draft':
-            invoice.status = 'sent'
-            invoice.save(update_fields=['status'])
+            Invoice.objects.filter(pk=invoice.pk).update(status='sent')
         deadline.job_card = job_card
         deadline.invoice = invoice
         messages.success(request, f'{service_type.name} for {deadline.period_label} marked as filed (awaiting payment).')
@@ -93,11 +89,9 @@ def update_status(request, pk, action):
             _update_line_item_status(job_card, service_type, 'not_handled', deadline.period_label)
         invoice = _get_or_create_invoice(deadline, request.user)
         if invoice:
-            invoice.status = 'paid'
-            invoice.amount_paid = invoice.grand_total
-            invoice.payment_method = 'mixed'
-            invoice.save(update_fields=['status', 'amount_paid', 'payment_method'])
+            Invoice.objects.filter(pk=invoice.pk).update(payment_method='mixed')
             _create_payment_if_needed(invoice, request.user)
+            invoice.refresh_from_db()
         deadline.job_card = job_card
         deadline.invoice = invoice
         messages.success(request, f'Payment recorded for {service_type.name} {deadline.period_label} (pending filing).')
@@ -114,10 +108,9 @@ def update_status(request, pk, action):
             _update_line_item_status(job_card, service_type, 'not_handled', deadline.period_label)
         invoice = _get_invoice_for_deadline(deadline)
         if invoice:
-            invoice.status = 'draft'
-            invoice.amount_paid = 0
-            invoice.save(update_fields=['status', 'amount_paid'])
+            # Delete payments first — their deletion signal will recalculate amount_paid
             invoice.payments.all().delete()
+            Invoice.objects.filter(pk=invoice.pk).update(status='draft', amount_paid=0)
         messages.info(request, f'{service_type.name} for {deadline.period_label} reset to no action.')
 
     deadline.save()
@@ -200,7 +193,10 @@ def _get_invoice_for_deadline(deadline):
 
 
 def _create_payment_if_needed(invoice, user):
+    """Create a payment record only if none exists. The post_save signal handles amount_paid."""
     if not invoice.payments.exists():
+        # Reload grand_total fresh from DB before creating payment
+        invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
         Payment.objects.create(
             invoice=invoice,
             amount=invoice.grand_total,
@@ -212,21 +208,15 @@ def _create_payment_if_needed(invoice, user):
 
 @login_required
 def mark_credential_handled(request, pk):
-    """Mark a credential as handled or activate it."""
     if request.method != 'POST':
         return redirect('compliance:list')
-    
     credential = get_object_or_404(ClientCredential, pk=pk)
-    
     if 'activate' in request.POST:
-        # Activate the credential
         credential.status = 'active'
         credential.save(update_fields=['status'])
         messages.success(request, f'{credential.label} for {credential.client.get_display_name()} activated.')
     else:
-        # Mark as handled (archived)
         credential.status = 'archived'
         credential.save(update_fields=['status'])
         messages.success(request, f'{credential.label} for {credential.client.get_display_name()} marked as handled.')
-    
     return redirect('compliance:list')

@@ -10,4 +10,6 @@ urlpatterns = [
     path('walkin/',     views.walkin_create,       name='walkin'),
     path('<int:pk>/',   views.client_detail,      name='detail'),
     path('<int:pk>/edit/', views.client_edit,     name='edit'),
+    path('<int:pk>/log/', views.communication_log_create, name='log_create'),
+    path('log/<int:pk>/delete/', views.communication_log_delete, name='log_delete'),
 ]

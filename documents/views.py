@@ -1,16 +1,68 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Sum, Count
 from services.models import ServiceType, JobCard
 from billing.models import Invoice
 from expenses.models import Expense
 from clients.models import Client
+from .models import ClientDocument
 import calendar
 
 @login_required
 def documents_home(request):
-    return render(request, 'documents/home.html')
+    return redirect('documents:doc_list')
+
+
+@login_required
+def doc_list(request):
+    client_pk = request.GET.get('client')
+    docs = ClientDocument.objects.select_related('client', 'uploaded_by', 'job_card')
+    if client_pk:
+        docs = docs.filter(client_id=client_pk)
+    return render(request, 'documents/doc_list.html', {
+        'docs': docs,
+        'client_filter': client_pk,
+        'doc_types': ClientDocument.DOC_TYPE,
+        'clients': Client.objects.order_by('full_name'),
+    })
+
+
+@login_required
+def doc_upload(request):
+    if request.method == 'POST':
+        client_id = request.POST.get('client')
+        client = get_object_or_404(Client, pk=client_id)
+        job_card_id = request.POST.get('job_card') or None
+        f = request.FILES.get('file')
+        if not f:
+            messages.error(request, 'Please select a file to upload.')
+            return redirect(request.META.get('HTTP_REFERER', 'documents:doc_list'))
+        ClientDocument.objects.create(
+            client=client,
+            job_card_id=job_card_id,
+            doc_type=request.POST.get('doc_type', 'other'),
+            title=request.POST.get('title', f.name),
+            file=f,
+            period_label=request.POST.get('period_label', ''),
+            notes=request.POST.get('notes', ''),
+            uploaded_by=request.user,
+        )
+        messages.success(request, 'Document uploaded successfully.')
+        next_url = request.POST.get('next') or 'documents:doc_list'
+        return redirect(next_url)
+    return redirect('documents:doc_list')
+
+
+@login_required
+def doc_delete(request, pk):
+    doc = get_object_or_404(ClientDocument, pk=pk)
+    if request.method == 'POST':
+        doc.file.delete(save=False)
+        doc.delete()
+        messages.success(request, 'Document deleted.')
+    return redirect(request.META.get('HTTP_REFERER', 'documents:doc_list'))
 
 @login_required
 def price_list(request):

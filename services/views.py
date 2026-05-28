@@ -4,9 +4,20 @@ from django.contrib import messages
 from django.db.models import Q
 from django.utils import timezone
 from decimal import Decimal
-from .models import JobCard, JobCardLineItem, ServiceType, StaffActivityLog
+from .models import JobCard, JobCardLineItem, ServiceType, StaffActivityLog, TimeEntry
 from .forms import JobCardForm, LineItemFormSet, ServiceTypeForm
 import calendar as cal
+
+
+def _auto_log_time(job, user, description, hours=Decimal('0.25')):
+    """Auto-log time entry for any staff action. Date and hours are automatic."""
+    TimeEntry.objects.create(
+        job_card=job,
+        staff=user,
+        description=description,
+        hours=hours,
+        entry_date=timezone.now().date(),
+    )
 
 
 def _line_item_has_content(item):
@@ -35,14 +46,17 @@ def _service_catalogue_context(request, service_form=None, open_add_modal=False)
 
 @login_required
 def jobcard_list(request):
-    jobs = JobCard.objects.select_related('client','assigned_to').prefetch_related('line_items').all()
+    all_jobs = list(JobCard.objects.select_related('client','assigned_to').prefetch_related('line_items').all())
     status = request.GET.get('status','')
     q = request.GET.get('q','')
-    if status: jobs = jobs.filter(status=status)
-    if q: jobs = jobs.filter(Q(job_number__icontains=q)|Q(client__full_name__icontains=q))
-    kanban = {s: [j for j in jobs if j.status == s] for s,_ in JobCard.STATUS}
+    jobs = all_jobs
+    if status: jobs = [j for j in jobs if j.status == status]
+    if q:
+        q_lower = q.lower()
+        jobs = [j for j in jobs if q_lower in j.job_number.lower() or q_lower in j.client.full_name.lower()]
+    kanban_cols = [(s, label, [j for j in all_jobs if j.status == s]) for s, label in JobCard.STATUS]
     return render(request, 'services/jobcard_list.html', {
-        'jobs': jobs, 'kanban': kanban, 'status': status, 'q': q,
+        'jobs': jobs, 'kanban_cols': kanban_cols, 'status': status, 'q': q,
         'status_choices': JobCard.STATUS, 'today': timezone.now().date(),
     })
 
@@ -50,7 +64,13 @@ def jobcard_list(request):
 def jobcard_detail(request, pk):
     job = get_object_or_404(JobCard, pk=pk)
     logs = job.activity_logs.select_related('staff').all()
-    return render(request, 'services/jobcard_detail.html', {'job': job, 'logs': logs})
+    time_entries = job.time_entries.select_related('staff').all()
+    total_hours = sum(t.hours for t in time_entries)
+    return render(request, 'services/jobcard_detail.html', {
+        'job': job, 'logs': logs,
+        'time_entries': time_entries, 'total_hours': total_hours,
+        'today': timezone.now().date(),
+    })
 
 @login_required
 def jobcard_create(request):
@@ -62,31 +82,73 @@ def jobcard_create(request):
     if request.method == 'POST':
         form = JobCardForm(request.POST)
         formset = LineItemFormSet(request.POST)
-        if form.is_valid() and formset.is_valid():
+        intake_pk = request.POST.get('walkin_intake_pk')
+        from_walkin = bool(intake_pk)
+
+        if form.is_valid() and (formset.is_valid() or from_walkin):
             job = form.save(commit=False)
             job.created_by = request.user
             job.save()
-            formset.instance = job
-            items = formset.save(commit=False)
-            for item in items:
-                if not _line_item_has_content(item):
-                    continue
-                if item.service_type and not item.default_price:
-                    item.default_price = item.service_type.default_price
-                item.default_price = item.default_price or Decimal('0')
-                if not item.negotiated_price:
-                    item.negotiated_price = item.default_price or Decimal('0')
-                if item.service_type and item.service_type.vat_applicable:
-                    item.vat_amount = item.negotiated_price * Decimal('0.18')
-                else:
-                    item.vat_amount = Decimal('0')
-                item.save()
-            for obj in formset.deleted_objects:
-                obj.delete()
+
+            if from_walkin:
+                # Build line item directly from POST — ignore formset validation entirely
+                svc_id = request.POST.get('jobcardlineitem_set-0-service_type')
+                price_raw = request.POST.get('jobcardlineitem_set-0-negotiated_price', '0')
+                default_raw = request.POST.get('jobcardlineitem_set-0-default_price', '0')
+                try:
+                    price = Decimal(price_raw) if price_raw else Decimal('0')
+                except Exception:
+                    price = Decimal('0')
+                try:
+                    default_price = Decimal(default_raw) if default_raw else Decimal('0')
+                except Exception:
+                    default_price = Decimal('0')
+                svc = None
+                if svc_id:
+                    svc = ServiceType.objects.filter(pk=svc_id).first()
+                vat = price * Decimal('0.18') if svc and svc.vat_applicable else Decimal('0')
+                JobCardLineItem.objects.create(
+                    job_card=job,
+                    service_type=svc,
+                    custom_description='' if svc else request.POST.get('jobcardlineitem_set-0-custom_description', 'Walk-in visit'),
+                    default_price=default_price or (svc.default_price if svc else Decimal('0')),
+                    negotiated_price=price,
+                    vat_amount=vat,
+                    status='not_handled',
+                    period_label=request.POST.get('jobcardlineitem_set-0-period_label', ''),
+                    notes=request.POST.get('jobcardlineitem_set-0-notes', ''),
+                )
+            else:
+                formset.instance = job
+                items = formset.save(commit=False)
+                for item in items:
+                    if not _line_item_has_content(item):
+                        continue
+                    if item.service_type and not item.default_price:
+                        item.default_price = item.service_type.default_price
+                    item.default_price = item.default_price or Decimal('0')
+                    if not item.negotiated_price:
+                        item.negotiated_price = item.default_price or Decimal('0')
+                    if item.service_type and item.service_type.vat_applicable:
+                        item.vat_amount = item.negotiated_price * Decimal('0.18')
+                    else:
+                        item.vat_amount = Decimal('0')
+                    item.save()
+                for obj in formset.deleted_objects:
+                    obj.delete()
+
             job.update_total()
-            _auto_create_invoice(job, request.user)
+            create_invoice = request.POST.get('create_invoice', 'yes') == 'yes'
+            invoice = None
+            if create_invoice:
+                invoice = _auto_create_invoice(job, request.user)
             StaffActivityLog.objects.create(job_card=job, staff=request.user, action='Job card created')
-            messages.success(request, f'Job card {job.job_number} created. Invoice auto-generated.')
+            _auto_log_time(job, request.user, 'Job card created', Decimal('0.25'))
+            if intake_pk:
+                from clients.models import WalkInIntake
+                WalkInIntake.objects.filter(pk=intake_pk).update(outcome='job_created')
+            inv_msg = f'Invoice {invoice.invoice_number} auto-generated.' if invoice else 'No invoice created (skipped by user).'
+            messages.success(request, f'Job card {job.job_number} created. {inv_msg}')
             return redirect('services:detail', pk=job.pk)
         else:
             messages.error(request, 'Please fix the errors below.')
@@ -109,11 +171,11 @@ def jobcard_create(request):
 def _auto_create_invoice(job, user):
     from billing.models import Invoice
     if hasattr(job, 'invoice'):
-        return
+        return None
     subtotal = sum(li.negotiated_price for li in job.line_items.all())
     vat_total = sum(li.vat_amount for li in job.line_items.all())
     due = job.due_date or (timezone.now().date() + timezone.timedelta(days=14))
-    Invoice.objects.create(
+    return Invoice.objects.create(
         client=job.client, job_card=job, due_date=due,
         subtotal=subtotal, vat_total=vat_total, grand_total=subtotal + vat_total,
         status='sent' if subtotal > 0 else 'draft', created_by=user,
@@ -130,6 +192,11 @@ def update_line_status(request, pk):
             StaffActivityLog.objects.create(
                 job_card=item.job_card, staff=request.user,
                 action=f'"{item.get_description()}" → {item.get_status_display()}'
+            )
+            _auto_log_time(
+                item.job_card, request.user,
+                f'{item.get_description()} — marked {item.get_status_display()}',
+                Decimal('0.25'),
             )
             job = item.job_card
             
@@ -151,6 +218,7 @@ def update_line_status(request, pk):
                             job_card=job, staff=request.user,
                             action='Job card auto-completed (all items paid and handled)'
                         )
+                        _auto_log_time(job, request.user, 'Job completed — all items handled and paid', Decimal('0.25'))
                 elif any_in_progress:
                     if job.status == 'open':
                         job.status = 'in_progress'
@@ -242,3 +310,28 @@ def service_toggle(request, pk):
             svc.save(update_fields=['is_active'])
             messages.success(request, f'Service "{svc.name}" restored.')
     return redirect('services:catalogue')
+
+
+@login_required
+def log_time(request, pk):
+    job = get_object_or_404(JobCard, pk=pk)
+    if request.method == 'POST':
+        hours = request.POST.get('hours', '').strip()
+        description = request.POST.get('description', '').strip()
+        entry_date = request.POST.get('entry_date') or timezone.now().date()
+        if hours and description:
+            from decimal import Decimal, InvalidOperation
+            try:
+                TimeEntry.objects.create(
+                    job_card=job,
+                    staff=request.user,
+                    description=description,
+                    hours=Decimal(hours),
+                    entry_date=entry_date,
+                )
+                messages.success(request, f'{hours}h logged on {job.job_number}.')
+            except (InvalidOperation, ValueError):
+                messages.error(request, 'Invalid hours value.')
+        else:
+            messages.error(request, 'Hours and description are required.')
+    return redirect('services:detail', pk=pk)

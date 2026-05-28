@@ -20,7 +20,7 @@ INSTALLED_APPS = [
     'django_apscheduler',
     'core', 'clients', 'services', 'billing',
     'compliance', 'credentials', 'notifications',
-    'expenses', 'documents', 'dashboard',
+    'expenses', 'documents', 'dashboard', 'taxcalendar',
 ]
 
 MIDDLEWARE = [

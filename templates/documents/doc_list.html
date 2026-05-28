@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% block title %}Documents{% endblock %}
+{% block breadcrumbs %}<li class="active">Documents</li>{% endblock %}
+{% block content %}
+<div class="page-hdr" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+  <h4 class="page-title"><i class="fas fa-folder-open"></i>Client Documents</h4>
+  <button class="btn btn-primary btn-sm" onclick="document.getElementById('uploadModal').style.display='flex'">
+    <i class="fas fa-upload"></i> Upload Document
+  </button>
+</div>
+
+<div class="card card-compact">
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr><th>Client</th><th>Title</th><th>Type</th><th>Period</th><th>Job Card</th><th>Uploaded By</th><th>Date</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for doc in docs %}
+        <tr>
+          <td><a href="{% url 'clients:detail' doc.client.pk %}">{{ doc.client.get_display_name }}</a></td>
+          <td style="font-weight:600">{{ doc.title }}</td>
+          <td><span class="badge badge-open" style="font-size:.7rem">{{ doc.get_doc_type_display }}</span></td>
+          <td style="font-size:.8rem">{{ doc.period_label|default:"—" }}</td>
+          <td style="font-size:.8rem">{% if doc.job_card %}<a href="{% url 'services:detail' doc.job_card.pk %}">{{ doc.job_card.job_number }}</a>{% else %}—{% endif %}</td>
+          <td style="font-size:.8rem">{{ doc.uploaded_by.get_full_name|default:"—" }}</td>
+          <td style="font-size:.78rem">{{ doc.uploaded_at|date:"d M Y" }}</td>
+          <td style="white-space:nowrap">
+            <a href="{{ doc.file.url }}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-download"></i></a>
+            <form method="post" action="{% url 'documents:doc_delete' doc.pk %}" style="display:inline" onsubmit="return confirm('Delete this document?')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm" style="color:var(--red);background:none;border:none;cursor:pointer"><i class="fas fa-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" style="text-align:center;color:#aaa;padding:2rem">No documents uploaded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Upload Modal -->
+<div id="uploadModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
+  <div class="card card-compact" style="width:100%;max-width:500px;margin:1rem">
+    <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+      <span><i class="fas fa-upload"></i> Upload Document</span>
+      <button type="button" onclick="document.getElementById('uploadModal').style.display='none'" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#888">&times;</button>
+    </div>
+    <div class="card-bd">
+      <form method="post" action="{% url 'documents:doc_upload' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'documents:doc_list' %}">
+        <div class="mb-2">
+          <label class="form-label">Client <span class="req">*</span></label>
+          <select name="client" class="s2" data-ph="Search client…" required>
+            <option value="">Search client…</option>
+            {% for c in clients %}
+            <option value="{{ c.pk }}">{{ c.client_id }} — {{ c.get_display_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-2" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+          <div>
+            <label class="form-label">Document Type</label>
+            <select name="doc_type" class="form-ctrl">
+              {% for val, label in doc_types %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Period Label</label>
+            <input type="text" name="period_label" class="form-ctrl" placeholder="e.g. April 2025">
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Title <span class="req">*</span></label>
+          <input type="text" name="title" class="form-ctrl" required>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">File <span class="req">*</span></label>
+          <input type="file" name="file" class="form-ctrl" required>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Notes</label>
+          <textarea name="notes" class="form-ctrl" rows="2"></textarea>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Upload</button>
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('uploadModal').style.display='none'">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+$(document).ready(function(){
+  $('[data-ph]').each(function(){ $(this).select2({theme:'bootstrap-5',placeholder:$(this).data('ph')}); });
+});
+</script>
+{% endblock %}

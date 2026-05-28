@@ -175,6 +175,45 @@ def user_settings(request):
 
 
 @login_required
+def run_daily_now(request):
+    """Manually run all daily automation tasks immediately (Admin/Manager only)."""
+    if not request.user.is_manager_or_admin():
+        messages.error(request, 'Permission denied.')
+        return redirect('dashboard:index')
+    if request.method == 'POST':
+        from core import jobs
+        from django.utils import timezone
+        from billing.models import Invoice
+        results = []
+        # 1. Mark overdue invoices
+        updated = Invoice.objects.filter(
+            status__in=['sent', 'partially_paid'],
+            due_date__lt=timezone.now().date()
+        ).update(status='overdue')
+        results.append(f'{updated} invoices marked overdue')
+        # 2. Update client statuses
+        try:
+            jobs.update_client_statuses()
+            results.append('client statuses updated')
+        except Exception as e:
+            results.append(f'client status error: {e}')
+        # 3. Generate compliance deadlines
+        try:
+            jobs.generate_compliance_deadlines()
+            results.append('compliance deadlines generated')
+        except Exception as e:
+            results.append(f'compliance error: {e}')
+        # 4. Generate monthly job cards
+        try:
+            jobs.generate_monthly_jobcards()
+            results.append('monthly job cards generated')
+        except Exception as e:
+            results.append(f'job card error: {e}')
+        messages.success(request, 'Automation run complete: ' + ' | '.join(results))
+    return redirect('dashboard:index')
+
+
+@login_required
 def trigger_automation(request):
     """Manually trigger automation tasks (Admin/Manager only)"""
     if not request.user.is_manager_or_admin():

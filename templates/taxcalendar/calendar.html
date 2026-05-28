@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% block title %}Tax Calendar{% endblock %}
+{% block nav_cal %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Tax Calendar</li>{% endblock %}
+{% block content %}
+<div class="page-hdr" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+  <h4 class="page-title"><i class="fas fa-calendar-alt"></i>Tax Calendar</h4>
+  <button class="btn btn-primary btn-sm" onclick="document.getElementById('addEventModal').style.display='flex'">
+    <i class="fas fa-plus"></i> Add Event
+  </button>
+</div>
+
+<!-- Filter bar -->
+<div class="card card-compact mb-3">
+  <div class="card-bd" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+    <span class="text-muted fs-sm">Filter:</span>
+    <a href="?" class="btn btn-sm {% if not status %}btn-primary{% else %}btn-outline{% endif %}">All</a>
+    {% for val, label in status_choices %}
+    <a href="?status={{ val }}" class="btn btn-sm {% if status == val %}btn-primary{% else %}btn-outline{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card card-compact">
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr><th>Due Date</th><th>Title</th><th>Type</th><th>Assigned To</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for ev in events %}
+        <tr>
+          <td style="font-weight:700;white-space:nowrap;{% if ev.due_date < today and ev.status == 'upcoming' %}color:var(--red){% endif %}">
+            {{ ev.due_date }}
+            {% if ev.due_date == today %}<span class="badge badge-open" style="font-size:.6rem;margin-left:.3rem">Today</span>{% endif %}
+          </td>
+          <td>{{ ev.title }}{% if ev.description %}<div style="font-size:.75rem;color:#888">{{ ev.description|truncatewords:12 }}</div>{% endif %}</td>
+          <td><span class="badge badge-open" style="font-size:.7rem">{{ ev.get_event_type_display }}</span></td>
+          <td style="font-size:.82rem">{{ ev.assigned_to.get_full_name|default:"—" }}</td>
+          <td>
+            <form method="post" action="{% url 'taxcalendar:update_status' ev.pk %}" style="display:inline">
+              {% csrf_token %}
+              <select name="status" class="form-ctrl" style="font-size:.75rem;padding:.2rem .4rem" onchange="this.form.submit()">
+                {% for val, label in status_choices %}
+                <option value="{{ val }}" {% if ev.status == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+          <td>
+            <form method="post" action="{% url 'taxcalendar:delete' ev.pk %}" onsubmit="return confirm('Delete this event?')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm" style="color:var(--red);background:none;border:none;cursor:pointer"><i class="fas fa-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" style="text-align:center;color:#aaa;padding:2rem">No events yet — add one above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Event Modal -->
+<div id="addEventModal" style="display:{% if open_modal %}flex{% else %}none{% endif %};position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
+  <div class="card card-compact" style="width:100%;max-width:480px;margin:1rem">
+    <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+      <span><i class="fas fa-calendar-plus"></i> Add Tax Calendar Event</span>
+      <button type="button" onclick="document.getElementById('addEventModal').style.display='none'" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#888">&times;</button>
+    </div>
+    <div class="card-bd">
+      <form method="post" action="{% url 'taxcalendar:create' %}">
+        {% csrf_token %}
+        <div class="mb-2">
+          <label class="form-label">Title <span class="req">*</span></label>
+          <input type="text" name="title" class="form-ctrl" value="{{ form.title.value|default:'' }}" required>
+        </div>
+        <div class="mb-2" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+          <div>
+            <label class="form-label">Type</label>
+            <select name="event_type" class="form-ctrl">
+              {% for val, label in form.fields.event_type.choices %}
+              <option value="{{ val }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Due Date <span class="req">*</span></label>
+            <input type="date" name="due_date" class="form-ctrl" value="{{ form.due_date.value|default:'' }}" required>
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Assigned To</label>
+          <select name="assigned_to" class="form-ctrl">
+            <option value="">— Anyone —</option>
+            {% for u in form.fields.assigned_to.queryset %}
+            <option value="{{ u.pk }}">{{ u.get_full_name|default:u.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-ctrl" rows="2"></textarea>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save</button>
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('addEventModal').style.display='none'">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

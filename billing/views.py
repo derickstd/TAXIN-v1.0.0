@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Sum, Q
+from django.db.models import F, Sum, Q
 from django.utils import timezone
 from decimal import Decimal, InvalidOperation
 from .models import Invoice, Payment
@@ -34,8 +34,25 @@ def invoice_list(request):
 @login_required
 def invoice_detail(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
-    payments = invoice.payments.order_by('-payment_date')
-    return render(request, 'billing/invoice_detail.html', {'invoice': invoice, 'payments': payments})
+    payments = invoice.payments.order_by('payment_date', 'pk')
+    # Build running balance per payment
+    running = invoice.grand_total
+    payments_with_balance = []
+    for pmt in payments:
+        running -= pmt.amount
+        payments_with_balance.append((pmt, max(running, 0)))
+    from django.conf import settings
+    firm_address = getattr(settings, 'FIRM_ADDRESS', 'Kampala, Uganda')
+    firm_phone   = getattr(settings, 'FIRM_PHONE',   '+256 785 230 670')
+    firm_email   = getattr(settings, 'FIRM_EMAIL',   'info@taxman256.com')
+    return render(request, 'billing/invoice_detail.html', {
+        'invoice': invoice,
+        'payments': payments,
+        'payments_with_balance': payments_with_balance,
+        'firm_address': firm_address,
+        'firm_phone': firm_phone,
+        'firm_email': firm_email,
+    })
 
 
 @login_required
@@ -105,28 +122,41 @@ def record_payment(request, pk):
         try:
             from decimal import Decimal, InvalidOperation
             from core.email_utils import send_payment_receipt
-            
+
             amount = Decimal(str(request.POST.get('amount', 0)))
+            if amount <= 0:
+                messages.error(request, 'Payment amount must be greater than zero.')
+                return redirect('billing:detail', pk=pk)
+
+            # Reload fresh from DB before calculating balance — never use stale in-memory value
+            invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
+            balance_due = invoice.grand_total - invoice.amount_paid
+            if balance_due <= 0:
+                messages.info(request, 'This invoice is already fully paid.')
+                return redirect('billing:detail', pk=pk)
+            # Cap at actual balance — signal will enforce this too but cap here for clean UX
+            amount = min(amount, balance_due)
+
             method = request.POST.get('method', 'cash')
             reference = request.POST.get('reference', '')
+            # Creating the Payment triggers the billing signal which recalculates
+            # amount_paid, updates invoice status, and refreshes client outstanding
             payment = Payment.objects.create(
                 invoice=invoice, amount=amount, method=method,
                 reference=reference, received_by=request.user)
-            invoice.amount_paid = (invoice.amount_paid or Decimal('0')) + amount
-            invoice.update_status()
-            # Update client outstanding
+            # Reload invoice to get signal-updated values
+            invoice.refresh_from_db()
             client = invoice.client
-            out = Invoice.objects.filter(client=client).exclude(
-                status__in=['paid', 'written_off']).aggregate(s=Sum('grand_total'))['s'] or Decimal('0')
-            paid_sum = Invoice.objects.filter(client=client).aggregate(s=Sum('amount_paid'))['s'] or Decimal('0')
-            client.total_outstanding = max(Decimal('0'), out - paid_sum)
-            client.save(update_fields=['total_outstanding'])
-            
+
             # Send payment receipt email
             if client.email:
                 send_payment_receipt(payment)
-            
-            messages.success(request, f'Payment of UGX {amount:,.0f} recorded.')
+
+            new_balance = invoice.grand_total - invoice.amount_paid
+            if new_balance <= 0:
+                messages.success(request, f'Payment of UGX {amount:,.0f} recorded. Invoice fully paid.')
+            else:
+                messages.success(request, f'Payment of UGX {amount:,.0f} recorded. Remaining balance: UGX {new_balance:,.0f}.')
         except (InvalidOperation, TypeError) as e:
             messages.error(request, f'Invalid payment amount: {e}')
     return redirect('billing:detail', pk=pk)

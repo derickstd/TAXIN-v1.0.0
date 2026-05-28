@@ -10,42 +10,66 @@
     <div class="alert-note" style="margin-bottom:1rem">
       <i class="fas fa-search"></i> Search for an existing client below. Not found? <a href="{% url 'clients:create' %}" target="_blank">Register them first</a>, then come back here.
     </div>
-    <form method="post" novalidate>{% csrf_token %}
+    <form method="post" novalidate id="walkinForm">{% csrf_token %}
       <div class="form-grid-2">
-        <div class="field-span-2">
-        <label class="form-label">Client <span class="req">*</span></label>
-        <select name="client" class="form-select s2" data-ph="Search by name or client ID…" required>
-          <option value="">Select client…</option>
-          {% for c in form.fields.client.queryset %}<option value="{{ c.pk }}" {% if form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.client_id }} — {{ c.get_display_name }}</option>{% endfor %}
-        </select>
+
+        <div class="field-span-2" id="field-client">
+          <label class="form-label">Client <span class="req">*</span></label>
+          <select name="client" id="clientSel" class="form-select s2" data-ph="Search by name or client ID…">
+            <option value="">Select client…</option>
+            {% for c in form.fields.client.queryset %}
+            <option value="{{ c.pk }}" {% if form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>
+              {{ c.client_id }} — {{ c.get_display_name }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="field-error" id="err-client" style="display:none;color:var(--red);font-size:.78rem;margin-top:.25rem"><i class="fas fa-exclamation-circle"></i> Please select a client.</div>
         </div>
-        <div class="field-span-2">
-        <label class="form-label">Purpose of Visit <span class="req">*</span></label>
-        <select name="service_type" class="form-select s2" data-ph="Select service…" required>
-          <option value="">Select service…</option>
-          {% for s in form.fields.service_type.queryset %}<option value="{{ s.pk }}" {% if form.service_type.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.get_category_display }} — {{ s.name }}</option>{% endfor %}
-        </select>
+
+        <div class="field-span-2" id="field-service_type">
+          <label class="form-label">Purpose of Visit <span class="req">*</span></label>
+          <select name="service_type" id="serviceSel" class="form-select s2" data-ph="Select service…">
+            <option value="">Select service…</option>
+            {% for s in form.fields.service_type.queryset %}
+            <option value="{{ s.pk }}" data-price="{{ s.default_price }}" {% if form.service_type.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>
+              {{ s.get_category_display }} — {{ s.name }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="field-error" id="err-service" style="display:none;color:var(--red);font-size:.78rem;margin-top:.25rem"><i class="fas fa-exclamation-circle"></i> Please select a service / purpose.</div>
         </div>
+
         <div>
           <label class="form-label">Assigned Staff</label>
           <select name="assigned_staff" class="form-select s2" data-ph="Who is handling this?">
             <option value="">— Self —</option>
-            {% for u in form.fields.assigned_staff.queryset %}<option value="{{ u.pk }}" {% if form.assigned_staff.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+            {% for u in form.fields.assigned_staff.queryset %}
+            <option value="{{ u.pk }}" {% if form.assigned_staff.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>
+              {{ u.get_full_name|default:u.username }}
+            </option>
+            {% endfor %}
           </select>
         </div>
+
         <div>
           <label class="form-label">Outcome</label>
           <select name="outcome" class="form-select s2" data-ph="Select outcome">
-            {% for val,label in form.fields.outcome.choices %}<option value="{{ val }}" {% if form.outcome.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            {% for val,label in form.fields.outcome.choices %}
+            <option value="{{ val }}" {% if form.outcome.value == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
           </select>
         </div>
+
         <div class="field-span-2">
-        <label class="form-label">Notes</label>
-        <textarea name="notes" class="form-control" rows="2" placeholder="Any additional observations">{{ form.notes.value|default:'' }}</textarea>
+          <label class="form-label">Notes</label>
+          <textarea name="notes" class="form-control" rows="2" placeholder="Any additional observations">{{ form.notes.value|default:'' }}</textarea>
         </div>
+
       </div>
       <div class="form-actions mt-3">
-        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i>Record Visit</button>
+        <button type="button" class="btn btn-primary btn-lg" id="walkinSubmitBtn" onclick="submitWalkin()">
+          <i class="fas fa-save"></i> Record Visit
+        </button>
         <a href="{% url 'clients:list' %}" class="btn btn-outline btn-lg">Cancel</a>
       </div>
     </form>
@@ -54,5 +78,65 @@
 </div>
 {% endblock %}
 {% block extra_js %}
-<script>$(document).ready(function(){$('.s2').select2({theme:'bootstrap-5',width:'100%',allowClear:true,placeholder:function(){return $(this).data('ph')||'Search…';}});});</script>
+<script>
+$(document).ready(function(){
+  $('.s2').select2({
+    theme: 'bootstrap-5',
+    width: '100%',
+    allowClear: true,
+    placeholder: function(){ return $(this).data('ph') || 'Search…'; }
+  });
+
+  // Clear error highlight when user makes a selection
+  $('#clientSel').on('change', function(){
+    clearError('client');
+  });
+  $('#serviceSel').on('change', function(){
+    clearError('service');
+  });
+});
+
+function clearError(field) {
+  if (field === 'client') {
+    $('#err-client').hide();
+    $('#field-client .select2-container--bootstrap-5 .select2-selection').css('border-color', '');
+  } else if (field === 'service') {
+    $('#err-service').hide();
+    $('#field-service_type .select2-container--bootstrap-5 .select2-selection').css('border-color', '');
+  }
+}
+
+function submitWalkin() {
+  var valid = true;
+
+  var clientVal = $('#clientSel').val();
+  if (!clientVal) {
+    $('#err-client').show();
+    $('#field-client .select2-container--bootstrap-5 .select2-selection').css('border-color', 'var(--red)');
+    valid = false;
+  } else {
+    clearError('client');
+  }
+
+  var serviceVal = $('#serviceSel').val();
+  if (!serviceVal) {
+    $('#err-service').show();
+    $('#field-service_type .select2-container--bootstrap-5 .select2-selection').css('border-color', 'var(--red)');
+    valid = false;
+  } else {
+    clearError('service');
+  }
+
+  if (!valid) {
+    // Scroll to first error
+    var firstErr = $('.field-error:visible').first();
+    if (firstErr.length) {
+      $('html, body').animate({ scrollTop: firstErr.offset().top - 120 }, 300);
+    }
+    return;
+  }
+
+  document.getElementById('walkinForm').submit();
+}
+</script>
 {% endblock %}

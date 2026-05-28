@@ -110,20 +110,14 @@ class Invoice(models.Model):
         else:         return '90+ days'
 
     def update_status(self):
-        if self.document_type in ('proforma', 'quotation'):
-            if self.amount_paid >= self.grand_total and self.grand_total > 0:
-                self.status = 'paid'
-            elif self.amount_paid > 0:
-                self.status = 'partially_paid'
-            Invoice.objects.filter(pk=self.pk).update(status=self.status, amount_paid=self.amount_paid)
-            return
-        if self.amount_paid >= self.grand_total:
+        """Recalculate and save invoice status only. amount_paid is managed by billing signals."""
+        if self.amount_paid >= self.grand_total and self.grand_total > 0:
             self.status = 'paid'
         elif self.amount_paid > 0:
             self.status = 'partially_paid'
-        elif self.status not in ('draft', 'written_off') and timezone.now().date() > self.due_date:
+        elif self.status not in ('draft', 'written_off', 'paid') and timezone.now().date() > self.due_date:
             self.status = 'overdue'
-        Invoice.objects.filter(pk=self.pk).update(status=self.status, amount_paid=self.amount_paid)
+        Invoice.objects.filter(pk=self.pk).update(status=self.status)
 
     def get_doc_label(self):
         return dict(self.DOC_TYPE).get(self.document_type, 'Invoice')

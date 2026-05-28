@@ -108,13 +108,7 @@
             {% for w in walkins %}
             <tr>
               <td style="font-size:.78rem">{{ w.visit_date|date:"d M Y, g:i A" }}</td>
-              <td style="font-size:.82rem">
-                {% if w.service_type %}
-                <strong>{{ w.service_type.name }}</strong>
-                {% else %}
-                {{ w.purpose|truncatewords:8 }}
-                {% endif %}
-              </td>
+              <td style="font-size:.82rem">{% if w.service_type %}<strong>{{ w.service_type.name }}</strong>{% else %}{{ w.purpose|truncatewords:8 }}{% endif %}</td>
               <td><span class="badge badge-{{ w.outcome }}">{{ w.get_outcome_display }}</span></td>
               <td style="font-size:.78rem">{{ w.assigned_staff.get_full_name|default:"—" }}</td>
             </tr>
@@ -124,7 +118,287 @@
       </div>
     </div>
     {% endif %}
+
+    <!-- Communication Log -->
+    <div class="card-box card-compact">
+      <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
+        <span><i class="fas fa-comments"></i>Communication Log</span>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('logCommModal').style.display='flex'"><i class="fas fa-plus"></i> Log</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Date</th><th>Channel</th><th>Direction</th><th>Subject</th><th>By</th><th></th></tr></thead>
+          <tbody>
+            {% for comm in communications %}
+            <tr>
+              <td style="font-size:.78rem;white-space:nowrap">{{ comm.logged_at|date:"d M Y H:i" }}</td>
+              <td><span class="badge badge-open" style="font-size:.68rem">{{ comm.get_channel_display }}</span></td>
+              <td style="font-size:.78rem">{{ comm.get_direction_display }}</td>
+              <td style="font-size:.82rem">{{ comm.subject }}{% if comm.body %}<div style="font-size:.74rem;color:#888">{{ comm.body|truncatewords:10 }}</div>{% endif %}</td>
+              <td style="font-size:.78rem">{{ comm.logged_by.get_full_name|default:"—" }}</td>
+              <td>
+                <form method="post" action="{% url 'clients:log_delete' comm.pk %}" onsubmit="return confirm('Delete this log?')" style="display:inline">
+                  {% csrf_token %}
+                  <button type="submit" style="background:none;border:none;color:var(--red);cursor:pointer"><i class="fas fa-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" style="text-align:center;color:#aaa;padding:1rem">No communications logged yet</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Documents -->
+    <div class="card-box card-compact">
+      <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
+        <span><i class="fas fa-folder-open"></i>Documents</span>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('uploadDocModal').style.display='flex'"><i class="fas fa-upload"></i> Upload</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Title</th><th>Type</th><th>Period</th><th>Uploaded</th><th></th></tr></thead>
+          <tbody>
+            {% for doc in client_docs %}
+            <tr>
+              <td style="font-weight:600">{{ doc.title }}</td>
+              <td><span class="badge badge-open" style="font-size:.68rem">{{ doc.get_doc_type_display }}</span></td>
+              <td style="font-size:.78rem">{{ doc.period_label|default:"—" }}</td>
+              <td style="font-size:.78rem">{{ doc.uploaded_at|date:"d M Y" }}</td>
+              <td style="white-space:nowrap">
+                <a href="{{ doc.file.url }}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-download"></i></a>
+                <form method="post" action="{% url 'documents:doc_delete' doc.pk %}" style="display:inline" onsubmit="return confirm('Delete?')">
+                  {% csrf_token %}
+                  <button type="submit" style="background:none;border:none;color:var(--red);cursor:pointer"><i class="fas fa-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" style="text-align:center;color:#aaa;padding:1rem">No documents uploaded yet</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
+
+<!-- Log Communication Modal -->
+<div id="logCommModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
+  <div class="card card-compact" style="width:100%;max-width:460px;margin:1rem">
+    <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+      <span><i class="fas fa-comments"></i> Log Communication</span>
+      <button type="button" onclick="document.getElementById('logCommModal').style.display='none'" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#888">&times;</button>
+    </div>
+    <div class="card-bd">
+      <form method="post" action="{% url 'clients:log_create' client.pk %}">
+        {% csrf_token %}
+        <div class="mb-2" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+          <div>
+            <label class="form-label">Channel</label>
+            <select name="channel" class="form-ctrl">
+              {% for val, label in comm_channels %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Direction</label>
+            <select name="direction" class="form-ctrl">
+              <option value="inbound">Inbound</option>
+              <option value="outbound">Outbound</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Subject <span class="req">*</span></label>
+          <input type="text" name="subject" class="form-ctrl" required>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Notes</label>
+          <textarea name="body" class="form-ctrl" rows="3"></textarea>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save</button>
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('logCommModal').style.display='none'">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Document Modal -->
+<div id="uploadDocModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
+  <div class="card card-compact" style="width:100%;max-width:460px;margin:1rem">
+    <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+      <span><i class="fas fa-upload"></i> Upload Document</span>
+      <button type="button" onclick="document.getElementById('uploadDocModal').style.display='none'" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#888">&times;</button>
+    </div>
+    <div class="card-bd">
+      <form method="post" action="{% url 'documents:doc_upload' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="client" value="{{ client.pk }}">
+        <input type="hidden" name="next" value="{% url 'clients:detail' client.pk %}">
+        <div class="mb-2" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+          <div>
+            <label class="form-label">Type</label>
+            <select name="doc_type" class="form-ctrl">
+              {% for val, label in doc_types %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Period</label>
+            <input type="text" name="period_label" class="form-ctrl" placeholder="e.g. April 2025">
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Title <span class="req">*</span></label>
+          <input type="text" name="title" class="form-ctrl" required>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">File <span class="req">*</span></label>
+          <input type="file" name="file" class="form-ctrl" required>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Upload</button>
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('uploadDocModal').style.display='none'">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% if new_job_intake %}
+<!-- Auto Job Creation Popup (triggered by walk-in redirect) -->
+<div id="newJobModal" style="display:flex;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;align-items:center;justify-content:center;overflow-y:auto">
+  <div class="card card-compact" style="width:100%;max-width:520px;margin:1rem;">
+    <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;background:var(--blue);color:#fff;border-radius:var(--radius) var(--radius) 0 0">
+      <span><i class="fas fa-briefcase"></i> Create Job Card from Walk-in</span>
+      <button type="button" onclick="document.getElementById('newJobModal').style.display='none'" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:rgba(255,255,255,.7)">&times;</button>
+    </div>
+    <div class="card-bd">
+      <div class="alert alert-note mb-3" style="font-size:.82rem">
+        <i class="fas fa-door-open"></i>
+        Walk-in recorded for <strong>{{ client.get_display_name }}</strong>{% if new_job_intake.service_type %} &mdash; <strong>{{ new_job_intake.service_type.name }}</strong>{% endif %}. Create a job card now?
+      </div>
+      <form method="post" action="{% url 'services:create' %}" id="walkinJobForm" novalidate>
+        {% csrf_token %}
+
+        {# ── JobCardForm required fields ── #}
+        <input type="hidden" name="client" value="{{ client.pk }}">
+        <input type="hidden" name="walkin_intake_pk" value="{{ new_job_intake.pk }}">
+        {# period fields — optional but included #}
+        <input type="hidden" name="period_month" value="">
+        <input type="hidden" name="period_year" value="">
+        <input type="hidden" name="is_periodic" value="">
+
+        {# ── LineItemFormSet management ── #}
+        <input type="hidden" name="jobcardlineitem_set-TOTAL_FORMS" value="1">
+        <input type="hidden" name="jobcardlineitem_set-INITIAL_FORMS" value="0">
+        <input type="hidden" name="jobcardlineitem_set-MIN_NUM_FORMS" value="0">
+        <input type="hidden" name="jobcardlineitem_set-MAX_NUM_FORMS" value="1000">
+
+        {# ── Line item 0 ── #}
+        <input type="hidden" name="jobcardlineitem_set-0-id" value="">
+        <input type="hidden" name="jobcardlineitem_set-0-job_card" value="">
+        {% if new_job_intake.service_type %}
+        <input type="hidden" name="jobcardlineitem_set-0-service_type" value="{{ new_job_intake.service_type.pk }}">
+        <input type="hidden" name="jobcardlineitem_set-0-default_price" value="{{ new_job_intake.service_type.default_price }}">
+        {% else %}
+        <input type="hidden" name="jobcardlineitem_set-0-service_type" value="">
+        <input type="hidden" name="jobcardlineitem_set-0-default_price" value="0">
+        {% endif %}
+        <input type="hidden" name="jobcardlineitem_set-0-custom_description" value="{% if not new_job_intake.service_type %}Walk-in visit{% endif %}">
+        <input type="hidden" name="jobcardlineitem_set-0-status" value="not_handled">
+        <input type="hidden" name="jobcardlineitem_set-0-period_label" value="">
+        <input type="hidden" name="jobcardlineitem_set-0-notes" value="">
+        <input type="hidden" name="jobcardlineitem_set-0-DELETE" value="">
+
+        {# ── Visible editable fields ── #}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.8rem">
+
+          <div id="wi-field-assigned">
+            <label class="form-label">Assigned To</label>
+            <select name="assigned_to" class="form-ctrl" style="font-size:.83rem" id="wiAssigned">
+              <option value="">&mdash; Unassigned &mdash;</option>
+              {% for u in staff_for_job %}
+              <option value="{{ u.pk }}" {% if u == client.assigned_officer %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div id="wi-field-priority">
+            <label class="form-label">Priority</label>
+            <select name="priority" class="form-ctrl" style="font-size:.83rem">
+              <option value="normal">Normal</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+
+          <div id="wi-field-due_date">
+            <label class="form-label">Due Date</label>
+            <input type="date" name="due_date" id="wiDueDate" class="form-ctrl" style="font-size:.83rem">
+            <div class="field-error" id="wi-err-due" style="display:none;color:var(--red);font-size:.75rem;margin-top:.2rem"><i class="fas fa-exclamation-circle"></i> Please set a due date.</div>
+          </div>
+
+          <div id="wi-field-price">
+            <label class="form-label">Agreed Price (UGX) <span class="req">*</span></label>
+            <input type="number" name="jobcardlineitem_set-0-negotiated_price" id="wiPrice"
+              class="form-ctrl" style="font-size:.83rem"
+              value="{{ new_job_intake.service_type.default_price|default:0 }}"
+              min="0" step="1000">
+            <div class="field-error" id="wi-err-price" style="display:none;color:var(--red);font-size:.75rem;margin-top:.2rem"><i class="fas fa-exclamation-circle"></i> Price must be greater than 0.</div>
+          </div>
+
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Notes</label>
+          <textarea name="notes" class="form-ctrl" rows="2" style="font-size:.83rem" placeholder="Any special instructions&hellip;">{{ new_job_intake.notes }}</textarea>
+        </div>
+
+        <div style="margin-bottom:.8rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.82rem">
+            <input type="checkbox" name="create_invoice" value="yes" checked>
+            <span>Auto-generate invoice on save</span>
+          </label>
+        </div>
+
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-primary" onclick="submitWalkinJob()"><i class="fas fa-briefcase"></i> Yes, Create Job Card</button>
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('newJobModal').style.display='none'">Skip for Now</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function submitWalkinJob() {
+  var valid = true;
+
+  // Validate price > 0
+  var price = parseFloat(document.getElementById('wiPrice').value) || 0;
+  if (price <= 0) {
+    document.getElementById('wi-err-price').style.display = 'block';
+    document.getElementById('wiPrice').style.borderColor = 'var(--red)';
+    valid = false;
+  } else {
+    document.getElementById('wi-err-price').style.display = 'none';
+    document.getElementById('wiPrice').style.borderColor = '';
+  }
+
+  if (!valid) return;
+  document.getElementById('walkinJobForm').submit();
+}
+
+// Clear price error on input
+document.getElementById('wiPrice').addEventListener('input', function(){
+  if (parseFloat(this.value) > 0) {
+    document.getElementById('wi-err-price').style.display = 'none';
+    this.style.borderColor = '';
+  }
+});
+</script>
+{% endif %}
 {% endblock %}
 

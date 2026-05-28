@@ -132,3 +132,18 @@ class StaffActivityLog(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class TimeEntry(models.Model):
+    job_card = models.ForeignKey(JobCard, on_delete=models.CASCADE, related_name='time_entries')
+    staff = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    description = models.CharField(max_length=300)
+    hours = models.DecimalField(max_digits=5, decimal_places=2)
+    entry_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-entry_date']
+
+    def __str__(self):
+        return f"{self.staff} — {self.hours}h on {self.job_card.job_number}"

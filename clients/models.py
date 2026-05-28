@@ -59,3 +59,24 @@ class WalkInIntake(models.Model):
 
     def __str__(self):
         return f"Walk-in: {self.client} on {self.visit_date.date()}"
+
+
+class CommunicationLog(models.Model):
+    DIRECTION = [('inbound', 'Inbound'), ('outbound', 'Outbound')]
+    CHANNEL = [
+        ('call', 'Phone Call'), ('whatsapp', 'WhatsApp'),
+        ('email', 'Email'), ('in_person', 'In Person'), ('other', 'Other'),
+    ]
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='communications')
+    direction = models.CharField(max_length=10, choices=DIRECTION, default='inbound')
+    channel = models.CharField(max_length=20, choices=CHANNEL, default='call')
+    subject = models.CharField(max_length=300)
+    body = models.TextField(blank=True)
+    logged_by = models.ForeignKey('core.User', on_delete=models.SET_NULL, null=True)
+    logged_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-logged_at']
+
+    def __str__(self):
+        return f"{self.get_channel_display()} with {self.client} — {self.subject[:50]}"

@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q, Sum
 from django.utils import timezone
-from .models import Client, WalkInIntake
+from .models import Client, WalkInIntake, CommunicationLog
 from .forms import ClientForm, WalkInIntakeForm
 from billing.models import Invoice
 
@@ -184,8 +184,11 @@ def client_detail(request, pk):
     walkins = client.walkin_intakes.order_by('-visit_date')[:5]
     from credentials.models import ClientCredential
     from compliance.models import ComplianceObligation
+    from documents.models import ClientDocument
     creds_count = ClientCredential.objects.filter(client=client).count()
     obligations = ComplianceObligation.objects.filter(client=client, is_active=True).select_related('service_type')
+    communications = client.communications.select_related('logged_by').all()[:20]
+    client_docs = client.documents.select_related('uploaded_by').all()[:20]
     details = [
         ('Full Name', client.full_name),
         ('TIN', client.tin or 'Not provided'),
@@ -204,6 +207,15 @@ def client_detail(request, pk):
         'balance': total_invoiced - total_paid,
         'walkins': walkins, 'creds_count': creds_count,
         'obligations': obligations, 'details': details,
+        'communications': communications,
+        'client_docs': client_docs,
+        'doc_types': __import__('documents.models', fromlist=['ClientDocument']).ClientDocument.DOC_TYPE,
+        'comm_channels': __import__('clients.models', fromlist=['CommunicationLog']).CommunicationLog.CHANNEL,
+        'new_job_intake': WalkInIntake.objects.select_related('service_type').filter(
+            pk=request.GET.get('new_job', 0), client=client
+        ).first(),
+        'service_types_for_job': __import__('services.models', fromlist=['ServiceType']).ServiceType.objects.filter(is_active=True).order_by('category', 'name'),
+        'staff_for_job': __import__('core.models', fromlist=['User']).User.objects.filter(is_active_staff=True, is_active=True).order_by('first_name'),
     })
 
 @login_required
@@ -392,20 +404,16 @@ def walkin_create(request):
         form = WalkInIntakeForm(request.POST)
         if form.is_valid():
             intake = form.save(commit=False)
-            # Set assigned staff to current user if not specified
             if not intake.assigned_staff:
                 intake.assigned_staff = request.user
             intake.save()
             messages.success(request, f'Walk-in visit recorded for {intake.client.get_display_name()}.')
-            return redirect('clients:detail', pk=intake.client.pk)
+            return redirect(f"/clients/{intake.client.pk}/?new_job={intake.pk}")
         else:
-            # Show validation errors
             for field, errors in form.errors.items():
                 for error in errors:
                     messages.error(request, f'{field}: {error}')
             return render(request, 'clients/walkin_form.html', {'form': form})
-    
-    # GET request - show form
     client_id = request.GET.get('client')
     form = WalkInIntakeForm(initial={'client': client_id} if client_id else {})
     return render(request, 'clients/walkin_form.html', {'form': form})
@@ -438,3 +446,29 @@ def client_import(request):
             import_section_active='batch_import',
         )
     return _render_client_onboarding(request, import_section_active='batch_import')
+
+
+@login_required
+def communication_log_create(request, pk):
+    client = get_object_or_404(Client, pk=pk)
+    if request.method == 'POST':
+        CommunicationLog.objects.create(
+            client=client,
+            direction=request.POST.get('direction', 'inbound'),
+            channel=request.POST.get('channel', 'call'),
+            subject=request.POST.get('subject', ''),
+            body=request.POST.get('body', ''),
+            logged_by=request.user,
+        )
+        messages.success(request, 'Communication logged.')
+    return redirect('clients:detail', pk=pk)
+
+
+@login_required
+def communication_log_delete(request, pk):
+    log = get_object_or_404(CommunicationLog, pk=pk)
+    client_pk = log.client_id
+    if request.method == 'POST':
+        log.delete()
+        messages.success(request, 'Log entry deleted.')
+    return redirect('clients:detail', pk=client_pk)

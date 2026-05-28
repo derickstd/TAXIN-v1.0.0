@@ -217,6 +217,15 @@
     <form method="post" action="{% url 'notifications:manager_report' %}" style="display:inline">{% csrf_token %}
       <button class="btn btn-outline"><i class="fas fa-chart-pie"></i>Manager Report</button>
     </form>
+    {% if user.is_superuser or user.role in 'admin,manager' %}
+    <form method="post" action="{% url 'core:run_daily' %}" style="display:inline"
+          onsubmit="return confirm('Run all automation tasks now?')">
+      {% csrf_token %}
+      <button class="btn btn-outline" style="color:#1A3C6E;border-color:#1A3C6E">
+        <i class="fas fa-robot"></i> Run Automation Now
+      </button>
+    </form>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

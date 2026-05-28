@@ -145,11 +145,21 @@
     <div class="card card-compact">
       <div class="card-hd"><i class="fas fa-history"></i>Payments</div>
       <div class="card-bd p0">
-        {% for pmt in payments %}
-        <div style="display:flex;justify-content:space-between;padding:.6rem 1rem;border-bottom:1px solid #f3f4f6;font-size:.82rem">
-          <div><div class="fw-6 ugx-g">UGX {{ pmt.amount|floatformat:0|intcomma }}</div>
-            <div class="fs-xs text-muted">{{ pmt.get_method_display }} &bull; {{ pmt.payment_date }}</div></div>
-          <div class="fs-xs text-muted text-r">{{ pmt.received_by.get_full_name|default:"—" }}</div>
+        {% for pmt, balance_after in payments_with_balance %}
+        <div style="padding:.65rem 1rem;border-bottom:1px solid #f3f4f6;font-size:.82rem">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div class="fw-6 ugx-g">UGX {{ pmt.amount|floatformat:0|intcomma }}</div>
+              <div class="fs-xs text-muted">{{ pmt.get_method_display }} &bull; {{ pmt.payment_date }}</div>
+              {% if pmt.reference %}<div class="fs-xs text-muted">Ref: {{ pmt.reference }}</div>{% endif %}
+            </div>
+            <div class="text-r">
+              <div class="fs-xs text-muted">{{ pmt.received_by.get_full_name|default:"—" }}</div>
+              <div class="fs-xs fw-7" style="color:{% if balance_after == 0 %}var(--green){% else %}var(--red){% endif %}">
+                Bal: UGX {{ balance_after|floatformat:0|intcomma }}
+              </div>
+            </div>
+          </div>
         </div>
         {% empty %}
         <div style="padding:1rem;text-align:center;color:var(--muted);font-size:.83rem">No payments yet</div>

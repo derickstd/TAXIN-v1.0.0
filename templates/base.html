@@ -94,7 +94,6 @@
       <div class="sb-sub" id="sub-clients">
         <a href="{% url 'clients:list' %}"   class="sb-link {% block nav_clients %}{% endblock %}" title="All Clients"><i class="fas fa-users"></i><span class="sb-lbl">All Clients</span></a>
         <a href="{% url 'clients:create' %}" class="sb-link {% block nav_cnew %}{% endblock %}"   title="New Client"><i class="fas fa-user-plus"></i><span class="sb-lbl">New Client</span></a>
-        <a href="{% url 'clients:import' %}" class="sb-link {% block nav_import %}{% endblock %}" title="Batch Import"><i class="fas fa-file-import"></i><span class="sb-lbl">Batch Import</span></a>
         <a href="{% url 'clients:walkin' %}" class="sb-link" title="Walk-in Intake"><i class="fas fa-door-open"></i><span class="sb-lbl">Walk-in Intake</span></a>
       </div>
     </div>
@@ -117,6 +116,9 @@
         <a href="{% url 'compliance:list' %}"    class="sb-link {% block nav_comp %}{% endblock %}" title="Compliance">
           <i class="fas fa-calendar-check"></i><span class="sb-lbl">Compliance</span>
           {% if upcoming_deadlines_count %}<span class="sb-badge">{{ upcoming_deadlines_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'taxcalendar:list' %}" class="sb-link {% block nav_cal %}{% endblock %}" title="Tax Calendar">
+          <i class="fas fa-calendar-alt"></i><span class="sb-lbl">Tax Calendar</span>
         </a>
       </div>
     </div>
@@ -147,6 +149,7 @@
       </button>
       <div class="sb-sub" id="sub-reports">
         <a href="{% url 'documents:price_list' %}"     class="sb-link {% block nav_price %}{% endblock %}" title="Price List"><i class="fas fa-tags"></i><span class="sb-lbl">Price List</span></a>
+        <a href="{% url 'documents:doc_list' %}"         class="sb-link" title="Documents"><i class="fas fa-folder-open"></i><span class="sb-lbl">Documents</span></a>
         <a href="{% url 'documents:monthly_report' %}" class="sb-link" title="Monthly Report"><i class="fas fa-chart-line"></i><span class="sb-lbl">Monthly Report</span></a>
         <a href="{% url 'documents:audit_books' %}"    class="sb-link" title="Audit Books"><i class="fas fa-book"></i><span class="sb-lbl">Audit Books</span></a>
         <a href="{% url 'notifications:list' %}"       class="sb-link {% block nav_notif %}{% endblock %}" title="Notifications"><i class="fas fa-bell"></i><span class="sb-lbl">Notifications</span></a>

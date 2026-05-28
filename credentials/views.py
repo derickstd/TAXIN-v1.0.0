@@ -45,38 +45,27 @@ def credential_list(request):
 
     q = request.GET.get('q', '')
     type_filter = request.GET.get('type', '')
+    client_filter = request.GET.get('client', '')
     creds = ClientCredential.objects.select_related('client', 'last_accessed_by').order_by('client__full_name')
     if q:
         creds = creds.filter(Q(client__full_name__icontains=q) | Q(label__icontains=q))
     if type_filter:
         creds = creds.filter(credential_type=type_filter)
+    if client_filter:
+        creds = creds.filter(client__pk=client_filter)
     today = timezone.now().date()
     expiring_soon = creds.filter(expiry_date__lte=today + timezone.timedelta(days=14), expiry_date__gte=today)
+    filtered_client = None
+    if client_filter:
+        filtered_client = Client.objects.filter(pk=client_filter).first()
     return render(request, 'credentials/credential_list.html', {
         'creds': creds, 'expiring_soon': expiring_soon,
         'today': today, 'q': q, 'type_filter': type_filter,
         'cred_types': ClientCredential.CRED_TYPE,
         'add_form': CredentialForm(),
+        'filtered_client': filtered_client,
     })
 
-
-@login_required
-def credential_create(request):
-    if request.method == 'POST':
-        form = CredentialForm(request.POST)
-        if form.is_valid():
-            cred = form.save(commit=False)
-            cred.created_by = request.user
-            cred.set_username(form.cleaned_data.get('username_plain', ''))
-            cred.set_password(form.cleaned_data.get('password_plain', ''))
-            cred.set_notes(form.cleaned_data.get('notes_plain', ''))
-            cred.save()
-            messages.success(request, 'Credential saved and encrypted successfully.')
-            return redirect('credentials:list')
-    else:
-        client_id = request.GET.get('client')
-        form = CredentialForm(initial={'client': client_id} if client_id else {})
-    return render(request, 'credentials/credential_form.html', {'form': form})
 
 
 @login_required

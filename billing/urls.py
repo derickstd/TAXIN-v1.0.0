@@ -5,7 +5,6 @@ app_name = 'billing'
 urlpatterns = [
     path('',                    views.invoice_list,          name='list'),
     path('new/',                views.invoice_create,        name='create'),
-    path('new/manual/',         views.invoice_create,        name='manual'),
     path('<int:pk>/',           views.invoice_detail,        name='detail'),
     path('<int:pk>/pay/',       views.record_payment,        name='pay'),
     path('<int:pk>/whatsapp/',  views.send_invoice_whatsapp, name='whatsapp'),

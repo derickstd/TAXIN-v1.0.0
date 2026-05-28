@@ -22,4 +22,5 @@ urlpatterns = [
     path('expenses/',      include('expenses.urls')),
     path('documents/',     include('documents.urls')),
     path('staff/',         include('core.urls')),
+    path('calendar/',      include('taxcalendar.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
