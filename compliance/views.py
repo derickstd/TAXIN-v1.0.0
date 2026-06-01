@@ -96,8 +96,8 @@ def update_status(request, pk, action):
         deadline.invoice = invoice
         messages.success(request, f'Payment recorded for {service_type.name} {deadline.period_label} (pending filing).')
 
-    elif action == 'none':
-        deadline.status = 'none'
+    elif action in ('none', 'reset'):
+        deadline.status = 'upcoming'
         deadline.filed_date = None
         deadline.filed_by = None
         job_card = _get_job_card_for_deadline(deadline)
@@ -111,7 +111,7 @@ def update_status(request, pk, action):
             # Delete payments first — their deletion signal will recalculate amount_paid
             invoice.payments.all().delete()
             Invoice.objects.filter(pk=invoice.pk).update(status='draft', amount_paid=0)
-        messages.info(request, f'{service_type.name} for {deadline.period_label} reset to no action.')
+        messages.info(request, f'{service_type.name} for {deadline.period_label} reset to upcoming.')
 
     deadline.save()
     return redirect('compliance:list')

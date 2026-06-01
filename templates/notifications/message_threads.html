@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% block title %}Staff Messages{% endblock %}
+{% block nav_messages %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'notifications:list' %}">Notifications</a></li><li class="active">Staff Messages</li>{% endblock %}
+{% block extra_css %}
+<style>
+.chat-page {
+  display:grid;
+  grid-template-columns:minmax(280px,320px) minmax(320px,1fr);
+  gap:1rem;
+}
+.chat-sidebar {
+  background:#fff;
+  border:1px solid rgba(14,29,62,.1);
+  border-radius:22px;
+  overflow:hidden;
+  box-shadow:0 20px 40px rgba(9,30,66,.08);
+}
+.chat-sidebar-hd {
+  padding:1.2rem 1.3rem;
+  font-weight:700;
+  font-size:.95rem;
+  letter-spacing:.01em;
+  border-bottom:1px solid rgba(14,29,62,.08);
+  background:linear-gradient(180deg,rgba(9,30,66,.04),transparent);
+}
+.chat-sidebar-list {
+  display:flex;
+  flex-direction:column;
+}
+.chat-item {
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:.75rem;
+  padding:1rem 1.25rem;
+  border-bottom:1px solid rgba(14,29,62,.05);
+  transition:background .2s, transform .2s;
+  text-decoration:none;
+  color:inherit;
+}
+.chat-item:hover {background:rgba(9,30,66,.03);transform:translateX(1px);}
+.chat-item-title {font-weight:700; margin-bottom:.35rem;}
+.chat-item-meta {font-size:.8rem; color:#5d6579; line-height:1.4;}
+.chat-item-unread {min-width:28px; text-align:center; font-size:.78rem; line-height:1.5; color:#fff; background:#1a3c6e; border-radius:999px; padding:.18rem .55rem;}
+.chat-main {background:#f5f7fb; border-radius:22px; padding:1.5rem; min-height:520px; display:flex; flex-direction:column;}
+.chat-welcome {max-width:720px; margin:auto; text-align:center;}
+.chat-welcome h3 {font-size:1.45rem; margin-bottom:.7rem;}
+.chat-welcome p {color:#4b5570; margin-bottom:1.3rem;}
+@media(max-width:992px){.chat-page{grid-template-columns:1fr;}.chat-sidebar{order:2;}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-hdr">
+  <h4 class="page-title"><i class="fas fa-comments"></i>Staff Messages</h4>
+</div>
+<div class="chat-page">
+  <aside class="chat-sidebar">
+    <div class="chat-sidebar-hd">Message threads</div>
+    <div class="chat-sidebar-list">
+      {% for thread in threads %}
+      <a href="{% url 'notifications:message_thread' thread.id %}" class="chat-item">
+        <div>
+          <div class="chat-item-title">{{ thread.subject|default:'No subject' }}</div>
+          <div class="chat-item-meta">
+            {% with last=thread.last_message %}
+              {% if last %}
+                {{ last.sender.get_full_name|default:last.sender.username }} · {{ last.body|truncatechars:55 }}
+              {% else %}
+                No messages yet
+              {% endif %}
+            {% endwith %}
+          </div>
+        </div>
+        <div class="chat-item-unread">{% if thread.unread_count_for_user > 0 %}{{ thread.unread_count_for_user }}{% else %}0{% endif %}</div>
+      </a>
+      {% empty %}
+      <div class="empty-state" style="padding:2rem;text-align:center">
+        <i class="fas fa-comments" style="font-size:2rem;color:#6d7a94"></i>
+        <p style="margin:.75rem 0 0;color:#4d586f;font-size:.95rem;">No message threads yet. Start a new conversation.</p>
+      </div>
+      {% endfor %}
+    </div>
+  </aside>
+  <main class="chat-main">
+    <div class="chat-welcome">
+      <h3>Welcome to Staff Messaging</h3>
+      <p>Use the thread list on the left to review conversations, or send a new message with the floating button.</p>
+      <a href="{% url 'notifications:message_new' %}" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Start a New Message</a>
+    </div>
+  </main>
+</div>
+{% endblock %}

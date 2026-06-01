@@ -304,17 +304,17 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.8rem">
           <div>
             <label class="form-label">Service</label>
-            <select name="jobcardlineitem_set-0-service_type" class="form-ctrl" style="font-size:.83rem">
+            <select name="jobcardlineitem_set-0-service_type" class="form-ctrl" id="regServiceType" style="font-size:.83rem">
               <option value="">— Select service —</option>
               {% for st in service_types_for_job %}
-              <option value="{{ st.pk }}" data-price="{{ st.default_price }}"
+              <option value="{{ st.pk }}" data-price="{{ st.default_price }}" data-deadlinetype="{{ st.deadline_type }}"
                 {% if st.pk|stringformat:"s" == new_job_reg_svc %}selected{% endif %}>
                 {{ st.name }}
               </option>
               {% endfor %}
             </select>
           </div>
-          <div>
+          <div id="reg-price-field">
             <label class="form-label">Agreed Price (UGX) <span class="req">*</span></label>
             <input type="number" name="jobcardlineitem_set-0-negotiated_price" id="regPrice"
               class="form-ctrl" style="font-size:.83rem"
@@ -337,7 +337,7 @@
               <option value="urgent">Urgent</option>
             </select>
           </div>
-          <div>
+          <div id="reg-due-date-field" style="display:none">
             <label class="form-label">Due Date</label>
             <input type="date" name="due_date" class="form-ctrl" style="font-size:.83rem">
           </div>
@@ -418,6 +418,29 @@ document.querySelector('#newJobRegModal select[name="jobcardlineitem_set-0-servi
   }
 });
 </script>
+<script>
+// Hide/show Due Date and Price based on service deadline_type
+document.addEventListener('DOMContentLoaded', function() {
+  var svcSel = document.getElementById('regServiceType');
+  var dueDateDiv = document.getElementById('reg-due-date-field');
+  var priceDiv = document.getElementById('reg-price-field');
+  function toggleFieldsForRegJob() {
+    var selected = svcSel.options[svcSel.selectedIndex];
+    var deadlineType = selected.getAttribute('data-deadlinetype');
+    if (deadlineType === 'none') {
+      dueDateDiv.style.display = 'none';
+      priceDiv.style.display = 'none';
+    } else {
+      dueDateDiv.style.display = '';
+      priceDiv.style.display = '';
+    }
+  }
+  if (svcSel && dueDateDiv && priceDiv) {
+    svcSel.addEventListener('change', toggleFieldsForRegJob);
+    toggleFieldsForRegJob(); // Initial state
+  }
+});
+</script>
 {% endif %}
 
 {% if new_job_intake %}
@@ -487,13 +510,13 @@ document.querySelector('#newJobRegModal select[name="jobcardlineitem_set-0-servi
             </select>
           </div>
 
-          <div id="wi-field-due_date">
+          <div id="wi-field-due_date" style="display:none">
             <label class="form-label">Due Date</label>
             <input type="date" name="due_date" id="wiDueDate" class="form-ctrl" style="font-size:.83rem">
             <div class="field-error" id="wi-err-due" style="display:none;color:var(--red);font-size:.75rem;margin-top:.2rem"><i class="fas fa-exclamation-circle"></i> Please set a due date.</div>
           </div>
 
-          <div id="wi-field-price">
+          <div id="wi-field-price" style="display:none">
             <label class="form-label">Agreed Price (UGX) <span class="req">*</span></label>
             <input type="number" name="jobcardlineitem_set-0-negotiated_price" id="wiPrice"
               class="form-ctrl" style="font-size:.83rem"
@@ -551,29 +574,55 @@ document.querySelector('#newJobRegModal select[name="jobcardlineitem_set-0-servi
   </div>
 </div>
 <script>
+function toggleWiDueAndPrice() {
+  var svcSel = document.getElementById('walkinJobForm')?.querySelector('[name="jobcardlineitem_set-0-service_type"]');
+  if (!svcSel) return;
+  var dueDateDiv = document.getElementById('wi-field-due_date');
+  var priceDiv = document.getElementById('wi-field-price');
+  var selected = svcSel.options[svcSel.selectedIndex];
+  var deadlineType = selected?.getAttribute('data-deadlinetype');
+  if (deadlineType === 'none') {
+    dueDateDiv.style.display = 'none';
+    priceDiv.style.display = 'none';
+  } else {
+    dueDateDiv.style.display = '';
+    priceDiv.style.display = '';
+  }
+}
+// Initial state for walk-in form
+if (document.getElementById('walkinJobForm')) {
+  toggleWiDueAndPrice();
+}
 function toggleWiPay(chk) {
   document.getElementById('wiPayFields').style.display = chk.checked ? 'block' : 'none';
 }
 function submitWalkinJob() {
   var valid = true;
-  var price = parseFloat(document.getElementById('wiPrice').value) || 0;
-  if (price <= 0) {
+  var priceDiv = document.getElementById('wi-field-price');
+  var dueDateDiv = document.getElementById('wi-field-due_date');
+  var price = priceDiv?.style.display !== 'none' ? (parseFloat(document.getElementById('wiPrice').value) || 0) : 1;
+  var dueDate = dueDateDiv?.style.display !== 'none' ? document.getElementById('wiDueDate').value : true;
+  
+  if (priceDiv?.style.display !== 'none' && price <= 0) {
     document.getElementById('wi-err-price').style.display = 'block';
     document.getElementById('wiPrice').style.borderColor = 'var(--red)';
     valid = false;
   } else {
     document.getElementById('wi-err-price').style.display = 'none';
-    document.getElementById('wiPrice').style.borderColor = '';
+    if (document.getElementById('wiPrice')) document.getElementById('wiPrice').style.borderColor = '';
   }
   if (!valid) return;
   document.getElementById('walkinJobForm').submit();
 }
-document.getElementById('wiPrice').addEventListener('input', function(){
-  if (parseFloat(this.value) > 0) {
-    document.getElementById('wi-err-price').style.display = 'none';
-    this.style.borderColor = '';
-  }
-});
+var wiPriceEl = document.getElementById('wiPrice');
+if (wiPriceEl) {
+  wiPriceEl.addEventListener('input', function(){
+    if (parseFloat(this.value) > 0) {
+      document.getElementById('wi-err-price').style.display = 'none';
+      this.style.borderColor = '';
+    }
+  });
+}
 </script>
 {% endif %}
 {% endblock %}

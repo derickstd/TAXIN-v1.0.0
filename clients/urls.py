@@ -7,9 +7,11 @@ urlpatterns = [
     path('new/',        views.client_create,      name='create'),
     path('import/',     views.client_import,      name='import'),
     path('search/',     views.client_search_api,  name='search'),
+    path('check-duplicates/', views.check_duplicates, name='check_duplicates'),
     path('walkin/',     views.walkin_create,       name='walkin'),
     path('<int:pk>/',   views.client_detail,      name='detail'),
     path('<int:pk>/edit/', views.client_edit,     name='edit'),
+    path('<int:pk>/merge/', views.merge_clients,  name='merge'),
     path('<int:pk>/log/', views.communication_log_create, name='log_create'),
     path('log/<int:pk>/delete/', views.communication_log_delete, name='log_delete'),
 ]

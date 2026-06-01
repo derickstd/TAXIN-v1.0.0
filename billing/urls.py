@@ -11,4 +11,5 @@ urlpatterns = [
     path('<int:pk>/convert/',   views.convert_to_invoice,    name='convert'),
     path('aging/',              views.aging_report,          name='aging'),
     path('refresh-balances/',   views.refresh_outstanding_balances, name='refresh_balances'),
+    path('refresh-balances-json/', views.refresh_outstanding_balances_json, name='refresh_balances_json'),
 ]

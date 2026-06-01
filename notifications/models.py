@@ -25,3 +25,37 @@ class NotificationLog(models.Model):
 
     def __str__(self):
         return f"{self.get_message_type_display()} to {self.recipient_number} — {self.status}"
+
+
+class MessageThread(models.Model):
+    subject = models.CharField(max_length=120, blank=True)
+    participants = models.ManyToManyField(User, related_name='message_threads')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='started_message_threads')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.subject or f"Thread #{self.pk}"
+
+    def last_message(self):
+        return self.messages.order_by('-created_at').first()
+
+    def unread_count(self, user):
+        return self.messages.exclude(read_by=user).count()
+
+
+class Message(models.Model):
+    thread = models.ForeignKey(MessageThread, related_name='messages', on_delete=models.CASCADE)
+    sender = models.ForeignKey(User, related_name='sent_messages', on_delete=models.SET_NULL, null=True, blank=True)
+    body = models.TextField()
+    attachment = models.FileField(upload_to='message_attachments/%Y/%m/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_by = models.ManyToManyField(User, related_name='read_messages', blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Message from {self.sender} in {self.thread}"

@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}New Staff Message{% endblock %}
+{% block nav_messages %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'notifications:message_threads' %}">Staff Messages</a></li><li class="active">New Message</li>{% endblock %}
+{% block content %}
+<div class="page-hdr">
+  <h4 class="page-title"><i class="fas fa-edit"></i>New Staff Message</h4>
+</div>
+<div class="card card-compact">
+  <div class="card-bd">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label">Recipients <span class="req">*</span></label>
+        {{ form.recipients }}
+        <div class="form-hint">Select one or more staff members to message.</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Subject</label>
+        {{ form.subject }}
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Message</label>
+        {{ form.body }}
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Attachment</label>
+        {{ form.attachment }}
+        <div class="form-hint">Optional file attachment.</div>
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send Message</button>
+        <a href="{% url 'notifications:message_threads' %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

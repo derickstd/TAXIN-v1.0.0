@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block title %}Merge Client — {{ source.get_display_name }}{% endblock %}
+{% block nav_clients %}active{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'clients:list' %}">Clients</a></li>
+<li><a href="{% url 'clients:detail' source.pk %}">{{ source.client_id }}</a></li>
+<li class="active">Merge</li>
+{% endblock %}
+{% block content %}
+<div class="page-hdr">
+  <h4 class="page-title"><i class="fas fa-code-merge"></i>Merge Client</h4>
+</div>
+
+<div class="alert" style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:8px;padding:.9rem 1.1rem;margin-bottom:1rem;font-size:.85rem">
+  <i class="fas fa-exclamation-triangle" style="color:#b45309"></i>
+  <strong>Warning:</strong> This will move ALL records (invoices, job cards, credentials, documents, compliance) from
+  <strong>{{ source.get_display_name }}</strong> into the target client, then <strong>permanently delete</strong> the source. This cannot be undone.
+</div>
+
+<div class="layout-sidebar-main" style="gap:.8rem">
+
+  <!-- Source client summary -->
+  <div>
+    <div class="card card-compact mb-2">
+      <div class="card-hd" style="background:#fee2e2;color:#991b1b"><i class="fas fa-trash-alt"></i> Source (will be deleted)</div>
+      <div class="card-bd" style="font-size:.83rem">
+        <div class="stat-row"><span style="color:#888">ID</span><span class="fw-7">{{ source.client_id }}</span></div>
+        <div class="stat-row"><span style="color:#888">Name</span><span class="fw-7">{{ source.full_name }}</span></div>
+        <div class="stat-row"><span style="color:#888">TIN</span><span>{{ source.tin|default:"—" }}</span></div>
+        <div class="stat-row"><span style="color:#888">Phone</span><span>{{ source.phone_primary }}</span></div>
+        <div class="stat-row"><span style="color:#888">Invoices</span><span>{{ source.invoices.count }}</span></div>
+        <div class="stat-row"><span style="color:#888">Job Cards</span><span>{{ source.job_cards.count }}</span></div>
+        <div class="stat-row"><span style="color:#888">Outstanding</span><span class="ugx-red fw-7">{{ source.total_outstanding|floatformat:0|intcomma }}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Merge form -->
+  <div>
+    <div class="card card-compact">
+      <div class="card-hd" style="background:#d1fae5;color:#065f46"><i class="fas fa-arrow-right"></i> Select Target (records will be moved here)</div>
+      <div class="card-bd">
+        <form method="post" action="{% url 'clients:merge' source.pk %}" onsubmit="return confirm('Are you sure? This will permanently delete {{ source.get_display_name }}.')">
+          {% csrf_token %}
+
+          {% if suggestions %}
+          <div class="mb-3">
+            <label class="form-label fw-7" style="font-size:.82rem">Suggested matches (same TIN or phone):</label>
+            {% for c in suggestions %}
+            <label style="display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;border:1.5px solid var(--border);border-radius:6px;margin-bottom:.4rem;cursor:pointer;font-size:.82rem">
+              <input type="radio" name="target_pk" value="{{ c.pk }}" style="accent-color:var(--blue)">
+              <span>
+                <strong>{{ c.client_id }}</strong> — {{ c.full_name }}
+                <span style="color:#888;font-size:.75rem">&bull; TIN: {{ c.tin|default:"—" }} &bull; {{ c.phone_primary }}</span>
+                <span class="badge badge-{{ c.status }}" style="font-size:.62rem;margin-left:.3rem">{{ c.get_status_display }}</span>
+              </span>
+            </label>
+            {% endfor %}
+            <div style="margin:.6rem 0;font-size:.78rem;color:#888;text-align:center">— or search all clients below —</div>
+          </div>
+          {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label">Merge into client</label>
+            <select name="target_pk" class="form-ctrl s2" data-ph="Search client to merge into…" style="font-size:.83rem">
+              <option value="">Search client…</option>
+              {% for c in all_clients %}
+              <option value="{{ c.pk }}">{{ c.client_id }} — {{ c.full_name }} ({{ c.tin|default:"no TIN" }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="flex gap-2 mt-3">
+            <button type="submit" class="btn btn-primary" style="background:#dc2626;border-color:#dc2626">
+              <i class="fas fa-code-merge"></i> Confirm Merge & Delete Source
+            </button>
+            <a href="{% url 'clients:detail' source.pk %}" class="btn btn-outline">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+$(document).ready(function(){
+  $('.s2').select2({theme:'bootstrap-5',width:'100%',placeholder:'Search client to merge into…'});
+  // If user picks from radio suggestions, clear the select and vice versa
+  $('input[type=radio]').on('change', function(){
+    $('.s2').val(null).trigger('change');
+  });
+  $('.s2').on('change', function(){
+    if($(this).val()) $('input[type=radio]').prop('checked', false);
+  });
+});
+</script>
+{% endblock %}

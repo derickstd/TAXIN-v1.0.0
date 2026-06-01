@@ -22,37 +22,41 @@
           <td style="font-weight:700;{% if d.due_date <= today %}color:#e74c3c{% endif %}">{{ d.due_date|date:"d M Y" }}</td>
           <td>{% if d.due_date < today %}<span class="badge badge-overdue">Overdue</span>{% elif d.due_date == today %}<span class="badge badge-pending_payment">Today!</span>{% else %}<span style="font-size:.8rem;color:#888">{{ d.due_date|timeuntil }}</span>{% endif %}</td>
           <td>
-            <div class="action-dropdown" style="position:relative;display:inline-block">
-              <button class="btn btn-primary btn-sm dropdown-toggle" type="button" onclick="toggleDropdown(this)" aria-expanded="false">
-                <i class="fas fa-tasks"></i> Update Status
-              </button>
-              <ul class="dropdown-menu show" style="display:none;position:absolute;z-index:1000;min-width:180px;background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;margin-top:4px;">
-                <li>
-                  <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_and_paid' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-check-circle" style="color:#27ae60"></i> Filed and Paid</button>
-                  </form>
-                </li>
-                <li>
-                  <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_not_paid' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-file-check" style="color:#3498db"></i> Filed and Not Paid</button>
-                  </form>
-                </li>
-                <li>
-                  <form method="post" action="{% url 'compliance:update_status' d.pk 'paid_not_filed' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-money-bill" style="color:#f39c12"></i> Paid but Not Filed</button>
-                  </form>
-                </li>
-                <li>
-                  <form method="post" action="{% url 'compliance:update_status' d.pk 'none' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-times-circle" style="color:#95a5a6"></i> None / Reset</button>
-                  </form>
-                </li>
-              </ul>
-            </div>
+            {% if d.status == 'upcoming' and d.due_date >= today %}
+              <div class="action-dropdown" style="position:relative;display:inline-block">
+                <button class="btn btn-primary btn-sm dropdown-toggle" type="button" onclick="toggleDropdown(this)" aria-expanded="false">
+                  <i class="fas fa-tasks"></i> Update Status
+                </button>
+                <ul class="dropdown-menu show" style="display:none;position:absolute;z-index:1000;min-width:180px;background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;margin-top:4px;">
+                  <li>
+                    <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_and_paid' %}" style="display:inline">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-check-circle" style="color:#27ae60"></i> Filed and Paid</button>
+                    </form>
+                  </li>
+                  <li>
+                    <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_not_paid' %}" style="display:inline">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-file-check" style="color:#3498db"></i> Filed and Not Paid</button>
+                    </form>
+                  </li>
+                  <li>
+                    <form method="post" action="{% url 'compliance:update_status' d.pk 'paid_not_filed' %}" style="display:inline">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-money-bill" style="color:#f39c12"></i> Paid but Not Filed</button>
+                    </form>
+                  </li>
+                  <li>
+                    <form method="post" action="{% url 'compliance:update_status' d.pk 'reset' %}" style="display:inline">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-undo" style="color:#95a5a6"></i> Reset to Upcoming</button>
+                    </form>
+                  </li>
+                </ul>
+              </div>
+            {% else %}
+              <span class="text-muted" style="font-size:.85rem">—</span>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -87,45 +91,47 @@
               <span class="badge" style="background:#3498db;color:white">{{ d.get_status_display }}</span>
             {% elif d.status == 'paid_not_filed' %}
               <span class="badge" style="background:#f39c12;color:white">{{ d.get_status_display }}</span>
-            {% elif d.status == 'none' %}
-              <span class="badge" style="background:#95a5a6;color:white">{{ d.get_status_display }}</span>
             {% else %}
               <span class="badge badge-{{ d.status }}">{{ d.get_status_display }}</span>
             {% endif %}
           </td>
           <td style="font-size:.78rem;color:#888">{{ d.filed_by.get_full_name|default:"—" }}{% if d.filed_date %} ({{ d.filed_date|date:"d M" }}){% endif %}</td>
           <td>
-            <div class="action-dropdown" style="position:relative;display:inline-block">
-              <button class="btn btn-outline btn-sm dropdown-toggle" type="button" onclick="toggleDropdown(this)" aria-expanded="false" style="font-size:.75rem">
-                <i class="fas fa-tasks"></i> Update
-              </button>
-              <ul class="dropdown-menu show" style="display:none;position:absolute;z-index:1000;min-width:180px;background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;margin-top:4px;">
-                <li>
-                  <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_and_paid' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-check-circle" style="color:#27ae60"></i> Filed and Paid</button>
-                  </form>
-                </li>
-                <li>
-                  <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_not_paid' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-file-check" style="color:#3498db"></i> Filed and Not Paid</button>
-                  </form>
-                </li>
-                <li>
-                  <form method="post" action="{% url 'compliance:update_status' d.pk 'paid_not_filed' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-money-bill" style="color:#f39c12"></i> Paid but Not Filed</button>
-                  </form>
-                </li>
-                <li>
-                  <form method="post" action="{% url 'compliance:update_status' d.pk 'none' %}" style="display:inline">
-                    {% csrf_token %}
-                    <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-times-circle" style="color:#95a5a6"></i> None / Reset</button>
-                  </form>
-                </li>
-              </ul>
-            </div>
+            {% if d.status == 'upcoming' and d.due_date >= today %}
+              <div class="action-dropdown" style="position:relative;display:inline-block">
+                <button class="btn btn-primary btn-sm dropdown-toggle" type="button" onclick="toggleDropdown(this)" aria-expanded="false">
+                  <i class="fas fa-tasks"></i> Update Status
+                </button>
+                <ul class="dropdown-menu show" style="display:none;position:absolute;z-index:1000;min-width:180px;background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;margin-top:4px;">
+                  <li>
+                    <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_and_paid' %}" style="display:inline">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-check-circle" style="color:#27ae60"></i> Filed and Paid</button>
+                    </form>
+                  </li>
+                  <li>
+                    <form method="post" action="{% url 'compliance:update_status' d.pk 'filed_not_paid' %}" style="display:inline">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-file-check" style="color:#3498db"></i> Filed and Not Paid</button>
+                    </form>
+                  </li>
+                  <li>
+                    <form method="post" action="{% url 'compliance:update_status' d.pk 'paid_not_filed' %}" style="display:inline">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-money-bill" style="color:#f39c12"></i> Paid but Not Filed</button>
+                    </form>
+                  </li>
+                  <li>
+                    <form method="post" action="{% url 'compliance:update_status' d.pk 'reset' %}" style="display:inline">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item" style="display:block;width:100%;padding:8px 16px;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;color:#333;"><i class="fas fa-undo" style="color:#95a5a6"></i> Reset to Upcoming</button>
+                    </form>
+                  </li>
+                </ul>
+              </div>
+            {% else %}
+              <span class="text-muted" style="font-size:.85rem">—</span>
+            {% endif %}
           </td>
         </tr>
         {% empty %}
@@ -138,8 +144,9 @@
 
 <!-- Client Credentials Section -->
 <div class="card-box" style="margin-top:2rem">
-  <div class="card-head">
+  <div class="card-head" style="display:flex;align-items:center;gap:.5rem">
     <span><i class="fas fa-key"></i>Client Credentials</span>
+    <button type="button" class="btn btn-outline btn-sm" id="toggleCredentialView"><i class="fas fa-eye"></i> View Credentials</button>
     <a href="{% url 'credentials:list' %}" class="btn btn-primary btn-sm" style="margin-left:auto"><i class="fas fa-plus"></i> Add Credential</a>
   </div>
   
@@ -188,7 +195,7 @@
           <td class="fs-sm {% if cred.expiry_date and cred.expiry_date <= today %}text-danger fw-7{% endif %}">
             {{ cred.expiry_date|default:"—" }}{% if cred.expiry_date and cred.expiry_date <= today %} ⚠️{% endif %}
           </td>
-          <td>
+          <td class="cred-status" data-status="{{ cred.status }}">
             {% if cred.status == 'active' %}
               <span class="badge" style="background:#27ae60;color:white">Active</span>
             {% elif cred.status == 'pending' %}
@@ -200,7 +207,7 @@
             {% endif %}
           </td>
           <td>
-            <form method="post" action="{% url 'compliance:mark_credential_handled' cred.pk %}" style="display:inline">
+            <form class="credential-action-form" method="post" action="{% url 'compliance:mark_credential_handled' cred.pk %}" style="display:inline">
               {% csrf_token %}
               {% if cred.status == 'active' %}
                 <button type="submit" class="btn btn-outline btn-sm" title="Mark as handled">
@@ -212,6 +219,26 @@
                 </button>
               {% endif %}
             </form>
+          </td>
+        </tr>
+        <tr class="cred-inline-row" style="display:none;background:var(--surface);border-top:1px solid var(--border)">
+          <td colspan="7" style="padding:.85rem 1rem">
+            <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-start">
+              <div style="min-width:220px;flex:1">
+                <div class="fs-xs text-muted">Username</div>
+                <div id="cred-inline-user-{{ cred.pk }}" style="font-family:monospace;word-break:break-all">••••••••</div>
+                <div class="fs-xs text-muted" style="margin-top:.75rem">Password</div>
+                <div id="cred-inline-pw-{{ cred.pk }}" style="font-family:monospace;word-break:break-all">••••••••</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:.55rem;min-width:160px">
+                <a href="{% url 'credentials:edit' cred.pk %}" class="btn btn-primary btn-sm"><i class="fas fa-edit"></i> Edit</a>
+                {% with website_url=cred.get_website_url %}
+                {% if website_url %}
+                <a href="{{ website_url }}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-external-link-alt"></i> Visit Portal</a>
+                {% endif %}
+                {% endwith %}
+              </div>
+            </div>
           </td>
         </tr>
         {% empty %}
@@ -244,5 +271,70 @@ function toggleDropdown(button) {
   // Toggle this dropdown
   menu.style.display = isShown ? 'none' : 'block';
 }
+
+function initCredentialStatusUpdates() {
+  document.querySelectorAll('form.credential-action-form').forEach(function(form) {
+    form.addEventListener('submit', function() {
+      var row = form.closest('tr');
+      if (!row) return;
+      var statusTd = row.querySelector('.cred-status');
+      var btn = form.querySelector('button[type=submit]');
+      var activate = btn && btn.name === 'activate';
+      if (statusTd) {
+        statusTd.dataset.status = activate ? 'active' : 'archived';
+        statusTd.innerHTML = activate
+          ? '<span class="badge" style="background:#27ae60;color:white">Active</span>'
+          : '<span class="badge badge-overdue" style="background:#95a5a6;color:white">Archived</span>';
+      }
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = activate ? '<i class="fas fa-sync"></i> Activating...' : '<i class="fas fa-sync"></i> Handling...';
+      }
+    });
+  });
+}
+
+function loadAllInlineCredentials() {
+  var visible = document.querySelectorAll('.cred-inline-row.open').length > 0;
+  var toggleBtn = document.getElementById('toggleCredentialView');
+  document.querySelectorAll('.cred-inline-row').forEach(function(inlineRow) {
+    inlineRow.style.display = visible ? 'none' : 'table-row';
+    inlineRow.classList.toggle('open', !visible);
+  });
+
+  if (!visible) {
+    document.querySelectorAll('.cred-row').forEach(function(row) {
+      var pk = row.dataset.pk;
+      var userEl = document.getElementById('cred-inline-user-' + pk);
+      var pwEl = document.getElementById('cred-inline-pw-' + pk);
+      if (!userEl || !pwEl) return;
+      if (userEl.dataset.loaded === 'true') return;
+      fetch('/credentials/' + pk + '/reveal/')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          if (data.error) {
+            userEl.textContent = 'Error';
+            pwEl.textContent = 'Error';
+            return;
+          }
+          userEl.textContent = data.username || '(not set)';
+          pwEl.textContent = data.password || '(not set)';
+          userEl.dataset.loaded = 'true';
+        })
+        .catch(function() {
+          userEl.textContent = 'Error';
+          pwEl.textContent = 'Error';
+        });
+    });
+  }
+
+  if (toggleBtn) {
+    toggleBtn.innerHTML = visible ? '<i class="fas fa-eye"></i> View Credentials' : '<i class="fas fa-eye-slash"></i> Hide Credentials';
+  }
+}
+
+document.getElementById('toggleCredentialView')?.addEventListener('click', loadAllInlineCredentials);
+
+initCredentialStatusUpdates();
 </script>
 {% endblock %}

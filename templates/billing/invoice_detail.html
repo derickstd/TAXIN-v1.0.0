@@ -43,7 +43,7 @@
             <div style="font-size:1.1rem;font-weight:800;color:var(--gold)">{{ invoice.get_doc_label|upper }}</div>
             <div class="fw-7" style="font-size:1rem">{{ invoice.invoice_number }}</div>
             <div class="fs-sm text-muted">Date: {{ invoice.date_issued }}</div>
-            <div class="fs-sm text-muted">Due: {{ invoice.due_date }}</div>
+            {# <div class="fs-sm text-muted">Due: {{ invoice.due_date }}</div> #}
             {% if invoice.valid_until %}<div class="fs-sm text-muted">Valid Until: {{ invoice.valid_until }}</div>{% endif %}
             {% if invoice.days_overdue > 0 %}<div class="fs-xs" style="color:var(--red);font-weight:700">{{ invoice.days_overdue }} days overdue</div>{% endif %}
           </div>

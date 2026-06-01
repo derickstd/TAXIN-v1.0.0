@@ -39,8 +39,32 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
-<link rel="stylesheet" href="{% static 'css/app.css' %}?v=5">
-{% block extra_css %}{% endblock %}
+<link rel="stylesheet" href="{% static 'css/app.css' %}?v=5"><style>
+.floating-message-button {
+  position:fixed;
+  right:1rem;
+  bottom:1rem;
+  width:56px;
+  height:56px;
+  border-radius:50%;
+  background:#1a3c6e;
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 22px 42px rgba(10,33,88,.24);
+  z-index:1100;
+  transition:transform .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.floating-message-button:hover {
+  transform:translateY(-2px) scale(1.03);
+  box-shadow:0 26px 48px rgba(10,33,88,.28);
+  background:#162f5e;
+}
+@media (max-width: 768px) {
+  .floating-message-button { right:.75rem; bottom:.75rem; width:52px; height:52px; }
+}
+</style>{% block extra_css %}{% endblock %}
 </head>
 <body data-theme="ocean">
 {% if user.is_authenticated %}
@@ -153,6 +177,7 @@
         <a href="{% url 'documents:monthly_report' %}" class="sb-link" title="Monthly Report"><i class="fas fa-chart-line"></i><span class="sb-lbl">Monthly Report</span></a>
         <a href="{% url 'documents:audit_books' %}"    class="sb-link" title="Audit Books"><i class="fas fa-book"></i><span class="sb-lbl">Audit Books</span></a>
         <a href="{% url 'notifications:list' %}"       class="sb-link {% block nav_notif %}{% endblock %}" title="Notifications"><i class="fas fa-bell"></i><span class="sb-lbl">Notifications</span></a>
+        <a href="{% url 'notifications:message_threads' %}" class="sb-link {% block nav_messages %}{% endblock %}" title="Messages"><i class="fas fa-comments"></i><span class="sb-lbl">Messages</span></a>
       </div>
     </div>
 
@@ -345,6 +370,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="{% static 'js/app.js' %}?v=4"></script>
 {% block extra_js %}{% endblock %}
+
+<a href="{% url 'notifications:message_new' %}" class="floating-message-button" title="New staff message"><i class="fas fa-comment-alt"></i></a>
 
 <!-- PWA: Service Worker + Install Prompt -->
 <script>

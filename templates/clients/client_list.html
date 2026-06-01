@@ -85,6 +85,7 @@
       <tbody id="client-tbody">
         {% for client in clients %}
         <tr class="client-row"
+            data-pk="{{ client.pk }}"
             data-name="{{ client.full_name|lower }}"
             data-id="{{ client.client_id|lower }}"
             data-tin="{{ client.tin|lower }}"
@@ -238,8 +239,36 @@
 
   // Run on load to reflect server-side filters
   applyFilters();
+  refreshOutstandingBalances();
 
   // Modals
+  function refreshOutstandingBalances() {
+    var refreshUrl = '{% url "billing:refresh_balances_json" %}';
+    fetch(refreshUrl, { credentials: 'same-origin' })
+      .then(function(response) {
+        return response.ok ? response.json() : Promise.reject('Refresh failed');
+      })
+      .then(function(data) {
+        if (!data.clients) return;
+        document.querySelectorAll('.client-row').forEach(function(row) {
+          var pk = row.dataset.pk;
+          var outstanding = data.clients[pk];
+          if (outstanding === undefined) return;
+          row.dataset.outstanding = outstanding;
+          var amt = parseFloat(outstanding) || 0;
+          var cell = row.querySelector('td:nth-last-child(2)');
+          if (cell) {
+            cell.textContent = amt.toLocaleString();
+            cell.className = amt > 0 ? 'ugx-red' : 'ugx-green';
+          }
+        });
+        applyFilters();
+      })
+      .catch(function() {
+        // Keep existing values if refresh fails.
+      });
+  }
+
   function modal(openId, closeIds, overlayId) {
     var el = document.getElementById(overlayId);
     document.getElementById(openId).addEventListener('click', function(){ el.classList.add('open'); });

@@ -500,3 +500,102 @@ def communication_log_delete(request, pk):
         log.delete()
         messages.success(request, 'Log entry deleted.')
     return redirect('clients:detail', pk=client_pk)
+
+
+from django.http import JsonResponse
+
+@login_required
+def check_duplicates(request):
+    """AJAX: return existing clients matching TIN or phone."""
+    tin   = request.GET.get('tin', '').strip()
+    phone = request.GET.get('phone', '').strip()
+    exclude_pk = request.GET.get('exclude', '')
+
+    qs = Client.objects.none()
+    if tin:
+        qs = qs | Client.objects.filter(tin=tin)
+    if phone:
+        qs = qs | Client.objects.filter(
+            Q(phone_primary=phone) | Q(phone_whatsapp=phone)
+        )
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+
+    results = []
+    for c in qs.distinct()[:5]:
+        results.append({
+            'pk': c.pk,
+            'client_id': c.client_id,
+            'full_name': c.full_name,
+            'tin': c.tin,
+            'phone': c.phone_primary,
+            'status': c.get_status_display(),
+            'url': f'/clients/{c.pk}/',
+        })
+    return JsonResponse({'duplicates': results})
+
+
+@login_required
+def merge_clients(request, pk):
+    """Merge source client (pk) INTO target client. Source is deleted after merge."""
+    if not request.user.is_manager_or_admin() and not request.user.is_superuser:
+        messages.error(request, 'Only managers and admins can merge clients.')
+        return redirect('clients:detail', pk=pk)
+
+    source = get_object_or_404(Client, pk=pk)
+
+    if request.method == 'POST':
+        target_pk = request.POST.get('target_pk', '').strip()
+        if not target_pk:
+            messages.error(request, 'Please select a target client to merge into.')
+            return redirect('clients:detail', pk=pk)
+
+        target = get_object_or_404(Client, pk=target_pk)
+        if target.pk == source.pk:
+            messages.error(request, 'Cannot merge a client into itself.')
+            return redirect('clients:detail', pk=pk)
+
+        # Re-assign all related records from source → target
+        source.invoices.all().update(client=target)
+        source.job_cards.all().update(client=target)
+        source.walkin_intakes.all().update(client=target)
+        source.obligations.all().update(client=target)
+        source.credentials.all().update(client=target)
+        source.documents.all().update(client=target)
+        source.communications.all().update(client=target)
+        source.subscriptions.all().update(client=target)
+
+        # Fill in missing fields on target from source
+        if not target.tin and source.tin:
+            target.tin = source.tin
+        if not target.phone_whatsapp and source.phone_whatsapp:
+            target.phone_whatsapp = source.phone_whatsapp
+        if not target.email and source.email:
+            target.email = source.email
+        if not target.physical_address and source.physical_address:
+            target.physical_address = source.physical_address
+        if not target.notes and source.notes:
+            target.notes = source.notes
+        target.save()
+
+        # Recalculate outstanding for target
+        from billing.signals import recalc_client_outstanding
+        recalc_client_outstanding(target)
+
+        source_name = source.get_display_name()
+        source.delete()
+
+        messages.success(request, f'✅ "{source_name}" merged into "{target.get_display_name()}". All records transferred.')
+        return redirect('clients:detail', pk=target.pk)
+
+    # GET — show merge confirmation page
+    # Find potential merge targets (same TIN or phone)
+    suggestions = Client.objects.filter(
+        Q(tin=source.tin) | Q(phone_primary=source.phone_primary)
+    ).exclude(pk=source.pk).distinct()[:10] if (source.tin or source.phone_primary) else Client.objects.none()
+
+    return render(request, 'clients/merge_confirm.html', {
+        'source': source,
+        'suggestions': suggestions,
+        'all_clients': Client.objects.exclude(pk=source.pk).order_by('full_name'),
+    })

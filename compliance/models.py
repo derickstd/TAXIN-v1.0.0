@@ -24,7 +24,6 @@ class ComplianceDeadline(models.Model):
         ('filed_and_paid', 'Filed and Paid'),
         ('filed_not_paid', 'Filed and Not Paid'),
         ('paid_not_filed', 'Paid but Not Filed'),
-        ('none', 'None'),
         ('overdue', 'Overdue'),
         ('penalty_issued', 'Penalty Issued'),
         ('waived', 'Waived'),

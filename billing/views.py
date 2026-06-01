@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import F, Sum, Q
+from django.http import JsonResponse
 from django.utils import timezone
 from decimal import Decimal, InvalidOperation
 from .models import Invoice, Payment
@@ -253,3 +254,17 @@ def refresh_outstanding_balances(request):
         messages.success(request, f'✅ Refreshed outstanding balances for all clients. {updated} updated.')
     
     return redirect('clients:list')
+
+
+@login_required
+def refresh_outstanding_balances_json(request):
+    """Refresh client outstanding balances and return them to the browser."""
+    from billing.signals import update_client_outstanding
+
+    clients = Client.objects.all()
+    result = {}
+    for client in clients:
+        update_client_outstanding(client)
+        result[str(client.pk)] = str(client.total_outstanding)
+
+    return JsonResponse({'clients': result})

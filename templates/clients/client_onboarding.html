@@ -374,7 +374,7 @@ $(document).ready(function(){
 function addServiceField(){
   var serviceOptions = '<option value="">Select service...</option>';
   serviceTypes.forEach(function(service){
-    serviceOptions += `<option value="${service.id}" data-price="${service.price}">${service.name} (UGX ${service.price.toLocaleString()})</option>`;
+    serviceOptions += `<option value="${service.id}" data-price="${service.price}" data-deadlinetype="${service.deadline_type}">${service.name} (UGX ${service.price.toLocaleString()})</option>`;
   });
   
   var html = `
@@ -389,11 +389,11 @@ function addServiceField(){
             ${serviceOptions}
           </select>
         </div>
-        <div>
+        <div class="price-row" style="display:none">
           <label class="form-label fs-xs">Agreed Price (UGX)</label>
           <input type="number" name="service_price_${serviceCount}" class="form-control service-price-${serviceCount}" style="font-size:.83rem" placeholder="Leave blank to use default price" min="0" step="1000">
         </div>
-        <div>
+        <div class="frequency-row" style="display:none">
           <label class="form-label fs-xs">Frequency</label>
           <select name="service_frequency_${serviceCount}" class="form-control" style="font-size:.83rem">
             <option value="monthly">Monthly</option>
@@ -410,13 +410,20 @@ function addServiceField(){
   $(`.service-select[data-index="${serviceCount}"]`).on('change', function(){
     var selectedOption = $(this).find('option:selected');
     var price = selectedOption.data('price');
-    var serviceName = selectedOption.text();
-    
+    var deadlineType = selectedOption.data('deadlinetype');
     if(price){
-      // Auto-fill the price field
       $(`.service-price-${serviceCount}`).val(price);
-      // Update placeholder to show default price
       $(`.service-price-${serviceCount}`).attr('placeholder', `Default: UGX ${price.toLocaleString()}`);
+    }
+    // Show/hide price and frequency based on deadline_type
+    var priceRow = $(this).closest('.form-stack').find('.price-row');
+    var freqRow = $(this).closest('.form-stack').find('.frequency-row');
+    if(deadlineType === 'none') {
+      priceRow.hide();
+      freqRow.hide();
+    } else {
+      priceRow.show();
+      freqRow.show();
     }
   });
   
