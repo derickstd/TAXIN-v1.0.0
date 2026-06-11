@@ -19,15 +19,15 @@ def auto_update_jobcard_on_line_item_change(sender, instance, **kwargs):
     if not all_items:
         return
 
-    all_paid    = all(li.status == 'handled_paid'                       for li in all_items)
-    all_handled = all(li.status in ('handled_paid', 'handled_not_paid') for li in all_items)
-    any_handled = any(li.status in ('handled_paid', 'handled_not_paid') for li in all_items)
+    all_paid    = all(li.status == 'handled_paid'                           for li in all_items)
+    all_handled = all(li.status in ('handled_paid', 'handled_not_paid')      for li in all_items)
+    any_progress = any(li.status in ('handled_paid', 'handled_not_paid', 'paid_not_handled') for li in all_items)
 
     if all_paid and job.status != 'completed':
         JobCard.objects.filter(pk=job.pk).update(status='completed', completed_at=timezone.now())
     elif all_handled and job.status not in ('completed', 'pending_payment'):
         JobCard.objects.filter(pk=job.pk).update(status='pending_payment')
-    elif any_handled and job.status == 'open':
+    elif any_progress and job.status == 'open':
         JobCard.objects.filter(pk=job.pk).update(status='in_progress')
 
     # Only sync invoice totals when no payments exist yet — once a client has paid,

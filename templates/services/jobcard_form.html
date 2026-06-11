@@ -78,18 +78,11 @@
               {% for val,label in form.fields.priority.choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
             </select>
           </div>
-          <div class="mb-2" id="dueDateRow" style="display:none">
-            <label class="form-label">Due Date</label>
-            <input type="date" name="due_date" class="form-ctrl">
-          </div>
 
           <div class="mb-2">
             <label class="form-label">Notes</label>
             <textarea name="notes" class="form-ctrl" rows="2" placeholder="Special instructions…"></textarea>
           </div>
-          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.82rem">
-            <input type="checkbox" name="is_periodic"> <span>Recurring monthly job</span>
-          </label>
           <div style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border)">
             <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.82rem">
               <input type="checkbox" name="create_invoice" value="yes" id="createInvoiceChk" checked>
@@ -243,12 +236,10 @@ $(document).ready(function(){
     if(price){ row.find('.li-default').val(price); if(!row.find('.li-price').val())row.find('.li-price').val(price); }
     row.find('.li-vat-badge').toggle(vat);
     recalcTotal();
-    updateDueDateVisibility();
   });
   $(document).on('input','.li-price',recalcTotal);
   $(document).on('change','.li-delete',function(){
     recalcTotal();
-    updateDueDateVisibility();
   });
 
   // Period label auto-fill
@@ -257,21 +248,7 @@ $(document).ready(function(){
     if(m&&y&&m!=='Month'){ $('.li-period').each(function(){if(!$(this).val())$(this).val(m+' '+y);}); }
   });
 
-  function updateDueDateVisibility(){
-    var showDueDate = false;
-    $('.s2-svc').each(function(){
-      var selected = $(this).find('option:selected');
-      var deadlineType = selected.data('deadlinetype');
-      if(deadlineType && deadlineType !== 'none'){
-        showDueDate = true;
-        return false;
-      }
-    });
-    $('#dueDateRow').toggle(showDueDate);
-  }
-
   recalcTotal();
-  updateDueDateVisibility();
 
   // Invoice toggle
   $('#createInvoiceChk').on('change', function(){
@@ -320,7 +297,6 @@ $(document).ready(function(){
     });
     $('#lineItems').append(template);
     template.find('.s2-svc').select2({theme:'bootstrap-5',allowClear:false,placeholder:'Search services…'});
-    updateDueDateVisibility();
   });
 });
 </script>

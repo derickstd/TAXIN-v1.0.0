@@ -102,6 +102,7 @@ class JobCardLineItem(models.Model):
     ITEM_STATUS = [
         ('handled_paid','Handled & Paid'),
         ('handled_not_paid','Handled — Awaiting Payment'),
+        ('paid_not_handled','Paid — Not Yet Handled'),
         ('not_handled','Not Yet Handled'),
     ]
     job_card = models.ForeignKey(JobCard, on_delete=models.CASCADE, related_name='line_items')

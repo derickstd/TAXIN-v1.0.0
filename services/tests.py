@@ -1,7 +1,9 @@
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from decimal import Decimal
 
+from billing.models import Invoice, Payment
 from clients.models import Client
 from core.models import User
 from services.models import JobCard, JobCardLineItem, ServiceType
@@ -176,3 +178,81 @@ class ServiceCatalogueManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertFalse(ServiceType.objects.filter(name='Blocked Service').exists())
+
+
+class JobCardLineItemStatusTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='tester2',
+            password='pass1234',
+            role='tax_officer',
+        )
+        self.client.force_login(self.user)
+        self.client_obj = Client.objects.create(
+            full_name='Future Ltd',
+            phone_primary='+256700000001',
+            created_by=self.user,
+        )
+        self.service = ServiceType.objects.create(
+            name='Compliance Check',
+            category='ura_advisory',
+            default_price=Decimal('90000'),
+            vat_applicable=False,
+        )
+
+    def test_paid_not_yet_handled_line_item_sets_job_in_progress(self):
+        job = JobCard.objects.create(client=self.client_obj, created_by=self.user)
+        item = JobCardLineItem.objects.create(
+            job_card=job,
+            service_type=self.service,
+            default_price=Decimal('90000'),
+            negotiated_price=Decimal('90000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+        )
+
+        response = self.client.post(reverse('services:line_status', args=[item.pk]), {
+            'status': 'paid_not_handled',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        job.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual(item.status, 'paid_not_handled')
+        self.assertEqual(job.status, 'in_progress')
+
+    def test_paid_not_yet_handled_invoice_payment_does_not_auto_complete_job(self):
+        job = JobCard.objects.create(client=self.client_obj, created_by=self.user)
+        item = JobCardLineItem.objects.create(
+            job_card=job,
+            service_type=self.service,
+            default_price=Decimal('90000'),
+            negotiated_price=Decimal('90000'),
+            vat_amount=Decimal('0'),
+            status='paid_not_handled',
+        )
+        invoice = Invoice.objects.create(
+            client=self.client_obj,
+            job_card=job,
+            due_date=timezone.now().date(),
+            subtotal=item.negotiated_price,
+            vat_total=item.vat_amount,
+            grand_total=item.negotiated_price + item.vat_amount,
+            status='sent',
+            created_by=self.user,
+        )
+
+        Payment.objects.create(
+            invoice=invoice,
+            amount=invoice.grand_total,
+            method='cash',
+            received_by=self.user,
+        )
+
+        job.refresh_from_db()
+        item.refresh_from_db()
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, 'paid')
+        self.assertEqual(invoice.amount_paid, invoice.grand_total)
+        self.assertEqual(item.status, 'paid_not_handled')
+        self.assertNotEqual(job.status, 'completed')

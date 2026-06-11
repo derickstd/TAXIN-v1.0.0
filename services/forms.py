@@ -11,10 +11,9 @@ class JobCardForm(forms.ModelForm):
         model = JobCard
         fields = [
             'client', 'period_month', 'period_year', 'assigned_to',
-            'priority', 'due_date', 'notes', 'is_periodic',
+            'priority', 'notes',
         ]
         widgets = {
-            'due_date': forms.DateInput(attrs={'type': 'date'}),
             'notes': forms.Textarea(attrs={'rows': 3}),
         }
 
@@ -26,9 +25,7 @@ class JobCardForm(forms.ModelForm):
         self.fields['assigned_to'].required = False
         self.fields['period_month'].required = False
         self.fields['period_year'].required = False
-        self.fields['due_date'].required = False
         self.fields['notes'].required = False
-        self.fields['is_periodic'].required = False
         month_choices = [('', '-- Month --')] + [(i, calendar.month_name[i]) for i in range(1, 13)]
         self.fields['period_month'].widget = forms.Select(choices=month_choices)
 
