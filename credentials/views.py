@@ -58,8 +58,10 @@ def credential_list(request):
     filtered_client = None
     if client_filter:
         filtered_client = Client.objects.filter(pk=client_filter).first()
+    from core.utils import paginate_queryset
+    page_obj = paginate_queryset(request, creds.order_by('client__full_name'), per_page=25)
     return render(request, 'credentials/credential_list.html', {
-        'creds': creds, 'expiring_soon': expiring_soon,
+        'creds': page_obj, 'page_obj': page_obj, 'expiring_soon': expiring_soon,
         'today': today, 'q': q, 'type_filter': type_filter,
         'cred_types': ClientCredential.CRED_TYPE,
         'add_form': CredentialForm(),

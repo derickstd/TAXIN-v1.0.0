@@ -7,6 +7,8 @@ from django.utils import timezone
 from decimal import Decimal, InvalidOperation
 from .models import Invoice, Payment
 from clients.models import Client
+from core.utils import paginate_queryset
+from core.duplicate_detection import check_duplicate_transaction
 
 
 @login_required
@@ -26,8 +28,9 @@ def invoice_list(request):
     total_paid = agg['total_paid'] or 0
     totals = {'total_invoiced': total_invoiced, 'total_paid': total_paid,
               'outstanding': total_invoiced - total_paid}
+    page_obj = paginate_queryset(request, invoices.order_by('-date_issued'), per_page=25)
     return render(request, 'billing/invoice_list.html', {
-        'invoices': invoices, 'status': status, 'q': q,
+        'invoices': page_obj, 'page_obj': page_obj, 'status': status, 'q': q,
         'status_choices': Invoice.STATUS, 'totals': totals,
     })
 
@@ -102,6 +105,31 @@ def invoice_create(request):
         else:
             status = 'draft'
         
+        # Check for similar invoices recently created for same client/amount
+        similar_invoices = Invoice.objects.filter(
+            client=client,
+            document_type=document_type,
+            created_at__gte=timezone.now().date() - timezone.timedelta(days=14),
+        ).order_by('-created_at')
+        allow_create = True
+        for s in similar_invoices:
+            # compare amounts within small tolerance
+            try:
+                if abs(float(s.grand_total) - float(amount)) <= max(1.0, float(amount) * 0.01):
+                    allow_create = False
+                    break
+            except Exception:
+                continue
+
+        if not allow_create and request.POST.get('force_create') != '1':
+            return render(request, 'billing/duplicate_invoice.html', {
+                'client': client,
+                'document_type': document_type,
+                'amount': amount,
+                'similar_invoices': similar_invoices[:5],
+                'orig_post': request.POST,
+            })
+
         inv = Invoice.objects.create(
             client=client, document_type=document_type,
             due_date=due_date, valid_until=valid_until,

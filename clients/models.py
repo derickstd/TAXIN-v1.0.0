@@ -4,7 +4,7 @@ from core.models import User
 
 class Client(models.Model):
     CLIENT_TYPE = [('individual','Individual'),('company','Company'),('ngo','NGO'),('partnership','Partnership')]
-    STATUS = [('active','Active'),('dormant','Dormant'),('suspended','Suspended'),('blacklisted','Blacklisted')]
+    STATUS = [('active','Active'),('dormant','Dormant'),('suspended','Suspended'),('blacklisted','Blacklisted'),('merged','Merged')]
 
     client_id = models.CharField(max_length=20, unique=True, editable=False)
     client_type = models.CharField(max_length=20, choices=CLIENT_TYPE, default='individual')
@@ -45,6 +45,14 @@ class Client(models.Model):
 
     def get_whatsapp_number(self):
         return self.phone_whatsapp or self.phone_primary
+    
+    def find_duplicate_candidates(self, similarity_threshold=80):
+        """Find potential duplicate clients."""
+        from core.duplicate_detection import find_duplicate_clients
+        return find_duplicate_clients(
+            client=self,
+            similarity_threshold=similarity_threshold
+        )
 
 class WalkInIntake(models.Model):
     OUTCOME = [('pending','Pending'),('job_created','Job Created'),('declined','Declined'),('referred','Referred')]

@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Possible duplicate invoice detected</h2>
+<p>There are recent invoices that look similar to this one. Review before creating a new invoice.</p>
+<ul>
+    {% for inv in similar_invoices %}
+    <li>{{ inv.invoice_number }} — {{ inv.get_doc_label }} — UGX {{ inv.grand_total }} — {{ inv.date_issued }} — <a href="/billing/{{ inv.pk }}/">View</a></li>
+    {% endfor %}
+</ul>
+<form method="post">
+    {% csrf_token %}
+    {% if orig_post %}
+        {% for k, v in orig_post.items %}
+            <input type="hidden" name="{{ k }}" value="{{ v }}" />
+        {% endfor %}
+    {% endif %}
+    <button type="submit" name="force_create" value="1" class="btn btn-success">Force create invoice</button>
+    <a href="javascript:history.back()" class="btn btn-link">Cancel</a>
+</form>
+{% endblock %}

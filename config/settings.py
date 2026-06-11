@@ -55,7 +55,17 @@ TEMPLATES = [{
     },
 }]
 
-DATABASES = {'default': {'ENGINE': 'django.db.backends.postgresql', 'NAME': 'primeserver','USER' : 'postgres', 'HOST' : 'localhost', 'PORT': 5432,'PASSWORD' : '@Developer25'}}
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'primeserver',
+        'USER': 'postgres',
+        'HOST': 'localhost',
+        'PORT': 5432,
+        'PASSWORD': '@Developer25',
+        'ATOMIC_REQUESTS': False,
+    }
+}
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Africa/Kampala'

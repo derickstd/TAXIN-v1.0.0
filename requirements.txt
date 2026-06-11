@@ -19,6 +19,8 @@ multidict==6.7.1
 openpyxl==3.1.5
 pillow==12.2.0
 propcache==0.4.1
+reportlab==4.2.5
+django-pagination==1.0.7
 psycopg2-binary==2.9.11
 pycparser==3.0
 PyJWT==2.12.1

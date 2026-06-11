@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.db.models import Q, Sum
 from django.utils import timezone
 from .models import Client, WalkInIntake, CommunicationLog
+from core.utils import paginate_queryset
 from .forms import ClientForm, WalkInIntakeForm
 from billing.models import Invoice
 
@@ -175,12 +176,15 @@ def client_list(request):
             invoices__status__in=['sent', 'partially_paid', 'overdue']
         ).distinct()
 
+    page_obj = paginate_queryset(request, clients.order_by('full_name'), per_page=25)
+
     if request.headers.get('HX-Request'):
-        return render(request, 'clients/partials/client_rows.html', {'clients': clients})
+        return render(request, 'clients/partials/client_rows.html', {'clients': page_obj})
 
     total_outstanding = clients.aggregate(s=Sum('total_outstanding'))['s'] or 0
     return render(request, 'clients/client_list.html', {
-        'clients': clients, 'q': q, 'status': status, 'ctype': ctype, 'debt_filter': debt_filter,
+        'clients': page_obj, 'page_obj': page_obj,
+        'q': q, 'status': status, 'ctype': ctype, 'debt_filter': debt_filter,
         'status_choices': Client.STATUS, 'type_choices': Client.CLIENT_TYPE,
         'total_outstanding': total_outstanding,
         'counts': {s: Client.objects.filter(status=s).count() for s, _ in Client.STATUS},
@@ -238,6 +242,25 @@ def client_create(request):
     if request.method == 'POST':
         form = ClientForm(request.POST)
         if form.is_valid():
+            # Check for potential duplicate clients before saving
+            from core.duplicate_detection import find_duplicate_clients
+            dup_candidates = find_duplicate_clients(
+                full_name=form.cleaned_data.get('full_name'),
+                phone=form.cleaned_data.get('phone_primary'),
+                tin=form.cleaned_data.get('tin'),
+                similarity_threshold=80,
+            )
+            if dup_candidates:
+                # Present duplicates to the user to choose edit or cancel
+                # If the user explicitly chose to force-create, continue
+                if request.POST.get('force_create') == '1':
+                    pass
+                else:
+                        return render(request, 'clients/duplicate_found.html', {
+                            'form': form,
+                            'duplicates': dup_candidates,
+                            'orig_post': request.POST,
+                        })
             from core.email_utils import send_welcome_email
             from credentials.models import ClientCredential
             from services.models import ClientServiceSubscription, ServiceType

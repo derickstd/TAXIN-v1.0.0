@@ -22,6 +22,8 @@
     </div>
   </div>
 
+  {% include "components/export_buttons.html" with excel_url="core:export_jobcards_excel" pdf_url="core:export_jobcards_pdf" show_condition=page_obj.paginator.count %}
+
   <div class="card-box card-compact">
     <div class="card-head"><i class="fas fa-bars-progress"></i>Status Summary</div>
     <div class="card-body">

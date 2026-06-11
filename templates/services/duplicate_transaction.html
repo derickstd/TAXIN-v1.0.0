@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Possible duplicate transaction detected</h2>
+<p>The system found similar transactions for this client and period. Review them before creating a new one.</p>
+<ul>
+    {% for item in similar %}
+    <li>
+        <strong>{{ item.type }}</strong>: {{ item.description }} — {% if item.due_date %}Due {{ item.due_date }}{% elif item.date %}Date {{ item.date }}{% endif %}
+        {% if item.type == 'invoice' %}
+            <a href="/billing/{{ item.object.pk }}/">View Invoice</a>
+        {% elif item.type == 'job_card' %}
+            <a href="/services/{{ item.object.pk }}/">View Job</a>
+        {% elif item.type == 'compliance_deadline' %}
+            <a href="/compliance/{{ item.object.pk }}/">View Deadline</a>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+<form method="post">
+    {% csrf_token %}
+    {% if orig_post %}
+        {% for k, v in orig_post.items %}
+            <input type="hidden" name="{{ k }}" value="{{ v }}" />
+        {% endfor %}
+    {% endif %}
+    <button type="submit" name="force_create" value="1" class="btn btn-success">Force create new transaction</button>
+    <a href="javascript:history.back()" class="btn btn-link">Cancel</a>
+</form>
+{% endblock %}

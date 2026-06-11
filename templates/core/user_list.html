@@ -9,6 +9,9 @@
 </div>
 <div class="card">
   <div class="card-hd"><i class="fas fa-users"></i>All Staff Accounts ({{ users|length }})</div>
+  {% if users|length > 20 %}
+  {% include "components/export_buttons.html" with excel_url="core:export_users_excel" pdf_url="core:export_users_pdf" show_condition=21 %}
+  {% endif %}
   <div class="tbl-wrap">
     <table class="tbl">
       <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Theme</th><th>WhatsApp</th><th>Email (Notify)</th><th>Active</th><th>Debt Alerts</th><th></th></tr></thead>

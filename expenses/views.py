@@ -9,6 +9,7 @@ from clients.models import Client
 from services.models import JobCard
 from core.decorators import manager_or_admin_required
 import datetime
+from core.utils import paginate_queryset
 
 
 class ExpenseForm(forms.ModelForm):
@@ -41,8 +42,9 @@ def expense_list(request):
     pending_count = expenses.filter(status='submitted').count()
     by_cat = expenses.values('category__name').annotate(total=Sum('amount')).order_by('-total')
     categories = ExpenseCategory.objects.filter(is_active=True).order_by('name')
+    page_obj = paginate_queryset(request, expenses, per_page=25)
     return render(request, 'expenses/expense_list.html', {
-        'expenses': expenses, 'total': total, 'approved_total': approved_total,
+        'expenses': page_obj, 'page_obj': page_obj, 'total': total, 'approved_total': approved_total,
         'pending_count': pending_count, 'by_cat': by_cat,
         'categories': categories, 'cat_filter': cat,
     })
@@ -92,7 +94,8 @@ class ExpenseCategoryForm(forms.ModelForm):
 @manager_or_admin_required
 def category_list(request):
     categories = ExpenseCategory.objects.all().order_by('name')
-    return render(request, 'expenses/category_list.html', {'categories': categories})
+    page_obj = paginate_queryset(request, categories, per_page=50)
+    return render(request, 'expenses/category_list.html', {'categories': page_obj, 'page_obj': page_obj})
 
 
 @login_required

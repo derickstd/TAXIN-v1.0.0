@@ -10,6 +10,8 @@ from credentials.models import ClientCredential
 
 @login_required
 def deadline_list(request):
+    from core.utils import paginate_queryset
+    
     today = timezone.now().date()
     seven_days = today + timezone.timedelta(days=7)
     ComplianceDeadline.objects.filter(status='upcoming', due_date__lt=today).update(status='overdue')
@@ -18,7 +20,7 @@ def deadline_list(request):
     ).select_related('obligation__client', 'obligation__service_type').order_by('due_date')
     all_deadlines = ComplianceDeadline.objects.select_related(
         'obligation__client', 'obligation__service_type', 'filed_by', 'invoice'
-    ).order_by('due_date')[:100]
+    ).order_by('due_date')
 
     credentials = ClientCredential.objects.select_related('client', 'last_accessed_by').order_by('client__full_name')
     q = request.GET.get('q', '')
@@ -28,8 +30,10 @@ def deadline_list(request):
             Q(client__full_name__icontains=q) | Q(label__icontains=q)
         )
 
+    page_obj = paginate_queryset(request, all_deadlines, per_page=25)
+    
     return render(request, 'compliance/deadline_list.html', {
-        'upcoming': upcoming, 'all_deadlines': all_deadlines, 'today': today,
+        'upcoming': upcoming, 'page_obj': page_obj, 'all_deadlines': page_obj, 'today': today,
         'credentials': credentials, 'q': q,
     })
 

@@ -6,22 +6,23 @@ from django.db.models import Max
 from .models import NotificationLog, MessageThread, Message
 from .forms import NewMessageForm, ReplyMessageForm
 from .services import send_debt_reminders, send_manager_debt_report
+from core.utils import paginate_queryset
 
 @login_required
 def notification_list(request):
-    logs = NotificationLog.objects.select_related('client','triggered_by').all()[:200]
-    return render(request, 'notifications/log_list.html', {'logs': logs})
+    logs_qs = NotificationLog.objects.select_related('client','triggered_by').order_by('-created_at')
+    page_obj = paginate_queryset(request, logs_qs, per_page=50)
+    return render(request, 'notifications/log_list.html', {'logs': page_obj, 'page_obj': page_obj})
 
 @login_required
 def message_threads(request):
-    threads = list(MessageThread.objects
-               .filter(participants=request.user)
-               .annotate(last_activity=Max('messages__created_at'))
-               .order_by('-last_activity', '-created_at'))
-    for thread in threads:
+    threads_qs = MessageThread.objects.filter(participants=request.user)
+    threads_qs = threads_qs.annotate(last_activity=Max('messages__created_at')).order_by('-last_activity', '-created_at')
+    page_obj = paginate_queryset(request, threads_qs, per_page=25)
+    for thread in page_obj.object_list:
         thread.unread_count_for_user = thread.messages.exclude(read_by=request.user).count()
     return render(request, 'notifications/message_threads.html', {
-        'threads': threads,
+        'threads': page_obj, 'page_obj': page_obj,
     })
 
 @login_required

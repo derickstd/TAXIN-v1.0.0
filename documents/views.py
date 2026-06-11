@@ -9,6 +9,7 @@ from expenses.models import Expense
 from clients.models import Client
 from .models import ClientDocument
 import calendar
+from core.utils import paginate_queryset
 
 @login_required
 def documents_home(request):
@@ -21,8 +22,9 @@ def doc_list(request):
     docs = ClientDocument.objects.select_related('client', 'uploaded_by', 'job_card')
     if client_pk:
         docs = docs.filter(client_id=client_pk)
+    page_obj = paginate_queryset(request, docs.order_by('-uploaded_at'), per_page=25)
     return render(request, 'documents/doc_list.html', {
-        'docs': docs,
+        'docs': page_obj, 'page_obj': page_obj,
         'client_filter': client_pk,
         'doc_types': ClientDocument.DOC_TYPE,
         'clients': Client.objects.order_by('full_name'),

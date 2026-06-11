@@ -6,7 +6,7 @@ User = get_user_model()
 class NewMessageForm(forms.Form):
     recipients = forms.ModelMultipleChoiceField(
         queryset=User.objects.none(),
-        widget=forms.SelectMultiple(attrs={'class': 'form-ctrl', 'size': '6'}),
+        widget=forms.SelectMultiple(attrs={'class': 'form-ctrl recipient-select', 'style': 'width:100%'}),
         help_text='Choose one or more staff recipients.',
     )
     subject = forms.CharField(

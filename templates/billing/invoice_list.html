@@ -34,6 +34,8 @@
     </div>
   </div>
 
+  {% include "components/export_buttons.html" with excel_url="core:export_invoices_excel" pdf_url="core:export_invoices_pdf" show_condition=page_obj.paginator.count %}
+
   <div class="card-box card-compact">
     <div class="card-head"><i class="fas fa-layer-group"></i>View Summary</div>
     <div class="card-body">

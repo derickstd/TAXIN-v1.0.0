@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Possible duplicate clients found</h2>
+<p>The system found existing clients similar to the one you're registering. Choose an action:</p>
+<ul>
+    {% for c, score, reasons in duplicates %}
+    <li>
+        <strong>{{ c.get_display_name }} ({{ c.client_id }})</strong> — {{ score }}% — {{ reasons }}
+        <a class="btn btn-sm btn-primary" href="/clients/{{ c.pk }}/">View</a>
+        <a class="btn btn-sm btn-secondary" href="/clients/{{ c.pk }}/edit/">Edit</a>
+    </li>
+    {% endfor %}
+</ul>
+<p>If none of the above are the same client, you can continue registering by clicking Continue below.</p>
+<form method="post">
+    {% csrf_token %}
+    {# Preserve original form data as hidden inputs so a force-create keeps values #}
+    {% if orig_post %}
+        {% for k, v in orig_post.items %}
+            <input type="hidden" name="{{ k }}" value="{{ v }}" />
+        {% endfor %}
+    {% endif %}
+    <button type="submit" name="force_create" value="1" class="btn btn-success">Continue and create new client</button>
+    <a href="/clients/new/" class="btn btn-link">Cancel</a>
+</form>
+{% endblock %}

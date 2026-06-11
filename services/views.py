@@ -7,6 +7,8 @@ from decimal import Decimal
 from .models import JobCard, JobCardLineItem, ServiceType, StaffActivityLog, TimeEntry
 from .forms import JobCardForm, LineItemFormSet, ServiceTypeForm
 import calendar as cal
+from core.utils import paginate_queryset
+from clients.models import Client
 
 
 def _auto_log_time(job, user, description, hours=Decimal('0.25')):
@@ -46,17 +48,17 @@ def _service_catalogue_context(request, service_form=None, open_add_modal=False)
 
 @login_required
 def jobcard_list(request):
-    all_jobs = list(JobCard.objects.select_related('client','assigned_to').prefetch_related('line_items').all())
+    all_jobs_qs = JobCard.objects.select_related('client','assigned_to').prefetch_related('line_items').all()
     status = request.GET.get('status','')
     q = request.GET.get('q','')
-    jobs = all_jobs
-    if status: jobs = [j for j in jobs if j.status == status]
+    jobs_qs = all_jobs_qs
+    if status: jobs_qs = jobs_qs.filter(status=status)
     if q:
-        q_lower = q.lower()
-        jobs = [j for j in jobs if q_lower in j.job_number.lower() or q_lower in j.client.full_name.lower()]
-    kanban_cols = [(s, label, [j for j in all_jobs if j.status == s]) for s, label in JobCard.STATUS]
+        jobs_qs = jobs_qs.filter(Q(job_number__icontains=q) | Q(client__full_name__icontains=q))
+    kanban_cols = [(s, label, list(all_jobs_qs.filter(status=s))) for s, label in JobCard.STATUS]
+    page_obj = paginate_queryset(request, jobs_qs.order_by('-created_at'), per_page=25)
     return render(request, 'services/jobcard_list.html', {
-        'jobs': jobs, 'kanban_cols': kanban_cols, 'status': status, 'q': q,
+        'jobs': page_obj, 'page_obj': page_obj, 'kanban_cols': kanban_cols, 'status': status, 'q': q,
         'status_choices': JobCard.STATUS, 'today': timezone.now().date(),
     })
 
@@ -84,6 +86,31 @@ def jobcard_create(request):
         formset = LineItemFormSet(request.POST)
         intake_pk = request.POST.get('walkin_intake_pk')
         from_walkin = bool(intake_pk) or bool(request.POST.get('new_job_reg'))
+
+        # Before creating, check for similar existing transactions to avoid duplicates
+        from core.duplicate_detection import check_duplicate_transaction
+        period_month = request.POST.get('period_month') or request.POST.get('period_month')
+        period_year = request.POST.get('period_year') or request.POST.get('period_year')
+        svc_id = request.POST.get('jobcardlineitem_set-0-service_type')
+        svc = ServiceType.objects.filter(pk=svc_id).first() if svc_id else None
+        similar = check_duplicate_transaction(
+            client=Client.objects.filter(pk=request.POST.get('client')).first(),
+            service_type=svc,
+            period_year=period_year and int(period_year) or None,
+            period_month=period_month and int(period_month) or None,
+            within_days=14,
+        )
+        if similar:
+            # allow force-create via POST param
+            if request.POST.get('force_create') == '1':
+                pass
+            else:
+                return render(request, 'services/duplicate_transaction.html', {
+                    'similar': similar,
+                    'form': form,
+                    'formset': formset,
+                    'orig_post': request.POST,
+                })
 
         if form.is_valid() and (formset.is_valid() or from_walkin):
             job = form.save(commit=False)
@@ -284,7 +311,12 @@ def update_jobcard_status(request, pk):
 
 @login_required
 def service_list(request):
-    return render(request, 'services/service_list.html', _service_catalogue_context(request))
+    ctx = _service_catalogue_context(request)
+    services = ctx.get('services')
+    page_obj = paginate_queryset(request, services.order_by('category', 'name'), per_page=50)
+    ctx['services'] = page_obj
+    ctx['page_obj'] = page_obj
+    return render(request, 'services/service_list.html', ctx)
 
 
 @login_required
