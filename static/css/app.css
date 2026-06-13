@@ -424,10 +424,10 @@ img{max-width:100%}
 /* ── KPI ── */
 .kpi,.kpi-card{background:var(--card);border-radius:var(--r);padding:.85rem .95rem;
   border-left:4px solid var(--blue);box-shadow:var(--shadow);height:100%}
-.kpi.gold,.kpi-card.gold{border-left-color:var(--gold)}
-.kpi.green,.kpi-card.green{border-left-color:var(--green)}
-.kpi.red,.kpi-card.red{border-left-color:var(--red)}
-.kpi.purple,.kpi-card.purple{border-left-color:var(--purple)}
+.kpi.gold,.kpi-card.gold{background:rgba(245,158,11,0.08);border-left-color:var(--gold)}
+.kpi.green,.kpi-card.green{background:rgba(5,150,105,0.08);border-left-color:var(--green)}
+.kpi.red,.kpi-card.red{background:rgba(220,38,38,0.08);border-left-color:var(--red)}
+.kpi.purple,.kpi-card.purple{background:rgba(139,92,246,0.08);border-left-color:var(--purple)}
 .kpi-card.positive{background:rgba(16,185,129,.08);border-left-color:var(--green)}
 .kpi-card.neutral{background:rgba(148,163,184,.08);border-left-color:rgba(148,163,184,.6)}
 .kpi-card.negative{background:rgba(239,68,68,.08);border-left-color:var(--red)}
