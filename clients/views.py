@@ -161,6 +161,14 @@ def client_list(request):
     status = request.GET.get('status', '')
     ctype = request.GET.get('type', '')
     debt_filter = request.GET.get('debt', '')
+    per_page = request.GET.get('per_page', '')
+
+    try:
+        per_page = int(per_page)
+    except (TypeError, ValueError):
+        per_page = 15
+    if per_page not in [15, 30, 50, 100]:
+        per_page = 15
 
     if q:
         clients = clients.filter(
@@ -180,7 +188,7 @@ def client_list(request):
             invoices__status__in=['sent', 'partially_paid', 'overdue']
         ).distinct()
 
-    page_obj = paginate_queryset(request, clients.order_by('full_name'), per_page=25)
+    page_obj = paginate_queryset(request, clients.order_by('full_name'), per_page=per_page)
 
     if request.headers.get('HX-Request'):
         return render(request, 'clients/partials/client_rows.html', {'clients': page_obj})
@@ -192,6 +200,7 @@ def client_list(request):
         'status_choices': Client.STATUS, 'type_choices': Client.CLIENT_TYPE,
         'total_outstanding': total_outstanding,
         'counts': {s: Client.objects.filter(status=s).count() for s, _ in Client.STATUS},
+        'per_page_options': [15, 30, 50, 100],
     })
 
 @login_required

@@ -21,37 +21,50 @@
   <div class="card-bd" style="padding:.6rem .9rem">
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
       <!-- Instant search -->
-      <input type="text" id="clientSearch" value="{{ q }}"
-        class="form-ctrl" style="max-width:280px;font-size:.85rem"
-        placeholder="Search name, TIN, phone, ID…"
-        autocomplete="off">
+      <form id="clientFilterForm" method="get" action="{% url 'clients:list' %}"
+            style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <input type="text" id="clientSearch" name="q" value="{{ q }}"
+          class="form-ctrl" style="max-width:280px;font-size:.85rem"
+          placeholder="Search name, TIN, phone, ID…"
+          autocomplete="off">
 
-      <!-- Status -->
-      <select id="filterStatus" class="form-ctrl" style="width:auto;font-size:.83rem">
-        <option value="">All Statuses</option>
-        {% for val,label in status_choices %}
-        <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
+        <!-- Status -->
+        <select id="filterStatus" name="status" class="form-ctrl" style="width:auto;font-size:.83rem">
+          <option value="">All Statuses</option>
+          {% for val,label in status_choices %}
+          <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
 
-      <!-- Type -->
-      <select id="filterType" class="form-ctrl" style="width:auto;font-size:.83rem">
-        <option value="">All Types</option>
-        {% for val,label in type_choices %}
-        <option value="{{ val }}" {% if ctype == val %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
+        <!-- Type -->
+        <select id="filterType" name="type" class="form-ctrl" style="width:auto;font-size:.83rem">
+          <option value="">All Types</option>
+          {% for val,label in type_choices %}
+          <option value="{{ val }}" {% if ctype == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
 
-      <!-- Debt filter -->
-      <select id="filterDebt" class="form-ctrl" style="width:auto;font-size:.83rem">
-        <option value="">All Clients</option>
-        <option value="indebted" {% if debt_filter == 'indebted' %}selected{% endif %}>Indebted (Balance &gt; 0)</option>
-        <option value="uncleared_invoices" {% if debt_filter == 'uncleared_invoices' %}selected{% endif %}>Uncleared Invoices</option>
-        <option value="cleared" {% if debt_filter == 'cleared' %}selected{% endif %}>Fully Cleared</option>
-      </select>
+        <!-- Debt filter -->
+        <select id="filterDebt" name="debt" class="form-ctrl" style="width:auto;font-size:.83rem">
+          <option value="">All Clients</option>
+          <option value="indebted" {% if debt_filter == 'indebted' %}selected{% endif %}>Indebted (Balance &gt; 0)</option>
+          <option value="uncleared_invoices" {% if debt_filter == 'uncleared_invoices' %}selected{% endif %}>Uncleared Invoices</option>
+          <option value="cleared" {% if debt_filter == 'cleared' %}selected{% endif %}>Fully Cleared</option>
+        </select>
 
-      <a href="{% url 'clients:list' %}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i> Clear</a>
-      <span id="visibleCount" style="font-size:.78rem;color:#888;margin-left:.3rem"></span>
+        <button type="submit" class="btn btn-outline btn-sm"><i class="fas fa-search"></i> Search</button>
+        <a href="?per_page={{ page_obj.paginator.per_page }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i> Clear</a>
+        <label style="display:flex;align-items:center;gap:.4rem;margin-left:.5rem;font-size:.85rem">
+          Show
+          <select name="per_page" class="form-ctrl" style="width:auto;min-width:96px">
+            {% for opt in per_page_options %}
+              <option value="{{ opt }}" {% if page_obj.paginator.per_page == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+          per page
+        </label>
+        <span id="visibleCount" style="font-size:.78rem;color:#888;margin-left:.3rem"></span>
+      </form>
     </div>
   </div>
 </div>
@@ -60,19 +73,19 @@
 
 <!-- Status chips -->
 <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.7rem">
-  <a href="{% url 'clients:list' %}" class="btn btn-sm {% if not status %}btn-primary{% else %}btn-outline{% endif %}">All</a>
+  <a href="?{% if q %}q={{ q }}&{% endif %}per_page={{ page_obj.paginator.per_page }}" class="btn btn-sm {% if not status %}btn-primary{% else %}btn-outline{% endif %}">All</a>
   {% for val,label in status_choices %}
-  <a href="?status={{ val }}{% if ctype %}&type={{ ctype }}{% endif %}{% if debt_filter %}&debt={{ debt_filter }}{% endif %}"
+  <a href="?{% if q %}q={{ q }}&{% endif %}status={{ val }}{% if ctype %}&type={{ ctype }}{% endif %}{% if debt_filter %}&debt={{ debt_filter }}{% endif %}&per_page={{ page_obj.paginator.per_page }}"
      class="btn btn-sm {% if status == val %}btn-primary{% else %}btn-outline{% endif %}">
     {{ label }} <span style="opacity:.7">({{ counts|dictsort:val }})</span>
   </a>
   {% endfor %}
   <!-- Debt quick chips -->
-  <a href="?debt=indebted{% if status %}&status={{ status }}{% endif %}"
+  <a href="?{% if q %}q={{ q }}&{% endif %}debt=indebted{% if status %}&status={{ status }}{% endif %}&per_page={{ page_obj.paginator.per_page }}"
      class="btn btn-sm {% if debt_filter == 'indebted' %}btn-primary{% else %}btn-outline{% endif %}" style="{% if debt_filter == 'indebted' %}{% else %}color:var(--red){% endif %}">
     <i class="fas fa-exclamation-circle"></i> Indebted
   </a>
-  <a href="?debt=uncleared_invoices{% if status %}&status={{ status }}{% endif %}"
+  <a href="?{% if q %}q={{ q }}&{% endif %}debt=uncleared_invoices{% if status %}&status={{ status }}{% endif %}&per_page={{ page_obj.paginator.per_page }}"
      class="btn btn-sm {% if debt_filter == 'uncleared_invoices' %}btn-primary{% else %}btn-outline{% endif %}">
     <i class="fas fa-file-invoice-dollar"></i> Uncleared Invoices
   </a>
@@ -115,6 +128,8 @@
     </table>
   </div>
 </div>
+
+{% include "components/pagination_controls.html" %}
 
 <!-- Bottom Action Buttons -->
 <div class="mt-3" style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap">
@@ -202,47 +217,28 @@
   var filterType   = document.getElementById('filterType');
   var filterDebt   = document.getElementById('filterDebt');
   var countEl      = document.getElementById('visibleCount');
-  var rows         = document.querySelectorAll('.client-row');
 
   function applyFilters() {
-    var q       = searchInput.value.toLowerCase().trim();
-    var status  = filterStatus.value;
-    var type    = filterType.value;
-    var debt    = filterDebt.value;
-    var visible = 0;
-
-    rows.forEach(function(row) {
-      var matchQ = !q || (
-        row.dataset.name.includes(q) ||
-        row.dataset.id.includes(q) ||
-        row.dataset.tin.includes(q) ||
-        row.dataset.phone.includes(q) ||
-        row.dataset.whatsapp.includes(q)
-      );
-      var matchStatus = !status || row.dataset.status === status;
-      var matchType   = !type   || row.dataset.type === type;
-      var outstanding = parseFloat(row.dataset.outstanding) || 0;
-      var matchDebt = true;
-      if (debt === 'indebted')          matchDebt = outstanding > 0;
-      else if (debt === 'cleared')      matchDebt = outstanding === 0;
-      else if (debt === 'uncleared_invoices') matchDebt = outstanding > 0;
-
-      var show = matchQ && matchStatus && matchType && matchDebt;
-      row.style.display = show ? '' : 'none';
-      if (show) visible++;
-    });
-
-    countEl.textContent = visible + ' client' + (visible !== 1 ? 's' : '');
+    // Use the form submission instead of client-side filtering for complete results.
+    document.getElementById('clientFilterForm').submit();
   }
 
-  // Instant — fires on every keystroke with no delay
-  searchInput.addEventListener('input', applyFilters);
+  // Submit the server-side filter form on change.
+  searchInput.addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      applyFilters();
+    }
+  });
   filterStatus.addEventListener('change', applyFilters);
   filterType.addEventListener('change', applyFilters);
   filterDebt.addEventListener('change', applyFilters);
 
-  // Run on load to reflect server-side filters
-  applyFilters();
+  var perPageSelect = document.querySelector('select[name="per_page"]');
+  if (perPageSelect) {
+    perPageSelect.addEventListener('change', applyFilters);
+  }
+
   refreshOutstandingBalances();
 
   // Modals
@@ -266,7 +262,6 @@
             cell.className = amt > 0 ? 'ugx-red' : 'ugx-green';
           }
         });
-        applyFilters();
       })
       .catch(function() {
         // Keep existing values if refresh fails.

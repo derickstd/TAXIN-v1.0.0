@@ -1,0 +1,25 @@
+{% if page_obj.has_other_pages %}
+<div class="pagination-bar" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-top:1rem;flex-wrap:wrap">
+  <div class="pagination-info" style="font-size:.9rem;color:#555">
+    Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ page_obj.paginator.count }}
+  </div>
+  <div class="pagination-links" style="display:flex;gap:.5rem;flex-wrap:wrap">
+    {% load pagination_extras %}
+    {% if page_obj.has_previous %}
+      <a class="btn btn-outline btn-sm" href="{% query_string page=1 %}">First</a>
+      <a class="btn btn-outline btn-sm" href="{% query_string page=page_obj.previous_page_number %}">Previous</a>
+    {% else %}
+      <span class="btn btn-outline btn-sm disabled">First</span>
+      <span class="btn btn-outline btn-sm disabled">Previous</span>
+    {% endif %}
+    <span class="btn btn-ghost btn-sm" style="pointer-events:none">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a class="btn btn-outline btn-sm" href="{% query_string page=page_obj.next_page_number %}">Next</a>
+      <a class="btn btn-outline btn-sm" href="{% query_string page=page_obj.paginator.num_pages %}">Last</a>
+    {% else %}
+      <span class="btn btn-outline btn-sm disabled">Next</span>
+      <span class="btn btn-outline btn-sm disabled">Last</span>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

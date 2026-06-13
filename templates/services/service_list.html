@@ -71,6 +71,8 @@
 </div>
 {% endfor %}
 
+{% include "components/pagination_controls.html" %}
+
 {% if not services %}
 <div class="card"><div class="card-bd"><div class="empty-state"><i class="fas fa-list"></i><p>No services. Run <code>python manage.py setup_taxman256</code></p></div></div></div>
 {% endif %}
