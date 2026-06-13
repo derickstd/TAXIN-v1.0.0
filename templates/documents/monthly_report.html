@@ -8,6 +8,7 @@
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
   <h4 class="page-title"><i class="fas fa-chart-line me-2 text-gold"></i>Monthly Report — {{ month_name }} {{ year }}</h4>
   <div class="d-flex gap-2 flex-wrap no-print">
+
     <form method="get" class="d-flex gap-2 flex-wrap">
       <select name="month" class="form-select form-select-sm select2" style="width:130px">
         {% for i,mn in months %}
@@ -48,6 +49,140 @@
     <div class="kpi-label">Net Profit Est.</div>
     <div class="kpi-value">{{ net_profit|floatformat:0|intcomma }}</div>
     <div class="kpi-sub">UGX</div>
+  </div>
+</div>
+
+<div class="card-box card-compact mb-4">
+  <div class="card-box-header"><i class="fas fa-receipt me-2"></i>Statement of Cash Flow</div>
+  <div class="card-box-body">
+    <div class="cashflow-summary-grid">
+      <div class="cf-card">
+        <div class="cf-card-title">Opening Balance</div>
+        <div class="cf-card-value ugx">0</div>
+        <div class="cf-card-sub">Period start</div>
+      </div>
+      <div class="cf-card cf-card-success">
+        <div class="cf-card-title">Cash Receipts</div>
+        <div class="cf-card-value ugx">+{{ total_cash_inflow|floatformat:0|intcomma }}</div>
+        <div class="cf-card-sub">Total inflows</div>
+      </div>
+      <div class="cf-card cf-card-danger">
+        <div class="cf-card-title">Cash Payments</div>
+        <div class="cf-card-value ugx">-{{ total_cash_outflow|floatformat:0|intcomma }}</div>
+        <div class="cf-card-sub">Total outflows</div>
+      </div>
+      <div class="cf-card cf-card-highlight">
+        <div class="cf-card-title">Net Cash Flow</div>
+        <div class="cf-card-value ugx {% if cashflow_net_total >= 0 %}cash-in-text{% else %}cash-out-text{% endif %}">{{ cashflow_net_total|floatformat:0|intcomma }}</div>
+        <div class="cf-card-sub">Net change</div>
+      </div>
+      <div class="cf-card cf-card-total">
+        <div class="cf-card-title">Closing Balance</div>
+        <div class="cf-card-value ugx">{{ cashflow_end_balance|floatformat:0|intcomma }}</div>
+        <div class="cf-card-sub">Period end</div>
+      </div>
+    </div>
+
+    <div class="cashflow-detail-section">
+      <div class="card-box card-compact cashflow-table-card mb-0">
+        <div class="card-box-header"><i class="fas fa-calendar-day me-2"></i>Daily Cash Transactions</div>
+        <div class="card-box-body p-0">
+          <div class="p-3 pt-3 pb-2">
+            <div class="cf-section-note">Detailed receipts and payments broken down by day</div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-taxman mb-0 cashflow-table">
+              <caption class="cashflow-table-caption">Daily cash receipts, payments, net flow and balance.</caption>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th class="text-end">Receipts (In)</th>
+                  <th class="text-end">Payments (Out)</th>
+                  <th class="text-end">Net Flow</th>
+                  <th class="text-end">Balance</th>
+                  <th class="text-center">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in cashflow_by_date %}
+                {% if row.inflow or row.outflow %}
+                <tr class="cf-transaction-row">
+                  <td>{{ row.date|date:"d M" }}</td>
+                  <td class="text-end ugx {% if row.inflow %}cash-in-text fw-bold{% else %}text-muted{% endif %}">
+                    {% if row.inflow %}+{{ row.inflow|floatformat:0|intcomma }}{% else %}—{% endif %}
+                  </td>
+                  <td class="text-end ugx {% if row.outflow %}cash-out-text fw-bold{% else %}text-muted{% endif %}">
+                    {% if row.outflow %}-{{ row.outflow|floatformat:0|intcomma }}{% else %}—{% endif %}
+                  </td>
+                  <td class="text-end ugx fw-bold {% if row.net >= 0 %}cash-in-text{% else %}cash-out-text{% endif %}">
+                    {{ row.net|floatformat:0|intcomma }}
+                  </td>
+                  <td class="text-end ugx fw-bold">{{ row.balance|floatformat:0|intcomma }}</td>
+                  <td class="text-center">
+                    <button type="button" class="btn btn-xs btn-link"
+                      onclick="openCashflowModal(this)"
+                      data-date="{{ row.date|date:'d M Y' }}"
+                      data-inflow="{{ row.inflow|floatformat:0|intcomma }}"
+                      data-outflow="{{ row.outflow|floatformat:0|intcomma }}"
+                      data-net="{{ row.net|floatformat:0|intcomma }}"
+                      data-balance="{{ row.balance|floatformat:0|intcomma }}"
+                      title="View transaction details"
+                    ><i class="fas fa-eye"></i></button>
+                  </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+              </tbody>
+              <tfoot>
+                <tr class="cf-totals-row">
+                  <th scope="row">Monthly Totals</th>
+                  <td class="text-end ugx cash-in-text fw-bold">+{{ total_cash_inflow|floatformat:0|intcomma }}</td>
+                  <td class="text-end ugx cash-out-text fw-bold">-{{ total_cash_outflow|floatformat:0|intcomma }}</td>
+                  <td class="text-end ugx {% if cashflow_net_total >= 0 %}cash-in-text{% else %}cash-out-text{% endif %} fw-bold">{{ cashflow_net_total|floatformat:0|intcomma }}</td>
+                  <td class="text-end ugx fw-bold">{{ cashflow_end_balance|floatformat:0|intcomma }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="cashflowDetailModal">
+  <div class="modal-box" style="max-width:500px">
+    <div class="modal-hd">
+      <h5>Transaction Details</h5>
+      <button type="button" class="modal-close" onclick="closeCashflowModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body p-0">
+      <div class="cashflow-detail-summary" style="padding:1rem">
+        <div style="border-bottom:none; padding:.75rem 0">
+          <strong style="display:block;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.35rem">Date</strong>
+          <div id="cf-detail-date">—</div>
+        </div>
+        <div style="border:none;padding:.75rem 0;display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div>
+            <strong style="display:block;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.35rem">Cash Receipts</strong>
+            <div id="cf-detail-inflow" class="cash-pill cash-in" style="margin:0;min-width:auto">0</div>
+          </div>
+          <div>
+            <strong style="display:block;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.35rem">Cash Payments</strong>
+            <div id="cf-detail-outflow" class="cash-pill cash-out" style="margin:0;min-width:auto">0</div>
+          </div>
+        </div>
+        <div style="padding:.75rem 0;border-top:2px solid var(--blue);margin-top:.5rem">
+          <strong style="display:block;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.35rem">Net Cash Flow</strong>
+          <div id="cf-detail-net" class="ugx" style="font-size:1.1rem;font-weight:700;color:var(--green)">0</div>
+        </div>
+        <div style="padding:.75rem 0;border-top:1px solid rgba(148,163,184,.2)">
+          <strong style="display:block;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.35rem">Closing Balance</strong>
+          <div id="cf-detail-balance" class="ugx" style="font-size:1rem;font-weight:700;color:var(--blue)">0</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -123,5 +258,39 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function openCashflowModal(button) {
+    var overlay = document.getElementById('cashflowDetailModal');
+    if (!overlay) return;
+    var date = button.dataset.date || 'Unknown';
+    var inflow = button.dataset.inflow || '0';
+    var outflow = button.dataset.outflow || '0';
+    var net = button.dataset.net || '0';
+    var balance = button.dataset.balance || '0';
+    var netValue = parseFloat(net.replace(/,/g, '')) || 0;
+    document.getElementById('cf-detail-date').textContent = date;
+    document.getElementById('cf-detail-inflow').textContent = inflow === '0' ? '0' : '+' + inflow;
+    document.getElementById('cf-detail-outflow').textContent = outflow === '0' ? '0' : '-' + outflow;
+    document.getElementById('cf-detail-net').textContent = net;
+    document.getElementById('cf-detail-net').classList.remove('cash-in', 'cash-out');
+    document.getElementById('cf-detail-net').classList.add(netValue >= 0 ? 'cash-in' : 'cash-out');
+    document.getElementById('cf-detail-balance').textContent = balance;
+    overlay.classList.add('open');
+  }
+  function closeCashflowModal() {
+    var overlay = document.getElementById('cashflowDetailModal');
+    if (overlay) overlay.classList.remove('open');
+  }
+  document.addEventListener('click', function(event) {
+    var overlay = document.getElementById('cashflowDetailModal');
+    if (!overlay || !overlay.classList.contains('open')) return;
+    if (event.target === overlay) {
+      closeCashflowModal();
+    }
+  });
+</script>
 {% endblock %}
 

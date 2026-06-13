@@ -4,11 +4,13 @@ from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Sum, Count
 from services.models import ServiceType, JobCard
-from billing.models import Invoice
+from billing.models import Invoice, Payment
 from expenses.models import Expense
 from clients.models import Client
 from .models import ClientDocument
 import calendar
+from datetime import date, timedelta
+from decimal import Decimal
 from core.utils import paginate_queryset
 
 @login_required
@@ -109,11 +111,43 @@ def monthly_report(request):
 
     invoices = Invoice.objects.filter(date_issued__month=month, date_issued__year=year)
     expenses = Expense.objects.filter(expense_date__month=month, expense_date__year=year, status='approved')
+    payments = Payment.objects.filter(payment_date__month=month, payment_date__year=year)
 
     total_invoiced = invoices.aggregate(s=Sum('grand_total'))['s'] or 0
     total_collected = invoices.aggregate(s=Sum('amount_paid'))['s'] or 0
     total_expenses = expenses.aggregate(s=Sum('amount'))['s'] or 0
+    total_cash_inflow = payments.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    total_cash_outflow = total_expenses
+    cashflow_net_total = total_cash_inflow - total_cash_outflow
     collection_rate = round((float(total_collected)/float(total_invoiced)*100),1) if total_invoiced else 0
+
+    first_day = date(year, month, 1)
+    last_day = date(year, month, calendar.monthrange(year, month)[1])
+    cash_in_by_date = {first_day + timedelta(days=i): Decimal('0') for i in range((last_day - first_day).days + 1)}
+    cash_out_by_date = {day: Decimal('0') for day in cash_in_by_date}
+    for payment in payments:
+        cash_in_by_date[payment.payment_date] += payment.amount
+    for expense in expenses:
+        cash_out_by_date[expense.expense_date] += expense.amount
+
+    cashflow_by_date = []
+    running_balance = Decimal('0')
+    current_day = first_day
+    while current_day <= last_day:
+        inflow = cash_in_by_date.get(current_day, Decimal('0'))
+        outflow = cash_out_by_date.get(current_day, Decimal('0'))
+        net = inflow - outflow
+        running_balance += net
+        cashflow_by_date.append({
+            'date': current_day,
+            'inflow': inflow,
+            'outflow': outflow,
+            'net': net,
+            'balance': running_balance,
+        })
+        current_day += timedelta(days=1)
+
+    cashflow_end_balance = cashflow_by_date[-1]['balance'] if cashflow_by_date else Decimal('0')
 
     top_clients = (Client.objects
         .filter(invoices__date_issued__month=month, invoices__date_issued__year=year)
@@ -139,6 +173,11 @@ def monthly_report(request):
         'total_invoiced': total_invoiced, 'total_collected': total_collected,
         'collection_rate': collection_rate,
         'total_expenses': total_expenses,
+        'total_cash_inflow': total_cash_inflow,
+        'total_cash_outflow': total_cash_outflow,
+        'cashflow_net_total': cashflow_net_total,
+        'cashflow_by_date': cashflow_by_date,
+        'cashflow_end_balance': cashflow_end_balance,
         'net_profit': total_collected - total_expenses,
         'top_clients': top_clients,
         'exp_by_cat': exp_by_cat,
