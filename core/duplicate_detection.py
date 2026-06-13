@@ -31,7 +31,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 
-def find_duplicate_clients(client=None, full_name=None, phone=None, tin=None, similarity_threshold=80):
+def find_duplicate_clients(client=None, full_name=None, phone=None, whatsapp=None, tin=None, similarity_threshold=80):
     """
     Find potential duplicate clients based on similarity.
     
@@ -39,6 +39,7 @@ def find_duplicate_clients(client=None, full_name=None, phone=None, tin=None, si
         client: Client instance to find duplicates for (if None, use other params)
         full_name: Full name to match
         phone: Phone number to match
+        whatsapp: WhatsApp number to match
         tin: TIN to match
         similarity_threshold: Similarity percentage threshold (0-100)
     
@@ -48,6 +49,7 @@ def find_duplicate_clients(client=None, full_name=None, phone=None, tin=None, si
     if client:
         full_name = client.full_name
         phone = client.phone_primary
+        whatsapp = client.phone_whatsapp
         tin = client.tin
     
     if not any([full_name, phone, tin]):
@@ -74,11 +76,19 @@ def find_duplicate_clients(client=None, full_name=None, phone=None, tin=None, si
                     reasons.append(f"TIN similar ({name_sim}%): {tin} vs {candidate.tin}")
                     scores.append(name_sim)
         
-        # Check phone match (exact)
-        if phone and candidate.phone_primary == phone:
-            reasons.append(f"Phone match: {phone}")
-            scores.append(100)
-        
+        # Check phone/WhatsApp match (exact)
+        phone_numbers = set()
+        if phone:
+            phone_numbers.add(phone)
+        if whatsapp:
+            phone_numbers.add(whatsapp)
+
+        for number in phone_numbers:
+            if candidate.phone_primary == number or candidate.phone_whatsapp == number:
+                reasons.append(f"Phone/WhatsApp match: {number}")
+                scores.append(100)
+                break
+
         # Check name similarity
         if full_name and candidate.full_name:
             name_sim = fuzz.token_set_ratio(full_name.lower(), candidate.full_name.lower())

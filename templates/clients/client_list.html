@@ -92,6 +92,7 @@
             data-id="{{ client.client_id|lower }}"
             data-tin="{{ client.tin|lower }}"
             data-phone="{{ client.phone_primary|lower }}"
+            data-whatsapp="{{ client.phone_whatsapp|lower }}"
             data-status="{{ client.status }}"
             data-type="{{ client.client_type }}"
             data-outstanding="{{ client.total_outstanding }}">
@@ -215,7 +216,8 @@
         row.dataset.name.includes(q) ||
         row.dataset.id.includes(q) ||
         row.dataset.tin.includes(q) ||
-        row.dataset.phone.includes(q)
+        row.dataset.phone.includes(q) ||
+        row.dataset.whatsapp.includes(q)
       );
       var matchStatus = !status || row.dataset.status === status;
       var matchType   = !type   || row.dataset.type === type;

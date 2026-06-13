@@ -46,6 +46,26 @@ def update_status(request, pk, action):
 
     service_type = deadline.obligation.service_type
 
+    if action == deadline.status:
+        messages.warning(request, f'{service_type.name} for {deadline.period_label} is already {deadline.get_status_display().lower()}.')
+        return redirect('compliance:list')
+
+    if deadline.status == 'filed_and_paid' and action != 'reset':
+        messages.warning(request, f'{service_type.name} for {deadline.period_label} has already been filed and paid.')
+        return redirect('compliance:list')
+
+    if deadline.status == 'filed_not_paid' and action == 'paid_not_filed':
+        messages.warning(request, f'{service_type.name} for {deadline.period_label} is already filed. Use Filed and Paid once payment is received.')
+        return redirect('compliance:list')
+
+    if deadline.status == 'paid_not_filed' and action == 'filed_not_paid':
+        messages.warning(request, f'{service_type.name} for {deadline.period_label} is already paid. Use Filed and Paid once filing is complete.')
+        return redirect('compliance:list')
+
+    if deadline.status in ('penalty_issued', 'waived') and action != 'reset':
+        messages.warning(request, f'{service_type.name} for {deadline.period_label} is finalized and cannot be changed.')
+        return redirect('compliance:list')
+
     if action == 'filed_and_paid':
         deadline.status = 'filed_and_paid'
         deadline.filed_date = timezone.now().date()

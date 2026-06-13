@@ -2,15 +2,19 @@
 {% block title %}Walk-in Intake{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">Walk-in Intake</li>{% endblock %}
 {% block content %}
-<div class="page-header"><h4 class="page-title"><i class="fas fa-door-open"></i>Record Walk-in Visit</h4></div>
-<div class="form-shell">
-<div class="card-box">
-  <div class="card-head"><i class="fas fa-door-open"></i>Visit Details</div>
-  <div class="card-body">
-    <div class="alert-note" style="margin-bottom:1rem">
-      <i class="fas fa-search"></i> Search for an existing client below. Not found? <a href="{% url 'clients:create' %}" target="_blank">Register them first</a>, then come back here.
+<div class="modal-overlay open" id="walkinModalPage">
+  <div class="modal-box" style="width:min(100%,540px);max-width:540px;">
+    <div class="modal-hd">
+      <h5><i class="fas fa-door-open"></i> Record Walk-in Visit</h5>
+      <a href="{% url 'clients:list' %}" class="modal-close">&times;</a>
     </div>
-    <form method="post" novalidate id="walkinForm">{% csrf_token %}
+    <div class="card-box">
+      <div class="card-head"><i class="fas fa-door-open"></i>Visit Details</div>
+      <div class="card-bd">
+        <div class="alert-note" style="margin-bottom:1rem">
+          <i class="fas fa-search"></i> Search for an existing client below. Not found? <a href="{% url 'clients:create' %}" target="_blank">Register them first</a>, then come back here.
+        </div>
+        <form method="post" novalidate id="walkinForm">{% csrf_token %}
       <div class="form-grid-2">
 
         <div class="field-span-2" id="field-client">
@@ -74,7 +78,8 @@
       </div>
     </form>
   </div>
-</div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 {% block extra_js %}

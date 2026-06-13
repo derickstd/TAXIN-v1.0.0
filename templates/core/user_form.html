@@ -3,12 +3,17 @@
 {% block nav_users %}active{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'core:users' %}">Users</a></li><li class="active">{{ title }}</li>{% endblock %}
 {% block content %}
-<div class="page-hdr"><h4 class="page-title"><i class="fas fa-user-shield"></i>{{ title }}</h4></div>
-<div class="row"><div class="col-7">
-<div class="card">
-  <div class="card-hd"><i class="fas fa-id-card"></i>Account Details</div>
-  <div class="card-bd">
-    <form method="post" novalidate>{% csrf_token %}
+<div class="modal-overlay open" id="userModal">
+  <div class="modal-box" style="width:min(100%,920px);max-width:920px;">
+    <div class="modal-hd">
+      <h5><i class="fas fa-user-shield"></i> {{ title }}</h5>
+      <a href="{% url 'core:users' %}" class="modal-close">&times;</a>
+    </div>
+    <div class="row"><div class="col-7">
+    <div class="card">
+      <div class="card-hd"><i class="fas fa-id-card"></i>Account Details</div>
+      <div class="card-bd">
+        <form method="post" novalidate>{% csrf_token %}
       <div class="form-grid-2">
         <div><label class="form-label">First Name</label><input type="text" name="first_name" value="{{ form.first_name.value|default:'' }}" class="form-ctrl" placeholder="First name"></div>
         <div><label class="form-label">Last Name</label><input type="text" name="last_name" value="{{ form.last_name.value|default:'' }}" class="form-ctrl" placeholder="Last name"></div>
@@ -76,6 +81,9 @@
   Ask staff to change immediately after first login.
 </div>
 </div></div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block extra_js %}
 <script>$(document).ready(function(){$('.s2').select2({theme:'bootstrap-5',allowClear:false});});</script>

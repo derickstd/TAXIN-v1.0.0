@@ -6,6 +6,14 @@ from django.forms import inlineformset_factory
 import calendar
 
 
+class OptionalModelChoiceField(forms.ModelChoiceField):
+    """ModelChoiceField that safely handles empty string values."""
+    def to_python(self, value):
+        if value == '' or value is None:
+            return None
+        return super().to_python(value)
+
+
 class JobCardForm(forms.ModelForm):
     class Meta:
         model = JobCard
@@ -31,6 +39,12 @@ class JobCardForm(forms.ModelForm):
 
 
 class JobCardLineItemForm(forms.ModelForm):
+    service_type = OptionalModelChoiceField(
+        queryset=ServiceType.objects.filter(is_active=True).order_by('category', 'name'),
+        required=False,
+        empty_label='Search services...'
+    )
+
     class Meta:
         model = JobCardLineItem
         fields = [
@@ -42,7 +56,6 @@ class JobCardLineItemForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['service_type'].queryset = ServiceType.objects.filter(
             is_active=True).order_by('category', 'name')
-        self.fields['service_type'].required = False
         self.fields['custom_description'].required = False
         self.fields['default_price'].required = False
         self.fields['negotiated_price'].required = False

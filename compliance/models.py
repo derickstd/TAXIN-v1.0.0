@@ -56,6 +56,10 @@ class ComplianceDeadline(models.Model):
         return self.status in ('filed_and_paid', 'filed_not_paid')
     
     @property
+    def can_be_updated(self):
+        return self.status not in ('filed_and_paid', 'filed_not_paid', 'penalty_issued', 'waived')
+
+    @property
     def days_until_due(self):
         """Calculate days until due date"""
         from django.utils import timezone

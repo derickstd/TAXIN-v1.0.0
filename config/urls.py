@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.contrib.auth import views as auth_views
 from django.conf import settings
 from django.conf.urls.static import static
@@ -16,6 +16,8 @@ urlpatterns = [
     path('dashboard/',     include('dashboard.urls')),
     path('clients/',       include('clients.urls')),
     path('jobs/',          include('services.urls')),
+    # Redirect /services/ to /jobs/ for backwards compatibility
+    re_path(r'^services(?P<path>/?.*)$', lambda request, path: redirect(f'/jobs{path}')),
     path('billing/',       include('billing.urls')),
     path('compliance/',    include('compliance.urls')),
     path('credentials/',   include('credentials.urls')),

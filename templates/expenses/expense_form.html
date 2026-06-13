@@ -3,12 +3,16 @@
 {% block nav_exp %}active{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'expenses:list' %}">Expenses</a></li><li class="active">New Expense</li>{% endblock %}
 {% block content %}
-<div class="page-header"><h4 class="page-title"><i class="fas fa-receipt"></i>Log New Expense</h4></div>
-<div class="form-shell-wide">
-<div class="card-box">
-  <div class="card-head"><i class="fas fa-receipt"></i>Expense Details</div>
-  <div class="card-body">
-    <form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
+<div class="modal-overlay open" id="expenseModal">
+  <div class="modal-box" style="width:min(100%,640px);max-width:640px;">
+    <div class="modal-hd">
+      <h5><i class="fas fa-receipt"></i>Log New Expense</h5>
+      <a href="{% url 'expenses:list' %}" class="modal-close">&times;</a>
+    </div>
+    <div class="card-box">
+      <div class="card-head"><i class="fas fa-receipt"></i>Expense Details</div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
       <div class="form-grid-2">
         <div>
           <label class="form-label">Date <span class="req">*</span></label>

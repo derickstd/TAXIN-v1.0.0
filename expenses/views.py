@@ -12,7 +12,26 @@ import datetime
 from core.utils import paginate_queryset
 
 
+class OptionalModelChoiceField(forms.ModelChoiceField):
+    """ModelChoiceField that safely handles empty string values."""
+    def to_python(self, value):
+        if value == '' or value is None:
+            return None
+        return super().to_python(value)
+
+
 class ExpenseForm(forms.ModelForm):
+    client = OptionalModelChoiceField(
+        queryset=Client.objects.order_by('full_name'),
+        required=False,
+        empty_label='— None —'
+    )
+    job_card = OptionalModelChoiceField(
+        queryset=JobCard.objects.order_by('-created_at')[:100],
+        required=False,
+        empty_label='— None —'
+    )
+
     class Meta:
         model = Expense
         fields = ['expense_date', 'category', 'description', 'amount',
@@ -27,7 +46,7 @@ class ExpenseForm(forms.ModelForm):
         self.fields['category'].queryset = ExpenseCategory.objects.filter(is_active=True).order_by('name')
         self.fields['client'].queryset = Client.objects.order_by('full_name')
         self.fields['job_card'].queryset = JobCard.objects.order_by('-created_at')[:100]
-        for f in ['client', 'job_card', 'reference', 'receipt_upload', 'is_billable']:
+        for f in ['reference', 'receipt_upload', 'is_billable']:
             self.fields[f].required = False
 
 

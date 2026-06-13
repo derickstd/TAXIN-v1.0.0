@@ -127,15 +127,19 @@ def _process_client_import_file(uploaded_file, user):
         try:
             name = (row.get('full_name') or row.get('name') or '').strip()
             phone = (row.get('phone_primary') or row.get('phone') or '').strip()
+            tin = (row.get('tin') or '').strip()
             if not name or not phone:
                 errors.append(f"Row {i}: missing name or phone")
                 continue
-            if Client.objects.filter(phone_primary=phone).exists():
+            if tin and Client.objects.filter(tin=tin).exists():
+                errors.append(f"Row {i}: {name} — TIN already exists, skipped")
+                continue
+            if Client.objects.filter(Q(phone_primary=phone) | Q(phone_whatsapp=phone)).exists():
                 errors.append(f"Row {i}: {name} — phone already exists, skipped")
                 continue
             Client.objects.create(
                 full_name=name,
-                tin=(row.get('tin') or '').strip(),
+                tin=tin,
                 phone_primary=phone,
                 phone_whatsapp=(row.get('phone_whatsapp') or phone).strip(),
                 email=(row.get('email') or '').strip(),
@@ -247,6 +251,7 @@ def client_create(request):
             dup_candidates = find_duplicate_clients(
                 full_name=form.cleaned_data.get('full_name'),
                 phone=form.cleaned_data.get('phone_primary'),
+                whatsapp=form.cleaned_data.get('phone_whatsapp'),
                 tin=form.cleaned_data.get('tin'),
                 similarity_threshold=80,
             )
@@ -464,17 +469,28 @@ def walkin_create(request):
             for field, errors in form.errors.items():
                 for error in errors:
                     messages.error(request, f'{field}: {error}')
-            return render(request, 'clients/walkin_form.html', {'form': form})
+            return _render_client_onboarding(
+                request,
+                walkin_form=form,
+                import_section_active='walkin',
+            )
     client_id = request.GET.get('client')
     form = WalkInIntakeForm(initial={'client': client_id} if client_id else {})
-    return render(request, 'clients/walkin_form.html', {'form': form})
+    return _render_client_onboarding(
+        request,
+        walkin_form=form,
+        import_section_active='walkin',
+    )
 
 @login_required
 def client_search_api(request):
     q = request.GET.get('q','')
     clients = Client.objects.filter(
         Q(full_name__icontains=q)|
-        Q(tin__icontains=q)|Q(client_id__icontains=q)
+        Q(tin__icontains=q)|
+        Q(client_id__icontains=q)|
+        Q(phone_primary__icontains=q)|
+        Q(phone_whatsapp__icontains=q)
     )[:10] if q else []
     return render(request, 'clients/partials/search_results.html', {'clients': clients})
 

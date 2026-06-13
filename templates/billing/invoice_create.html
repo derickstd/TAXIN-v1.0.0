@@ -3,21 +3,23 @@
 {% block nav_inv %}active{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">Create Document</li>{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h4 class="page-title"><i class="fas fa-file-invoice"></i>Create Invoice / Quotation</h4>
-</div>
-<div class="form-shell">
-<div class="card-box">
-  <div class="card-head"><i class="fas fa-file-alt"></i>Document Details</div>
-  <div class="card-body">
-    <div class="alert-note" style="margin-bottom:1rem">
-      <i class="fas fa-info-circle"></i>
-      <div><strong>Tax Invoice</strong> = final bill with payment obligation.<br>
-      <strong>Pro Forma Invoice</strong> = preliminary invoice before work begins.<br>
-      <strong>Quotation</strong> = price offer, no payment obligation yet.<br>
-      Both Pro Forma and Quotation can be converted to a Tax Invoice when work is confirmed.</div>
+<div class="modal-overlay open" id="invoiceCreateModal">
+  <div class="modal-box" style="width:min(100%,1024px);max-width:1024px;">
+    <div class="modal-hd">
+      <h5><i class="fas fa-file-invoice"></i> Create Invoice / Quotation</h5>
+      <a href="{% url 'billing:list' %}" class="modal-close">&times;</a>
     </div>
-    <form method="post" novalidate>{% csrf_token %}
+    <div class="card-box">
+      <div class="card-head"><i class="fas fa-file-alt"></i>Document Details</div>
+      <div class="card-body">
+        <div class="alert-note" style="margin-bottom:1rem">
+          <i class="fas fa-info-circle"></i>
+          <div><strong>Tax Invoice</strong> = final bill with payment obligation.<br>
+          <strong>Pro Forma Invoice</strong> = preliminary invoice before work begins.<br>
+          <strong>Quotation</strong> = price offer, no payment obligation yet.<br>
+          Both Pro Forma and Quotation can be converted to a Tax Invoice when work is confirmed.</div>
+        </div>
+        <form method="post" novalidate>{% csrf_token %}
       <input type="hidden" name="document_type" value="">
       <div style="margin-bottom:1.1rem">
         <label class="form-label">Document Type <span class="req">*</span></label>
@@ -70,6 +72,7 @@
     </form>
   </div>
 </div>
+  </div>
 </div>
 {% endblock %}
 {% block extra_js %}
