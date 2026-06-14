@@ -50,7 +50,7 @@ class User(AbstractUser):
     company           = models.ForeignKey(Company, null=True, blank=True, on_delete=models.SET_NULL, related_name='users')
 
     def is_manager_or_admin(self):
-        return self.role in ('manager', 'admin')
+        return self.is_superuser or self.role in ('manager', 'admin')
 
     def get_notify_whatsapp(self):
         """Return WhatsApp number for notifications, falling back to phone_whatsapp."""

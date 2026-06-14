@@ -52,3 +52,21 @@ class ExpenseApprovalTests(TestCase):
         )
         expense.refresh_from_db()
         self.assertEqual(expense.status, 'approved')
+
+    def test_superuser_can_approve_submitted_expense(self):
+        superuser = User.objects.create_superuser(username='superadmin', password='pass123', email='super@example.com')
+        expense = Expense.objects.create(
+            expense_date=date.today(),
+            category=self.category,
+            description='Needs approval',
+            amount=Decimal('1000.00'),
+            paid_by=self.user,
+            created_by=self.user,
+            status='submitted',
+        )
+        self.client.force_login(superuser)
+        response = self.client.post(f'/expenses/{expense.pk}/approve/')
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, 'approved')
+        self.assertEqual(expense.approved_by, superuser)
+        self.assertEqual(response.status_code, 302)
