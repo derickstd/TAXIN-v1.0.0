@@ -421,8 +421,7 @@ img{max-width:100%}
 .card-bd,.card-body,.card-box-body{padding:1.05rem 1rem;min-width:0}
 .card-bd.p0,.card-body.p0,.card-box-body.p0,.p-0{padding:0!important}
 
-/* ── KPI ── */
-.kpi,.kpi-card{background:var(--card);border-radius:var(--r);padding:.85rem .95rem;
+.kpi,.kpi-card{background:var(--card);border-radius:var(--r);padding:.5rem .6rem;
   border-left:4px solid var(--blue);box-shadow:var(--shadow);height:100%}
 .kpi.gold,.kpi-card.gold{background:rgba(245,158,11,0.08);border-left-color:var(--gold)}
 .kpi.green,.kpi-card.green{background:rgba(5,150,105,0.08);border-left-color:var(--green)}
@@ -432,9 +431,9 @@ img{max-width:100%}
 .kpi-card.neutral{background:rgba(148,163,184,.08);border-left-color:rgba(148,163,184,.6)}
 .kpi-card.negative{background:rgba(239,68,68,.08);border-left-color:var(--red)}
 a.kpi:hover,a.kpi-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(14,116,144,.15)}
-.kpi-lbl,.kpi-label{font-size:.67rem;color:var(--muted);text-transform:uppercase;
-  letter-spacing:.8px;font-weight:700;margin-bottom:.25rem}
-.kpi-val,.kpi-value{font-size:1.35rem;font-weight:800;color:var(--blue);line-height:1.1}
+.kpi-lbl,.kpi-label{font-size:.62rem;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.7px;font-weight:700;margin-bottom:.18rem}
+.kpi-val,.kpi-value{font-size:1.05rem;font-weight:800;color:var(--blue);line-height:1.05}
 .kpi.gold .kpi-val,.kpi.gold .kpi-value,.kpi-card.gold .kpi-val,.kpi-card.gold .kpi-value{color:var(--gold)}
 .kpi.green .kpi-val,.kpi.green .kpi-value,.kpi-card.green .kpi-val,.kpi-card.green .kpi-value{color:var(--green)}
 .kpi.red .kpi-val,.kpi.red .kpi-value,.kpi-card.red .kpi-val,.kpi-card.red .kpi-value{color:var(--red)}
@@ -468,11 +467,11 @@ a.kpi:hover,a.kpi-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rg
 .modal-body{padding:.4rem 0 0}
 
 /* ── Professional Cashflow Statement ── */
-.cashflow-summary-grid{display:grid;grid-template-columns:repeat(5,minmax(170px,1fr));gap:.8rem;margin-bottom:1.25rem;align-items:stretch}
-.cf-card{background:var(--surface);border:1px solid rgba(14,116,144,.12);border-radius:16px;box-shadow:0 12px 30px rgba(14,116,144,.08);padding:.95rem;min-height:120px;display:flex;flex-direction:column;justify-content:space-between}
-.cf-card-title{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.4rem}
-.cf-card-value{font-size:1.3rem;font-weight:800;line-height:1.05;color:var(--blue)}
-.cf-card-sub{margin-top:.45rem;font-size:.72rem;color:var(--muted);line-height:1.3}
+.cashflow-summary-grid{display:grid;grid-template-columns:repeat(5,minmax(140px,1fr));gap:.6rem;margin-bottom:1rem;align-items:stretch}
+.cf-card{background:var(--surface);border:1px solid rgba(14,116,144,.12);border-radius:12px;box-shadow:0 10px 22px rgba(14,116,144,.06);padding:.6rem;min-height:80px;display:flex;flex-direction:column;justify-content:space-between}
+.cf-card-title{font-size:.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.35px;margin-bottom:.3rem}
+.cf-card-value{font-size:1.05rem;font-weight:800;line-height:1.05;color:var(--blue)}
+.cf-card-sub{margin-top:.3rem;font-size:.66rem;color:var(--muted);line-height:1.2}
 .cf-card-success{border-color:rgba(16,185,129,.18)}
 .cf-card-danger{border-color:rgba(239,68,68,.18)}
 .cf-card-highlight{border-color:rgba(245,158,11,.18);background:rgba(255,248,230,.9)}

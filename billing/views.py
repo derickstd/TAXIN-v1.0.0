@@ -192,6 +192,66 @@ def record_payment(request, pk):
 
 
 @login_required
+def record_client_payment(request):
+    """Accept a lump-sum payment for a client and allocate it to their oldest
+    unpaid invoices (using the invoice amounts as the recorded agreed prices).
+    Creates `Payment` records per invoice until the amount is exhausted.
+    """
+    if request.method != 'POST':
+        messages.error(request, 'Invalid request method.')
+        return redirect('billing:list')
+
+    client_id = request.POST.get('client')
+    amount_raw = request.POST.get('amount', '0')
+    method = request.POST.get('method', 'cash')
+    reference = request.POST.get('reference', '')
+    try:
+        amount = Decimal(str(amount_raw))
+    except (InvalidOperation, TypeError):
+        messages.error(request, 'Invalid payment amount.')
+        return redirect('billing:list')
+
+    client = get_object_or_404(Client, pk=client_id)
+    if amount <= 0:
+        messages.error(request, 'Payment amount must be greater than zero.')
+        return redirect('billing:detail', pk=client.invoices.first().pk if client.invoices.exists() else 'billing:list')
+
+    # Fetch unpaid invoices oldest-first and allocate
+    unpaid = (Invoice.objects.filter(client=client)
+                         .exclude(status__in=['paid', 'written_off'])
+                         .order_by('date_issued', 'pk'))
+
+    remaining = amount
+    created_count = 0
+    for inv in unpaid:
+        if remaining <= 0:
+            break
+        inv.refresh_from_db(fields=['grand_total', 'amount_paid'])
+        balance = inv.grand_total - inv.amount_paid
+        if balance <= 0:
+            continue
+        to_apply = min(balance, remaining)
+        Payment.objects.create(
+            invoice=inv,
+            amount=to_apply,
+            method=method,
+            reference=reference,
+            received_by=request.user
+        )
+        remaining -= to_apply
+        created_count += 1
+
+    # Update client's last transaction date and outstanding via signals
+    if created_count:
+        messages.success(request, f'Allocated payment to {created_count} invoice(s). Remaining: UGX {remaining:,.0f}.')
+    else:
+        messages.info(request, 'No unpaid invoices found for this client.')
+
+    # Optionally send receipt for first payment created (signals already updated invoices)
+    return redirect('clients:detail', pk=client.pk)
+
+
+@login_required
 def aging_report(request):
     invoices = Invoice.objects.exclude(status__in=['paid', 'written_off']).select_related('client')
     buckets = {'Current': [], '1–30 days': [], '31–60 days': [], '61–90 days': [], '90+ days': []}

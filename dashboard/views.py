@@ -22,7 +22,7 @@ def index(request):
     last_month_end = this_month - timezone.timedelta(days=1)
     seven_days = today + timezone.timedelta(days=7)
 
-    period = request.GET.get('period', '6m')
+    period = request.GET.get('period', '30d')
     period_options = [
         ('7d', 'Last 7 days'),
         ('30d', 'Last 30 days'),
@@ -274,6 +274,9 @@ def index(request):
             'hours':     round(float(hours), 1),
             'revenue':   float(revenue),
         })
+
+    # Sort staff performance by revenue (descending) to highlight top contributors
+    staff_perf.sort(key=lambda x: x.get('revenue', 0), reverse=True)
 
     # ── Top clients by revenue this month ──
     top_clients = (Client.objects

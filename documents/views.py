@@ -114,9 +114,9 @@ def monthly_report(request):
     payments = Payment.objects.filter(payment_date__month=month, payment_date__year=year)
 
     total_invoiced = invoices.aggregate(s=Sum('grand_total'))['s'] or 0
-    total_collected = invoices.aggregate(s=Sum('amount_paid'))['s'] or 0
+    total_collected = payments.aggregate(s=Sum('amount'))['s'] or Decimal('0')
     total_expenses = expenses.aggregate(s=Sum('amount'))['s'] or 0
-    total_cash_inflow = payments.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    total_cash_inflow = total_collected
     total_cash_outflow = total_expenses
     cashflow_net_total = total_cash_inflow - total_cash_outflow
     collection_rate = round((float(total_collected)/float(total_invoiced)*100),1) if total_invoiced else 0
@@ -193,7 +193,7 @@ def audit_books(request):
     years = list(range(today.year - 3, today.year + 2))
 
     total_revenue = Invoice.objects.filter(date_issued__year=year).aggregate(s=Sum('grand_total'))['s'] or 0
-    total_collected = Invoice.objects.filter(date_issued__year=year).aggregate(s=Sum('amount_paid'))['s'] or 0
+    total_collected = Payment.objects.filter(payment_date__year=year).aggregate(s=Sum('amount'))['s'] or 0
     outstanding = total_revenue - total_collected
     expenses = Expense.objects.filter(expense_date__year=year, status='approved')
     exp_by_cat = expenses.values('category__name').annotate(total=Sum('amount')).order_by('-total')

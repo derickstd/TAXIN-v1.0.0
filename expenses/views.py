@@ -54,8 +54,27 @@ class ExpenseForm(forms.ModelForm):
 def expense_list(request):
     expenses = Expense.objects.select_related('category', 'paid_by').order_by('-expense_date')
     cat = request.GET.get('category', '')
+    start_date_str = request.GET.get('start_date', '').strip()
+    end_date_str = request.GET.get('end_date', '').strip()
+
     if cat:
         expenses = expenses.filter(category_id=cat)
+
+    start_date = None
+    end_date = None
+    if start_date_str:
+        try:
+            start_date = datetime.date.fromisoformat(start_date_str)
+            expenses = expenses.filter(expense_date__gte=start_date)
+        except ValueError:
+            start_date = None
+    if end_date_str:
+        try:
+            end_date = datetime.date.fromisoformat(end_date_str)
+            expenses = expenses.filter(expense_date__lte=end_date)
+        except ValueError:
+            end_date = None
+
     total = expenses.aggregate(s=Sum('amount'))['s'] or 0
     approved_total = expenses.filter(status='approved').aggregate(s=Sum('amount'))['s'] or 0
     pending_count = expenses.filter(status='submitted').count()
@@ -66,6 +85,7 @@ def expense_list(request):
         'expenses': page_obj, 'page_obj': page_obj, 'total': total, 'approved_total': approved_total,
         'pending_count': pending_count, 'by_cat': by_cat,
         'categories': categories, 'cat_filter': cat,
+        'start_date': start_date_str, 'end_date': end_date_str,
     })
 
 

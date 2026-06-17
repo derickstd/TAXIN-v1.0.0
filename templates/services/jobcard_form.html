@@ -128,7 +128,7 @@
               </label>
               {% endif %}
             </div>
-            <div class="form-stack" style="gap:.6rem">
+            <div class="form-grid-2" style="gap:.6rem">
               <div style="grid-column:1/-1">
                 <label class="form-label fs-xs">Service Type</label>
                 <select name="{{ f.service_type.html_name }}" class="s2-svc"
@@ -168,7 +168,7 @@
                   value="{{ f.period_label.value|default:'' }}"
                   class="form-ctrl li-period" style="font-size:.83rem" placeholder="e.g. April 2025">
               </div>
-              <div style="">
+              <div style="grid-column:1/-1">
                 <label class="form-label fs-xs">Notes <span class="text-muted">(optional)</span></label>
                 <input type="text" name="{{ f.notes.html_name }}"
                   value="{{ f.notes.value|default:'' }}"

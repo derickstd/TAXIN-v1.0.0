@@ -26,6 +26,8 @@
             <option value="">All Categories</option>
             {% for cat in categories %}<option value="{{ cat.pk }}" {% if cat.pk|stringformat:"s" == cat_filter %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}
           </select>
+          <input type="date" name="start_date" value="{{ start_date|default:'' }}" class="form-control" style="max-width:170px" placeholder="From">
+          <input type="date" name="end_date" value="{{ end_date|default:'' }}" class="form-control" style="max-width:170px" placeholder="To">
           <button class="btn btn-primary btn-sm">Filter</button>
           <a href="{% url 'expenses:list' %}" class="btn btn-outline btn-sm">Clear</a>
         </form>

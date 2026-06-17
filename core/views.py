@@ -502,7 +502,7 @@ def export_invoices_excel(request):
             inv.client.full_name if inv.client else '—',
             f"{inv.grand_total:,.0f}",
             f"{inv.amount_paid:,.0f}",
-            f"{inv.balance_outstanding:,.0f}",
+            f"{inv.balance_due:,.0f}",
             inv.get_status_display(),
             str(inv.date_issued),
         ])
@@ -539,17 +539,17 @@ def export_jobcards_excel(request):
     if status:
         cards = cards.filter(status=status)
     
-    columns = ['Job ID', 'Client', 'Service', 'Assigned To', 'Status', 'Created', 'Due Date']
+    columns = ['Job Number', 'Client', 'Assigned To', 'Status', 'Created', 'Due Date', 'Total Fee']
     data = []
     for card in cards[:1000]:
         data.append([
-            card.job_id,
+            card.job_number,
             card.client.full_name if card.client else '—',
-            card.service_type.name if card.service_type else '—',
             card.assigned_to.get_full_name() if card.assigned_to else '—',
             card.get_status_display(),
             str(card.created_at.date()),
             str(card.due_date) if card.due_date else '—',
+            f"{card.total_fee:,.0f}",
         ])
     return export_to_excel('jobcards', columns, data, title='Job Cards Report')
 
@@ -560,15 +560,15 @@ def export_jobcards_pdf(request):
     from services.models import JobCard
     
     cards = JobCard.objects.select_related('client', 'assigned_to').all()[:500]
-    columns = ['Job ID', 'Client', 'Service', 'Status', 'Assigned To']
+    columns = ['Job Number', 'Client', 'Status', 'Assigned To', 'Total Fee']
     data = []
     for card in cards:
         data.append([
-            card.job_id,
+            card.job_number,
             card.client.full_name if card.client else '—',
-            card.service_type.name if card.service_type else '—',
             card.get_status_display(),
             card.assigned_to.get_full_name() if card.assigned_to else '—',
+            f"{card.total_fee:,.0f}",
         ])
     return export_to_pdf('jobcards', columns, data, title='Job Cards Report')
 

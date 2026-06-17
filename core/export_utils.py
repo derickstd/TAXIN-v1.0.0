@@ -5,6 +5,7 @@ from io import BytesIO
 from django.http import HttpResponse
 from datetime import datetime
 from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -32,7 +33,8 @@ def export_to_excel(filename, columns, data_rows, title=None):
     
     # Add title if provided
     if title:
-        ws.merge_cells(f'A1:{chr(64 + len(columns))}1')
+        end_col = get_column_letter(len(columns))
+        ws.merge_cells(f'A1:{end_col}1')
         title_cell = ws['A1']
         title_cell.value = title
         title_cell.font = Font(size=14, bold=True, color="FFFFFF")
@@ -73,7 +75,8 @@ def export_to_excel(filename, columns, data_rows, title=None):
     
     # Adjust column widths
     for col_idx, col_name in enumerate(columns, 1):
-        ws.column_dimensions[chr(64 + col_idx)].width = max(15, len(str(col_name)) + 2)
+        col_letter = get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = max(15, len(str(col_name)) + 2)
     
     # Generate response
     output = BytesIO()

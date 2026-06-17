@@ -19,19 +19,18 @@
         <button class="btn btn-primary"><i class="fas fa-search"></i></button>
         <a href="{% url 'services:list' %}" class="btn btn-outline"><i class="fas fa-times"></i></a>
       </form>
+      <div class="d-flex flex-wrap align-items-center gap-2 mt-2" style="font-size:.82rem;color:var(--text-muted)">
+        <div style="display:flex;align-items:center;gap:.35rem"><span class="badge badge-open" style="font-size:.82rem;padding:.3rem .55rem">Visible</span><span class="fw-7">{{ jobs|length }}</span></div>
+        <div style="display:flex;align-items:center;gap:.35rem"><span>Status</span><span class="text-muted">{{ status|default:"All" }}</span></div>
+        <div style="display:flex;align-items:center;gap:.35rem"><span>Cols</span><span class="text-muted">{{ status_choices|length }}</span></div>
+        <a href="{% url 'services:create' %}" class="btn btn-outline btn-sm">New Job</a>
+      </div>
     </div>
   </div>
 
-  {% include "components/export_buttons.html" with excel_url="core:export_jobcards_excel" pdf_url="core:export_jobcards_pdf" show_condition=page_obj.paginator.count %}
+  {% include "components/export_buttons.html" with excel_url="core:export_jobcards_excel" pdf_url="core:export_jobcards_pdf" show_condition=page_obj.paginator.count compact=True %}
 
-  <div class="card-box card-compact">
-    <div class="card-head"><i class="fas fa-bars-progress"></i>Status Summary</div>
-    <div class="card-body">
-      <div class="stat-row"><span>Visible Jobs</span><span class="fw-7">{{ jobs|length }}</span></div>
-      <div class="stat-row"><span>Filter</span><span class="text-muted">{{ status|default:"All" }}</span></div>
-      <div class="stat-row"><span>Board Columns</span><span class="text-muted">{{ status_choices|length }}</span></div>
-    </div>
-  </div>
+ 
 </div>
 
 <!-- Kanban board — always shows all jobs by status regardless of filter -->

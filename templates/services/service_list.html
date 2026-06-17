@@ -92,12 +92,12 @@
     </div>
     {% endif %}
     <form method="post" action="{% url 'services:service_new' %}">{% csrf_token %}
-      <div style="margin-bottom:.8rem">
-        <label class="form-label" for="{{ service_form.name.id_for_label }}">Service Name <span class="req">*</span></label>
-        <input type="text" name="{{ service_form.name.html_name }}" id="{{ service_form.name.id_for_label }}" class="form-ctrl" placeholder="e.g. Customs Entry Processing" value="{{ service_form.name.value|default:'' }}" required>
-        {% if service_form.name.errors %}<div class="err-msg">{{ service_form.name.errors|join:', ' }}</div>{% endif %}
-      </div>
-      <div class="grid g2" style="margin-bottom:.8rem">
+      <div class="form-grid-2" style="margin-bottom:.8rem;gap:.8rem">
+        <div>
+          <label class="form-label" for="{{ service_form.name.id_for_label }}">Service Name <span class="req">*</span></label>
+          <input type="text" name="{{ service_form.name.html_name }}" id="{{ service_form.name.id_for_label }}" class="form-ctrl" placeholder="e.g. Customs Entry Processing" value="{{ service_form.name.value|default:'' }}" required>
+          {% if service_form.name.errors %}<div class="err-msg">{{ service_form.name.errors|join:', ' }}</div>{% endif %}
+        </div>
         <div>
           <label class="form-label" for="{{ service_form.category.id_for_label }}">Category <span class="req">*</span></label>
           <select name="{{ service_form.category.html_name }}" id="{{ service_form.category.id_for_label }}" class="form-ctrl">
@@ -107,13 +107,13 @@
           </select>
           {% if service_form.category.errors %}<div class="err-msg">{{ service_form.category.errors|join:', ' }}</div>{% endif %}
         </div>
+      </div>
+      <div class="form-grid-2" style="margin-bottom:.8rem;gap:.8rem">
         <div>
           <label class="form-label" for="{{ service_form.default_price.id_for_label }}">Default Price (UGX)</label>
           <input type="number" name="{{ service_form.default_price.html_name }}" id="{{ service_form.default_price.id_for_label }}" class="form-ctrl" placeholder="0 = negotiable" min="0" step="1000" value="{{ service_form.default_price.value|default:'0' }}">
           {% if service_form.default_price.errors %}<div class="err-msg">{{ service_form.default_price.errors|join:', ' }}</div>{% endif %}
         </div>
-      </div>
-      <div class="grid g2" style="margin-bottom:.8rem">
         <div>
           <label class="form-label" for="{{ service_form.deadline_type.id_for_label }}">Deadline Rule</label>
           <select name="{{ service_form.deadline_type.html_name }}" id="{{ service_form.deadline_type.id_for_label }}" class="form-ctrl">
@@ -123,14 +123,14 @@
           </select>
           {% if service_form.deadline_type.errors %}<div class="err-msg">{{ service_form.deadline_type.errors|join:', ' }}</div>{% endif %}
         </div>
-        <div style="display:flex;align-items:flex-end;padding-bottom:.3rem;gap:1rem;flex-wrap:wrap">
-          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem">
-            <input type="checkbox" name="{{ service_form.is_recurring.html_name }}" {% if service_form.is_recurring.value %}checked{% endif %}> <span>Recurring Monthly</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem">
-            <input type="checkbox" name="{{ service_form.vat_applicable.html_name }}" {% if service_form.vat_applicable.value %}checked{% endif %}> <span>VAT Applies</span>
-          </label>
-        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;align-items:center;margin-bottom:.8rem">
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem">
+          <input type="checkbox" name="{{ service_form.is_recurring.html_name }}" {% if service_form.is_recurring.value %}checked{% endif %}> <span>Recurring Monthly</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem">
+          <input type="checkbox" name="{{ service_form.vat_applicable.html_name }}" {% if service_form.vat_applicable.value %}checked{% endif %}> <span>VAT Applies</span>
+        </label>
       </div>
       <div style="margin-bottom:.8rem">
         <label class="form-label" for="{{ service_form.description.id_for_label }}">Description</label>

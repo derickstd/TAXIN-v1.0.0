@@ -1,0 +1,260 @@
+001: {% extends 'base.html' %}
+002: {% block title %}Monthly Report — {{ month_name }} {{ year }}{% endblock %}
+003: {% block breadcrumbs %}
+004: <li class="breadcrumb-item"><a href="{% url 'documents:home' %}">Documents</a></li>
+005: <li class="breadcrumb-item active">Monthly Report</li>
+006: {% endblock %}
+007: {% block content %}
+008: <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+009:   <h4 class="page-title"><i class="fas fa-chart-line me-2 text-gold"></i>Monthly Report — {{ month_name }} {{ year }}</h4>
+010:   <div class="d-flex gap-2 flex-wrap no-print">
+011: 
+012:     <form method="get" class="d-flex gap-2 flex-wrap">
+013:       <select name="month" class="form-select form-select-sm select2" style="width:130px">
+014:         {% for i,mn in months %}
+015:         <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ mn }}</option>
+016:         {% endfor %}
+017:       </select>
+018:       <select name="year" class="form-select form-select-sm" style="width:90px">
+019:         {% for y in years %}
+020:         <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+021:         {% endfor %}
+022:       </select>
+023:       <button class="btn btn-sm btn-brand">Load</button>
+024:     </form>
+025:     <button onclick="window.print()" class="btn btn-sm btn-outline-secondary">
+026:       <i class="fas fa-print me-1"></i>Print
+027:     </button>
+028:   </div>
+029: </div>
+030: 
+031: <!-- KPIs -->
+032: <div class="stats-grid mb-4">
+033:   <div class="kpi-card">
+034:     <div class="kpi-label">Invoiced</div>
+035:     <div class="kpi-value">{{ total_invoiced|floatformat:0|intcomma }}</div>
+036:     <div class="kpi-sub">UGX</div>
+037:   </div>
+038:   <div class="kpi-card green">
+039:     <div class="kpi-label">Collected</div>
+040:     <div class="kpi-value">{{ total_collected|floatformat:0|intcomma }}</div>
+041:     <div class="kpi-sub">{{ collection_rate }}% rate</div>
+042:   </div>
+043:   <div class="kpi-card red">
+044:     <div class="kpi-label">Expenses</div>
+045:     <div class="kpi-value">{{ total_expenses|floatformat:0|intcomma }}</div>
+046:     <div class="kpi-sub">UGX approved</div>
+047:   </div>
+048:   <div class="kpi-card {% if net_profit >= 0 %}gold{% else %}red{% endif %}">
+049:     <div class="kpi-label">Net Profit Est.</div>
+050:     <div class="kpi-value">{{ net_profit|floatformat:0|intcomma }}</div>
+051:     <div class="kpi-sub">UGX</div>
+052:   </div>
+053: </div>
+054: 
+055: <div class="card-box card-compact mb-4">
+056:   <div class="card-box-header"><i class="fas fa-wallet me-2"></i>Statement of Cash Flow</div>
+057:   <div class="card-box-body">
+058:     <div class="stats-grid mb-4">
+059:       <div class="kpi-card green">
+060:         <div class="kpi-label">Cash In</div>
+061:         <div class="kpi-value">{{ total_cash_inflow|floatformat:0|intcomma }}</div>
+062:         <div class="kpi-sub">Payments received</div>
+063:       </div>
+064:       <div class="kpi-card red">
+065:         <div class="kpi-label">Cash Out</div>
+066:         <div class="kpi-value">{{ total_cash_outflow|floatformat:0|intcomma }}</div>
+067:         <div class="kpi-sub">Approved expenses</div>
+068:       </div>
+069:       <div class="kpi-card {% if cashflow_net_total >= 0 %}gold{% else %}red{% endif %}">
+070:         <div class="kpi-label">Net Cash</div>
+071:         <div class="kpi-value">{{ cashflow_net_total|floatformat:0|intcomma }}</div>
+072:         <div class="kpi-sub">Month cash flow</div>
+073:       </div>
+074:     </div>
+075:     <div class="table-responsive">
+076:       <table class="table table-taxman mb-0">
+077:         <thead>
+078:           <tr>
+079:             <th>Date</th>
+080:             <th>Cashflow</th>
+081:             <th>Net Cash</th>
+082:             <th>Running Balance</th>
+083:             <th class="text-end">Action</th>
+084:           </tr>
+085:         </thead>
+086:         <tbody>
+087:           {% for row in cashflow_by_date %}
+088:           <tr>
+089:             <td>{{ row.date|date:"j M" }}</td>
+090:             <td>
+091:               {% if row.inflow %}
+092:               <span class="cash-pill cash-in">+{{ row.inflow|floatformat:0|intcomma }}</span>
+093:               {% endif %}
+094:               {% if row.outflow %}
+095:               <span class="cash-pill cash-out">-{{ row.outflow|floatformat:0|intcomma }}</span>
+096:               {% endif %}
+097:               {% if not row.inflow and not row.outflow %}
+098:               <span class="text-muted">No activity</span>
+099:               {% endif %}
+100:             </td>
+101:             <td class="ugx">{{ row.net|floatformat:0|intcomma }}</td>
+102:             <td class="ugx">{{ row.balance|floatformat:0|intcomma }}</td>
+103:             <td class="text-end">
+104:               <button type="button" class="btn btn-sm btn-outline-secondary"
+105:                 onclick="openCashflowModal(this)"
+106:                 data-date="{{ row.date|date:'j M Y' }}"
+107:                 data-inflow="{{ row.inflow|floatformat:0|intcomma }}"
+108:                 data-outflow="{{ row.outflow|floatformat:0|intcomma }}"
+109:                 data-net="{{ row.net|floatformat:0|intcomma }}"
+110:                 data-balance="{{ row.balance|floatformat:0|intcomma }}"
+111:               >
+112:                 View
+113:               </button>
+114:             </td>
+115:           </tr>
+116:           {% endfor %}
+117:         </tbody>
+118:         <tfoot>
+119:           <tr>
+120:             <th>Total</th>
+121:             <th>
+122:               <span class="cash-pill cash-in">+{{ total_cash_inflow|floatformat:0|intcomma }}</span>
+123:               <span class="cash-pill cash-out">-{{ total_cash_outflow|floatformat:0|intcomma }}</span>
+124:             </th>
+125:             <th class="ugx">{{ cashflow_net_total|floatformat:0|intcomma }}</th>
+126:             <th class="ugx">{{ cashflow_end_balance|floatformat:0|intcomma }}</th>
+127:             <th></th>
+128:           </tr>
+129:         </tfoot>
+130:       </table>
+131:     </div>
+132:   </div>
+133: </div>
+134: 
+135: <div class="modal-overlay" id="cashflowDetailModal">
+136:   <div class="modal-box">
+137:     <div class="modal-hd">
+138:       <h5>Cashflow Entry Details</h5>
+139:       <button type="button" class="modal-close" onclick="closeCashflowModal()" aria-label="Close">&times;</button>
+140:     </div>
+141:     <div class="modal-body">
+142:       <div class="cashflow-detail-summary">
+143:         <div><strong>Date:</strong> <span id="cf-detail-date">Select a row</span></div>
+144:         <div><strong>Cash In:</strong> <span id="cf-detail-inflow" class="cash-pill cash-in">0</span></div>
+145:         <div><strong>Cash Out:</strong> <span id="cf-detail-outflow" class="cash-pill cash-out">0</span></div>
+146:         <div><strong>Net Cash:</strong> <span id="cf-detail-net" class="cash-pill cash-in">0</span></div>
+147:         <div><strong>Running Balance:</strong> <span id="cf-detail-balance" class="ugx">0</span></div>
+148:       </div>
+149:     </div>
+150:   </div>
+151: </div>
+152: 
+153: <div class="cards-grid-2">
+154:   <div>
+155:     <div class="card-box card-compact">
+156:       <div class="card-box-header"><i class="fas fa-trophy me-2"></i>Top Clients by Revenue</div>
+157:       <div class="card-box-body p-0">
+158:         <table class="table table-taxman mb-0">
+159:           <thead><tr><th>#</th><th>Client</th><th>Revenue (UGX)</th></tr></thead>
+160:           <tbody>
+161:             {% for c in top_clients %}
+162:             <tr>
+163:               <td>{{ forloop.counter }}</td>
+164:               <td><a href="{% url 'clients:detail' c.pk %}">{{ c.get_display_name }}</a></td>
+165:               <td class="ugx">{{ c.revenue|floatformat:0|intcomma }}</td>
+166:             </tr>
+167:             {% empty %}
+168:             <tr><td colspan="3" class="text-center text-muted py-3">No data</td></tr>
+169:             {% endfor %}
+170:           </tbody>
+171:         </table>
+172:       </div>
+173:     </div>
+174:   </div>
+175:   <div>
+176:     <div class="card-box card-compact">
+177:       <div class="card-box-header"><i class="fas fa-receipt me-2"></i>Expenses by Category</div>
+178:       <div class="card-box-body p-0">
+179:         <table class="table table-taxman mb-0">
+180:           <thead><tr><th>Category</th><th>Amount (UGX)</th></tr></thead>
+181:           <tbody>
+182:             {% for e in exp_by_cat %}
+183:             <tr>
+184:               <td>{{ e.category__name|default:"Other" }}</td>
+185:               <td class="ugx">{{ e.total|floatformat:0|intcomma }}</td>
+186:             </tr>
+187:             {% empty %}
+188:             <tr><td colspan="2" class="text-center text-muted py-3">No approved expenses this month</td></tr>
+189:             {% endfor %}
+190:           </tbody>
+191:         </table>
+192:       </div>
+193:     </div>
+194:   </div>
+195: </div>
+196: 
+197: <div class="cards-grid-2 mt-1">
+198:   <div>
+199:     <div class="card-box card-compact">
+200:       <div class="card-box-header"><i class="fas fa-briefcase me-2"></i>Job Cards Summary</div>
+201:       <div class="card-box-body">
+202:         {% for s, cnt in job_summary.items %}
+203:         <div class="stat-row">
+204:           <span><span class="badge-status badge-{{ s }}">{{ s|title }}</span></span>
+205:           <span class="fw-bold">{{ cnt }}</span>
+206:         </div>
+207:         {% endfor %}
+208:       </div>
+209:     </div>
+210:   </div>
+211:   <div>
+212:     <div class="card-box card-compact">
+213:       <div class="card-box-header"><i class="fas fa-file-invoice me-2"></i>Invoice Summary</div>
+214:       <div class="card-box-body">
+215:         {% for s, cnt in invoice_summary.items %}
+216:         <div class="stat-row">
+217:           <span><span class="badge-status badge-{{ s }}">{{ s|title }}</span></span>
+218:           <span class="fw-bold">{{ cnt }}</span>
+219:         </div>
+220:         {% endfor %}
+221:       </div>
+222:     </div>
+223:   </div>
+224: </div>
+225: {% endblock %}
+226: 
+227: {% block extra_js %}
+228: <script>
+229:   function openCashflowModal(button) {
+230:     var overlay = document.getElementById('cashflowDetailModal');
+231:     if (!overlay) return;
+232:     var date = button.dataset.date || 'Unknown';
+233:     var inflow = button.dataset.inflow || '0';
+234:     var outflow = button.dataset.outflow || '0';
+235:     var net = button.dataset.net || '0';
+236:     var balance = button.dataset.balance || '0';
+237:     var netValue = parseFloat(net.replace(/,/g, '')) || 0;
+238:     document.getElementById('cf-detail-date').textContent = date;
+239:     document.getElementById('cf-detail-inflow').textContent = inflow === '0' ? '0' : '+' + inflow;
+240:     document.getElementById('cf-detail-outflow').textContent = outflow === '0' ? '0' : '-' + outflow;
+241:     document.getElementById('cf-detail-net').textContent = net;
+242:     document.getElementById('cf-detail-net').classList.remove('cash-in', 'cash-out');
+243:     document.getElementById('cf-detail-net').classList.add(netValue >= 0 ? 'cash-in' : 'cash-out');
+244:     document.getElementById('cf-detail-balance').textContent = balance;
+245:     overlay.classList.add('open');
+246:   }
+247:   function closeCashflowModal() {
+248:     var overlay = document.getElementById('cashflowDetailModal');
+249:     if (overlay) overlay.classList.remove('open');
+250:   }
+251:   document.addEventListener('click', function(event) {
+252:     var overlay = document.getElementById('cashflowDetailModal');
+253:     if (!overlay || !overlay.classList.contains('open')) return;
+254:     if (event.target === overlay) {
+255:       closeCashflowModal();
+256:     }
+257:   });
+258: </script>
+259: {% endblock %}
+260: 

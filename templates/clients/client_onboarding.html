@@ -377,7 +377,7 @@ $(document).ready(function(){
 function addServiceField(){
   var serviceOptions = '<option value="">Select service...</option>';
   serviceTypes.forEach(function(service){
-    serviceOptions += `<option value="${service.id}" data-price="${service.price}" data-deadlinetype="${service.deadline_type}">${service.name} (UGX ${service.price.toLocaleString()})</option>`;
+    serviceOptions += `<option value="${service.id}" data-price="${service.price}" data-deadlinetype="${service.deadline_type}" data-frequency="${service.frequency}">${service.name} (UGX ${service.price.toLocaleString()})</option>`;
   });
   
   var html = `
@@ -385,8 +385,8 @@ function addServiceField(){
       <button type="button" class="btn btn-sm" onclick="removeService(this)" style="position:absolute;top:.5rem;right:.5rem;padding:.2rem .5rem;background:#fee2e2;color:#dc2626;border:none">
         <i class="fas fa-times"></i>
       </button>
-      <div class="form-stack" style="gap:.6rem">
-        <div>
+      <div class="form-grid-2" style="gap:.6rem">
+        <div style="grid-column:1/-1">
           <label class="form-label fs-xs">Service Type</label>
           <select name="service_type_${serviceCount}" class="form-control service-select" data-index="${serviceCount}" style="font-size:.83rem">
             ${serviceOptions}
@@ -404,29 +404,40 @@ function addServiceField(){
             <option value="annual">Annual</option>
           </select>
         </div>
+        <div style="grid-column:1/-1">
+          <label class="form-label fs-xs">Service Notes</label>
+          <input type="text" name="service_notes_${serviceCount}" class="form-control" style="font-size:.83rem" placeholder="Optional internal note">
+        </div>
       </div>
     </div>
   `;
   $('#servicesContainer').append(html);
   
-  // Add change event to auto-fill price
+  // Add change event to auto-fill price and inherit frequency
   $(`.service-select[data-index="${serviceCount}"]`).on('change', function(){
     var selectedOption = $(this).find('option:selected');
     var price = selectedOption.data('price');
     var deadlineType = selectedOption.data('deadlinetype');
+    var frequency = selectedOption.data('frequency');
+    var index = $(this).data('index');
     if(price){
-      $(`.service-price-${serviceCount}`).val(price);
-      $(`.service-price-${serviceCount}`).attr('placeholder', `Default: UGX ${price.toLocaleString()}`);
+      $(`.service-price-${index}`).val(price);
+      $(`.service-price-${index}`).attr('placeholder', `Default: UGX ${price.toLocaleString()}`);
     }
     // Show/hide price and frequency based on deadline_type
-    var priceRow = $(this).closest('.form-stack').find('.price-row');
-    var freqRow = $(this).closest('.form-stack').find('.frequency-row');
+    var container = $(this).closest('.service-item');
+    var priceRow = container.find('.price-row');
+    var freqRow = container.find('.frequency-row');
+    var frequencySelect = container.find('select[name="service_frequency_' + index + '"]');
     if(deadlineType === 'none') {
       priceRow.hide();
       freqRow.hide();
     } else {
       priceRow.show();
       freqRow.show();
+      if(frequency) {
+        frequencySelect.val(frequency);
+      }
     }
   });
   
@@ -445,7 +456,7 @@ function addCredentialField(){
       <button type="button" class="btn btn-sm" onclick="removeCredential(this)" style="position:absolute;top:.5rem;right:.5rem;padding:.2rem .5rem;background:#fee2e2;color:#dc2626;border:none">
         <i class="fas fa-times"></i>
       </button>
-      <div class="form-stack" style="gap:.6rem">
+      <div class="form-grid-2" style="gap:.6rem">
         <div>
           <label class="form-label fs-xs">Platform</label>
           <select name="cred_platform_${credentialCount}" class="form-control cred-platform" data-index="${credentialCount}" style="font-size:.83rem">

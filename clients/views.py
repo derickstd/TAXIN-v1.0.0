@@ -95,8 +95,21 @@ def _client_onboarding_context(
     
     # Get active service types for the service dropdown
     service_types = ServiceType.objects.filter(is_active=True).order_by('category', 'name')
+    def service_type_frequency(st):
+        if st.deadline_type.startswith('annual'):
+            return 'annual'
+        if st.deadline_type == 'monthly_15' or st.is_recurring:
+            return 'monthly'
+        return 'monthly'
+
     service_types_json = json.dumps([
-        {'id': st.id, 'name': st.name, 'price': float(st.default_price)}
+        {
+            'id': st.id,
+            'name': st.name,
+            'price': float(st.default_price),
+            'deadline_type': st.deadline_type,
+            'frequency': service_type_frequency(st)
+        }
         for st in service_types
     ])
     
