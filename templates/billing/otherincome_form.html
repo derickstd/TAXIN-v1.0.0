@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% block title %}Add Other Income{% endblock %}
+{% block nav_bill %}active{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'billing:list' %}">Billing</a></li>
+<li><a href="{% url 'billing:otherincome_list' %}">Other Income</a></li>
+<li class="active">Add Income</li>
+{% endblock %}
+
+{% block content %}
+<div class="card-box" style="max-width:800px;margin:0 auto">
+  <div class="card-head">
+    <span><i class="fas fa-gift"></i> Record Other Income</span>
+  </div>
+
+  <div class="card-body">
+    <form method="post" style="display:flex;flex-direction:column;gap:1.2rem">
+      {% csrf_token %}
+
+      <!-- Source Name -->
+      <div>
+        <label for="source_name" style="display:block;margin-bottom:.4rem;font-weight:600">Source Name *</label>
+        <input type="text" id="source_name" name="source_name" placeholder="e.g., SACCOS Interest, Landlord Grant" 
+               required style="width:100%;padding:.6rem;border:1px solid #cbd5e1;border-radius:.4rem;font-size:1rem">
+        <small style="color:#64748b;margin-top:.2rem;display:block">Descriptive name for this income source</small>
+      </div>
+
+      <!-- Category -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div>
+          <label for="category" style="display:block;margin-bottom:.4rem;font-weight:600">Category *</label>
+          <select id="category" name="category" required style="width:100%;padding:.6rem;border:1px solid #cbd5e1;border-radius:.4rem;font-size:1rem">
+            {% for val, label in category_choices %}
+            <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Income Date -->
+        <div>
+          <label for="income_date" style="display:block;margin-bottom:.4rem;font-weight:600">Income Date *</label>
+          <input type="date" id="income_date" name="income_date" required 
+                 style="width:100%;padding:.6rem;border:1px solid #cbd5e1;border-radius:.4rem;font-size:1rem">
+        </div>
+      </div>
+
+      <!-- Amount -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div>
+          <label for="amount" style="display:block;margin-bottom:.4rem;font-weight:600">Amount (UGX) *</label>
+          <input type="number" id="amount" name="amount" placeholder="0" min="0" step="0.01" required
+                 style="width:100%;padding:.6rem;border:1px solid #cbd5e1;border-radius:.4rem;font-size:1rem">
+        </div>
+
+        <!-- Collection Method -->
+        <div>
+          <label for="collection_method" style="display:block;margin-bottom:.4rem;font-weight:600">Collection Method *</label>
+          <select id="collection_method" name="collection_method" required style="width:100%;padding:.6rem;border:1px solid #cbd5e1;border-radius:.4rem;font-size:1rem">
+            {% for val, label in method_choices %}
+            <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Reference -->
+      <div>
+        <label for="reference" style="display:block;margin-bottom:.4rem;font-weight:600">Reference</label>
+        <input type="text" id="reference" name="reference" placeholder="e.g., Transaction ID, Check #, Invoice #"
+               style="width:100%;padding:.6rem;border:1px solid #cbd5e1;border-radius:.4rem;font-size:1rem">
+        <small style="color:#64748b;margin-top:.2rem;display:block">Optional: tracking reference for this income</small>
+      </div>
+
+      <!-- Description -->
+      <div>
+        <label for="description" style="display:block;margin-bottom:.4rem;font-weight:600">Description</label>
+        <textarea id="description" name="description" rows="4" placeholder="Additional details about this income..."
+                  style="width:100%;padding:.6rem;border:1px solid #cbd5e1;border-radius:.4rem;font-size:1rem;font-family:inherit"></textarea>
+      </div>
+
+      <!-- Buttons -->
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;border-top:1px solid #e2e8f0;padding-top:1rem;margin-top:1rem">
+        <a href="{% url 'billing:otherincome_list' %}" class="btn btn-secondary">
+          <i class="fas fa-times"></i> Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save"></i> Save Income
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Help Box -->
+<div style="max-width:800px;margin:2rem auto;padding:1rem;background:#f0fdf4;border-left:4px solid #22c55e;border-radius:.5rem">
+  <div style="font-weight:600;color:#22c55e;margin-bottom:.5rem"><i class="fas fa-info-circle"></i> How to Use</div>
+  <ul style="margin:0;padding-left:1.5rem;font-size:.9rem;color:#65a30d">
+    <li>Record any income outside your main invoicing system (interest, gifts, grants, rental, etc.)</li>
+    <li>Categorize by income type for better tracking and reporting</li>
+    <li>Dates and amounts are required; reference and description are optional</li>
+    <li>All entries are tracked and included in your dashboard income summary</li>
+  </ul>
+</div>
+
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block title %}{{ income.source_name }}{% endblock %}
+{% block nav_bill %}active{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'billing:list' %}">Billing</a></li>
+<li><a href="{% url 'billing:otherincome_list' %}">Other Income</a></li>
+<li class="active">{{ income.source_name }}</li>
+{% endblock %}
+
+{% block content %}
+<div class="card-box" style="max-width:800px;margin:0 auto">
+  <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
+    <span><i class="fas fa-gift"></i> {{ income.source_name }}</span>
+    <div style="display:flex;gap:.5rem">
+      <a href="{% url 'billing:otherincome_delete' income.pk %}" class="btn btn-sm btn-danger" onclick="return confirm('Delete this entry?')">
+        <i class="fas fa-trash"></i> Delete
+      </a>
+      <a href="{% url 'billing:otherincome_list' %}" class="btn btn-sm btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back
+      </a>
+    </div>
+  </div>
+
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem">
+      <!-- Left: Main Details -->
+      <div>
+        <div style="margin-bottom:1.5rem">
+          <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Source Name</div>
+          <div style="font-size:1.1rem;font-weight:700">{{ income.source_name }}</div>
+        </div>
+
+        <div style="margin-bottom:1.5rem">
+          <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Amount</div>
+          <div style="font-size:1.3rem;font-weight:700;color:#059669">UGX {{ income.amount|floatformat:0|intcomma }}</div>
+        </div>
+
+        <div style="margin-bottom:1.5rem">
+          <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Category</div>
+          <div style="display:inline-block;padding:.3rem .6rem;background:#e5e7eb;border-radius:.3rem;color:#374151;font-weight:600">
+            {{ income.get_category_display }}
+          </div>
+        </div>
+
+        <div style="margin-bottom:1.5rem">
+          <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Income Date</div>
+          <div style="font-size:1rem">{{ income.income_date|date:"F d, Y" }}</div>
+        </div>
+      </div>
+
+      <!-- Right: Collection Details -->
+      <div>
+        <div style="margin-bottom:1.5rem">
+          <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Collection Method</div>
+          <div style="font-size:1rem">
+            <i class="fas fa-check-circle" style="color:#22c55e;margin-right:.3rem"></i>
+            {{ income.get_collection_method_display }}
+          </div>
+        </div>
+
+        <div style="margin-bottom:1.5rem">
+          <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Reference</div>
+          <div style="font-size:1rem">{{ income.reference|default:"No reference" }}</div>
+        </div>
+
+        <div style="margin-bottom:1.5rem">
+          <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Recorded By</div>
+          <div style="font-size:1rem">{{ income.recorded_by.get_full_name|default:income.recorded_by.username }}</div>
+        </div>
+
+        <div style="margin-bottom:1.5rem">
+          <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Recorded On</div>
+          <div style="font-size:1rem">{{ income.created_at|date:"M d, Y \a\t H:i" }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if income.description %}
+    <div style="margin-top:2rem;padding:1rem;background:#f9fafb;border-radius:.5rem;border-left:4px solid #8b5cf6">
+      <div style="font-size:.85rem;color:#64748b;margin-bottom:.5rem;font-weight:600">Description</div>
+      <p style="margin:0;color:#374151;line-height:1.5">{{ income.description }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Updated timestamp -->
+    <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid #e2e8f0;font-size:.8rem;color:#aaa">
+      Last updated: {{ income.updated_at|date:"M d, Y H:i" }}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

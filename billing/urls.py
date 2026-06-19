@@ -13,4 +13,9 @@ urlpatterns = [
     path('aging/',              views.aging_report,          name='aging'),
     path('refresh-balances/',   views.refresh_outstanding_balances, name='refresh_balances'),
     path('refresh-balances-json/', views.refresh_outstanding_balances_json, name='refresh_balances_json'),
+    # Other Income routes
+    path('otherincome/',        views.other_income_list,     name='otherincome_list'),
+    path('otherincome/new/',    views.other_income_create,   name='otherincome_create'),
+    path('otherincome/<int:pk>/', views.other_income_detail, name='otherincome_detail'),
+    path('otherincome/<int:pk>/delete/', views.other_income_delete, name='otherincome_delete'),
 ]

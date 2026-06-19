@@ -1,11 +1,11 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import F, Sum, Q
+from django.db.models import F, Sum, Q, Count
 from django.http import JsonResponse
 from django.utils import timezone
 from decimal import Decimal, InvalidOperation
-from .models import Invoice, Payment
+from .models import Invoice, Payment, OtherIncome
 from clients.models import Client
 from core.utils import paginate_queryset
 from core.duplicate_detection import check_duplicate_transaction
@@ -356,3 +356,105 @@ def refresh_outstanding_balances_json(request):
         result[str(client.pk)] = str(client.total_outstanding)
 
     return JsonResponse({'clients': result})
+
+
+@login_required
+def other_income_list(request):
+    """List all other income entries with filtering by category and date."""
+    incomes = OtherIncome.objects.all().select_related('recorded_by')
+    category = request.GET.get('category', '')
+    q = request.GET.get('q', '')
+    
+    if category:
+        incomes = incomes.filter(category=category)
+    if q:
+        incomes = incomes.filter(
+            Q(source_name__icontains=q) | Q(reference__icontains=q) | Q(description__icontains=q)
+        )
+    
+    # Aggregates
+    totals = incomes.aggregate(
+        total_income=Sum('amount'),
+        count=Count('id')
+    )
+    total_income = totals['total_income'] or 0
+    count = totals['count'] or 0
+    avg_income = float(total_income) / count if count > 0 else 0
+    
+    page_obj = paginate_queryset(request, incomes.order_by('-income_date'), per_page=20)
+    
+    return render(request, 'billing/otherincome_list.html', {
+        'incomes': page_obj,
+        'page_obj': page_obj,
+        'category': category,
+        'q': q,
+        'category_choices': OtherIncome.CATEGORY,
+        'total_income': total_income,
+        'count': count,
+        'avg_income': avg_income,
+    })
+
+
+@login_required
+def other_income_create(request):
+    """Create a new other income entry."""
+    if request.method == 'POST':
+        try:
+            source_name = request.POST.get('source_name', '').strip()
+            category = request.POST.get('category', 'other')
+            amount = Decimal(request.POST.get('amount', 0))
+            income_date = request.POST.get('income_date')
+            collection_method = request.POST.get('collection_method', 'bank_transfer')
+            reference = request.POST.get('reference', '').strip()
+            description = request.POST.get('description', '').strip()
+            
+            if not source_name:
+                messages.error(request, 'Source name is required.')
+                return redirect('billing:otherincome_create')
+            
+            if amount <= 0:
+                messages.error(request, 'Amount must be greater than zero.')
+                return redirect('billing:otherincome_create')
+            
+            income = OtherIncome.objects.create(
+                source_name=source_name,
+                category=category,
+                amount=amount,
+                income_date=income_date or timezone.now().date(),
+                collection_method=collection_method,
+                reference=reference,
+                description=description,
+                recorded_by=request.user,
+            )
+            
+            messages.success(request, f'✓ Other income "{source_name}" recorded successfully.')
+            return redirect('billing:otherincome_list')
+        
+        except (ValueError, InvalidOperation) as e:
+            messages.error(request, f'Invalid input: {str(e)}')
+            return redirect('billing:otherincome_create')
+    
+    return render(request, 'billing/otherincome_form.html', {
+        'category_choices': OtherIncome.CATEGORY,
+        'method_choices': OtherIncome.METHOD,
+    })
+
+
+@login_required
+def other_income_detail(request, pk):
+    """View details of a single other income entry."""
+    income = get_object_or_404(OtherIncome, pk=pk)
+    return render(request, 'billing/otherincome_detail.html', {'income': income})
+
+
+@login_required
+def other_income_delete(request, pk):
+    """Delete an other income entry."""
+    income = get_object_or_404(OtherIncome, pk=pk)
+    if request.method == 'POST':
+        source_name = income.source_name
+        income.delete()
+        messages.success(request, f'✓ Deleted other income "{source_name}".')
+        return redirect('billing:otherincome_list')
+    
+    return render(request, 'billing/otherincome_confirm_delete.html', {'income': income})

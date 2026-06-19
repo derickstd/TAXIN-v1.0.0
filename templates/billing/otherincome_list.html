@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% block title %}Other Income{% endblock %}
+{% block nav_bill %}active{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'billing:list' %}">Billing</a></li>
+<li class="active">Other Income</li>
+{% endblock %}
+
+{% block content %}
+<div class="card-box">
+  <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
+    <span><i class="fas fa-gift"></i> Other Income</span>
+    <a href="{% url 'billing:otherincome_create' %}" class="btn btn-primary btn-sm">
+      <i class="fas fa-plus"></i> Add Income
+    </a>
+  </div>
+
+  <!-- Summary cards -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;padding:1rem;background:#f8f9fa;border-radius:.5rem">
+    <div>
+      <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Total Income</div>
+      <div style="font-weight:700;color:#059669;font-size:1.4rem">UGX {{ total_income|floatformat:0|intcomma }}</div>
+    </div>
+    <div>
+      <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Number of Entries</div>
+      <div style="font-weight:700;color:#1D4ED8;font-size:1.4rem">{{ count }}</div>
+    </div>
+    <div>
+      <div style="font-size:.85rem;color:#64748b;margin-bottom:.3rem">Average Amount</div>
+      {% if count > 0 %}
+      <div style="font-weight:700;color:#f59e0b;font-size:1.4rem">UGX {{ avg_income|floatformat:0|intcomma }}</div>
+      {% else %}
+      <div style="font-weight:700;color:#aaa;font-size:1.4rem">—</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div style="margin-bottom:1rem;padding:1rem;background:#fff;border:1px solid #e2e8f0;border-radius:.5rem">
+    <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+      <input type="text" name="q" placeholder="Search source name, reference..." value="{{ q }}" style="padding:.4rem;border:1px solid #cbd5e1;border-radius:.3rem;flex:1;min-width:250px">
+      <select name="category" style="padding:.4rem;border:1px solid #cbd5e1;border-radius:.3rem">
+        <option value="">All Categories</option>
+        {% for val, label in category_choices %}
+        <option value="{{ val }}" {% if category == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-secondary btn-sm">
+        <i class="fas fa-search"></i> Filter
+      </button>
+    </form>
+  </div>
+
+  <!-- Table -->
+  <div class="card-body">
+    {% if incomes %}
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Source Name</th>
+          <th>Category</th>
+          <th>Amount</th>
+          <th>Income Date</th>
+          <th>Collection Method</th>
+          <th>Reference</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for income in incomes %}
+        <tr>
+          <td><strong>{{ income.source_name }}</strong></td>
+          <td><span class="badge" style="background:#e5e7eb;color:#374151">{{ income.get_category_display }}</span></td>
+          <td style="color:#059669;font-weight:700">UGX {{ income.amount|floatformat:0|intcomma }}</td>
+          <td style="font-size:.9rem;color:#64748b">{{ income.income_date|date:"M d, Y" }}</td>
+          <td style="font-size:.9rem">{{ income.get_collection_method_display }}</td>
+          <td style="font-size:.85rem;color:#aaa">{{ income.reference|default:"—" }}</td>
+          <td>
+            <a href="{% url 'billing:otherincome_detail' income.pk %}" class="link" title="View">
+              <i class="fas fa-eye"></i>
+            </a>
+            <a href="{% url 'billing:otherincome_delete' income.pk %}" class="link" title="Delete" onclick="return confirm('Delete this entry?')">
+              <i class="fas fa-trash" style="color:#ef4444"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div style="text-align:center;padding:1rem;border-top:1px solid #e2e8f0;margin-top:1rem">
+      {% if page_obj.has_previous %}
+      <a href="?page=1{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="btn btn-sm">First</a>
+      <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="btn btn-sm">Previous</a>
+      {% endif %}
+      <span style="margin:0 1rem">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="btn btn-sm">Next</a>
+      <a href="?page={{ page_obj.paginator.num_pages }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="btn btn-sm">Last</a>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div style="text-align:center;padding:2rem;color:#aaa">
+      <i class="fas fa-inbox" style="font-size:3rem;opacity:.3;margin-bottom:1rem;display:block"></i>
+      <p>No other income recorded yet.</p>
+      <a href="{% url 'billing:otherincome_create' %}" class="btn btn-primary btn-sm" style="margin-top:1rem">Add First Entry</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

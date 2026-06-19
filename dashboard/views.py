@@ -1,8 +1,10 @@
 from django.shortcuts import render
+from django.http import JsonResponse
+from django.template.loader import render_to_string
 from django.contrib.auth.decorators import login_required
 from django.db.models import Sum, Count, Q, Avg
 from django.utils import timezone
-from billing.models import Invoice, Payment
+from billing.models import Invoice, Payment, OtherIncome
 from services.models import JobCard, TimeEntry
 from clients.models import Client
 from compliance.models import ComplianceDeadline
@@ -12,6 +14,7 @@ from credentials.models import ClientCredential
 from core.automation import get_automation_status, get_automation_recommendations
 from core.reporting import calculate_monthly_trends
 from datetime import date
+import calendar as _calendar
 
 
 @login_required
@@ -84,6 +87,8 @@ def index(request):
     # ── Revenue KPIs ──
     invoiced_month  = Invoice.objects.filter(date_issued__gte=this_month).aggregate(s=Sum('grand_total'))['s'] or 0
     collected_month = Payment.objects.filter(payment_date__gte=this_month).aggregate(s=Sum('amount'))['s'] or 0
+    other_income_month = OtherIncome.objects.filter(income_date__gte=this_month).aggregate(s=Sum('amount'))['s'] or 0
+    total_income_month = float(collected_month) + float(other_income_month)
     unpaid_qs       = Invoice.objects.exclude(status__in=['paid', 'written_off'])
     total_outstanding = (unpaid_qs.aggregate(s=Sum('grand_total'))['s'] or 0) - \
                         (unpaid_qs.aggregate(s=Sum('amount_paid'))['s'] or 0)
@@ -95,8 +100,18 @@ def index(request):
     expenses_by_cat    = (expenses_month.values('category__name')
                           .annotate(total=Sum('amount')).order_by('-total')[:6])
 
+    # ── Other income this month ──
+    other_income_sources = OtherIncome.objects.filter(income_date__gte=this_month).order_by('-income_date')
+    other_income_by_category = []
+    for cat_choice, cat_name in OtherIncome.CATEGORY:
+        cat_total = OtherIncome.objects.filter(income_date__gte=this_month, category=cat_choice).aggregate(s=Sum('amount'))['s'] or 0
+        cat_count = OtherIncome.objects.filter(income_date__gte=this_month, category=cat_choice).count()
+        if cat_total > 0:
+            other_income_by_category.append((cat_name, float(cat_total), cat_count))
+    other_income_by_category.sort(key=lambda x: x[1], reverse=True)
+
     # ── Net profit this month ──
-    net_profit_month = float(collected_month) - float(total_expenses_month)
+    net_profit_month = total_income_month - float(total_expenses_month)
     collection_rate_month = round((float(collected_month) / float(invoiced_month) * 100), 1) if invoiced_month else 0
     new_clients_this_month = Client.objects.filter(created_at__gte=this_month).count()
     new_jobcards_this_month = JobCard.objects.filter(created_at__gte=this_month).count()
@@ -104,11 +119,16 @@ def index(request):
 
     invoiced_last_month = Invoice.objects.filter(date_issued__gte=last_month, date_issued__lte=last_month_end).aggregate(s=Sum('grand_total'))['s'] or 0
     collected_last_month = Payment.objects.filter(payment_date__gte=last_month, payment_date__lte=last_month_end).aggregate(s=Sum('amount'))['s'] or 0
+    other_income_last_month = OtherIncome.objects.filter(income_date__gte=last_month, income_date__lte=last_month_end).aggregate(s=Sum('amount'))['s'] or 0
+    total_income_last_month = float(collected_last_month) + float(other_income_last_month)
     expenses_last_month = Expense.objects.filter(expense_date__gte=last_month, expense_date__lte=last_month_end).aggregate(s=Sum('amount'))['s'] or 0
-    net_profit_last_month = float(collected_last_month) - float(expenses_last_month)
+    net_profit_last_month = total_income_last_month - float(expenses_last_month)
     jobs_completed_last_month = JobCard.objects.filter(status='completed', completed_at__gte=last_month, completed_at__lte=last_month_end).count()
     new_clients_last_month = Client.objects.filter(created_at__gte=last_month, created_at__lte=last_month_end).count()
     new_jobcards_last_month = JobCard.objects.filter(created_at__gte=last_month, created_at__lte=last_month_end).count()
+
+    # Collection rate for last month (percentage)
+    collection_rate_last_month = round((float(collected_last_month) / float(invoiced_last_month) * 100), 1) if invoiced_last_month else 0
 
     invoiced_pct, invoiced_state, invoiced_label = compare_metrics(invoiced_month, invoiced_last_month)
     collected_pct, collected_state, collected_label = compare_metrics(collected_month, collected_last_month)
@@ -116,6 +136,7 @@ def index(request):
     jobs_pct, jobs_state, jobs_label = compare_metrics(jobs_completed, jobs_completed_last_month)
     new_clients_pct, clients_state, clients_label = compare_metrics(new_clients_this_month, new_clients_last_month)
     new_jobcards_pct, jobcards_state, jobcards_label = compare_metrics(new_jobcards_this_month, new_jobcards_last_month)
+    rate_pct, rate_state, rate_label = compare_metrics(collection_rate_month, collection_rate_last_month)
 
     performance_comparison = [
         {
@@ -134,6 +155,15 @@ def index(request):
             'icon': 'fas fa-wallet',
             'subtitle': collected_label,
             'state': collected_state,
+            'currency': 'UGX',
+        },
+        {
+            'label': 'Other Income',
+            'current': other_income_month,
+            'url': '/dashboard/#other-income',
+            'icon': 'fas fa-gift',
+            'subtitle': f"Total {float(other_income_month):,.0f}" if other_income_month else 'No other income recorded',
+            'state': 'neutral',
             'currency': 'UGX',
         },
         {
@@ -170,6 +200,15 @@ def index(request):
             'icon': 'fas fa-briefcase',
             'subtitle': jobcards_label,
             'state': jobcards_state,
+            'currency': '',
+        },
+        {
+            'label': 'Collection Rate',
+            'current': collection_rate_month,
+            'url': '/billing/aging',
+            'icon': 'fas fa-percent',
+            'subtitle': rate_label,
+            'state': rate_state,
             'currency': '',
         },
     ]
@@ -304,6 +343,8 @@ def index(request):
 
     ctx = {
         'invoiced_month': invoiced_month, 'collected_month': collected_month,
+        'other_income_month': other_income_month, 'total_income_month': total_income_month,
+        'other_income_sources': other_income_sources, 'other_income_by_category': other_income_by_category,
         'total_outstanding': total_outstanding, 'jobs_completed': jobs_completed,
         'collection_rate': round((float(collected_month) / float(invoiced_month) * 100), 1) if invoiced_month else 0,
         'total_expenses_month': total_expenses_month,
@@ -328,5 +369,94 @@ def index(request):
         'automation_status': automation_status,
         'automation_recommendations': automation_recommendations,
         'today': today,
+        # Compact calendar for dashboard (supports navigation via cal_year/cal_month and zoom)
+        'cal_year': request.GET.get('cal_year', today.year),
+        'cal_month': request.GET.get('cal_month', today.month),
+        'cal_zoom': request.GET.get('cal_zoom', 'month'),
     }
+    # prepare compact calendar data
+    try:
+        cy = int(ctx['cal_year'])
+        cm = int(ctx['cal_month'])
+    except Exception:
+        cy = today.year; cm = today.month
+    cz = ctx.get('cal_zoom', 'month')
+    if cz == 'month':
+        # Build calendar weeks (rows) for month grid display
+        cal = _calendar.Calendar()  # Monday-first; change firstweekday if needed
+        weeks = []
+        for week in cal.monthdatescalendar(cy, cm):
+            week_row = []
+            for d in week:
+                if d.month == cm:
+                    mi = Payment.objects.filter(payment_date=d).aggregate(s=Sum('amount'))['s'] or 0
+                    mo = Expense.objects.filter(expense_date=d, status='approved').aggregate(s=Sum('amount'))['s'] or 0
+                    net = float(mi) - float(mo)
+                    week_row.append({
+                        'date': d,
+                        'income': mi,
+                        'expense': mo,
+                        'net': net,
+                        'status': 'positive' if net > 0 else 'negative' if net < 0 else 'neutral',
+                        'has_data': bool(mi or mo),
+                    })
+                else:
+                    week_row.append(None)
+            weeks.append(week_row)
+        ctx.update({'cal_weeks': weeks, 'cal_label': date(cy, cm, 1).strftime('%b %Y')})
+    elif cz == 'months':
+        # show months in year totals
+        months = []
+        for m in range(1, 13):
+            mo_in = Payment.objects.filter(payment_date__year=cy, payment_date__month=m).aggregate(s=Sum('amount'))['s'] or 0
+            mo_out = Expense.objects.filter(expense_date__year=cy, expense_date__month=m, status='approved').aggregate(s=Sum('amount'))['s'] or 0
+            months.append((_calendar.month_abbr[m], mo_in, mo_out))
+        ctx.update({'cal_months': months, 'cal_label': str(cy)})
+    else:
+        # years view: show last 5 years totals
+        years = []
+        for y in range(today.year - 4, today.year + 1):
+            y_in = Payment.objects.filter(payment_date__year=y).aggregate(s=Sum('amount'))['s'] or 0
+            y_out = Expense.objects.filter(expense_date__year=y, status='approved').aggregate(s=Sum('amount'))['s'] or 0
+            years.append((y, y_in, y_out))
+        ctx.update({'cal_years': years, 'cal_label': f"{today.year - 4}–{today.year}"})
     return render(request, 'dashboard/index.html', ctx)
+
+
+@login_required
+def day_transactions(request):
+    day_str = request.GET.get('day')
+    if not day_str:
+        return JsonResponse({'error': 'Missing day parameter'}, status=400)
+
+    try:
+        day = date.fromisoformat(day_str)
+    except ValueError:
+        return JsonResponse({'error': 'Invalid day format'}, status=400)
+
+    payments = (Payment.objects.filter(payment_date=day)
+                .select_related('invoice')
+                .order_by('-created_at'))
+    expenses = (Expense.objects.filter(expense_date=day)
+                .select_related('category')
+                .order_by('-created_at'))
+    other_income = (OtherIncome.objects.filter(income_date=day)
+                    .order_by('-created_at'))
+
+    total_payments = payments.aggregate(s=Sum('amount'))['s'] or 0
+    total_expenses = expenses.aggregate(s=Sum('amount'))['s'] or 0
+    total_other_income = other_income.aggregate(s=Sum('amount'))['s'] or 0
+    net = float(total_payments + total_other_income) - float(total_expenses)
+
+    html = render_to_string('dashboard/day_transactions_fragment.html', {
+        'payments': payments,
+        'expenses': expenses,
+        'other_income': other_income,
+        'total_payments': total_payments,
+        'total_expenses': total_expenses,
+        'total_other_income': total_other_income,
+        'net': net,
+        'filter_day': day,
+    }, request=request)
+
+    return JsonResponse({'html': html, 'day': day_str})

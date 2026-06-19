@@ -148,3 +148,44 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"UGX {self.amount:,.0f} → {self.invoice.invoice_number}"
+
+
+class OtherIncome(models.Model):
+    """
+    Track external income/revenue sources outside the company invoicing system.
+    Includes gifts, grants, interest, dividends, or other non-core revenue.
+    """
+    CATEGORY = [
+        ('interest', 'Interest Income'),
+        ('dividend', 'Dividend'),
+        ('gift', 'Gift/Donation'),
+        ('grant', 'Grant'),
+        ('rental', 'Rental Income'),
+        ('other', 'Other'),
+    ]
+    METHOD = [
+        ('cash', 'Cash'),
+        ('mobile_money', 'Mobile Money'),
+        ('bank_transfer', 'Bank Transfer'),
+    ]
+    
+    source_name = models.CharField(max_length=150, help_text='e.g., "SACCOS Interest", "Landlord Grant"')
+    category = models.CharField(max_length=20, choices=CATEGORY, default='other')
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    income_date = models.DateField(help_text='Date income was received')
+    collection_method = models.CharField(max_length=20, choices=METHOD, default='bank_transfer')
+    reference = models.CharField(max_length=100, blank=True, help_text='e.g., transaction ID, check number')
+    description = models.TextField(blank=True, help_text='Additional details about the income')
+    recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-income_date']
+        indexes = [
+            models.Index(fields=['-income_date']),
+            models.Index(fields=['category']),
+        ]
+    
+    def __str__(self):
+        return f"{self.source_name} — UGX {self.amount:,.0f} ({self.income_date})"

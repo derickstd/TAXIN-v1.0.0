@@ -4,6 +4,11 @@ from django.contrib import messages
 from django.utils import timezone
 from .models import TaxEvent
 from .forms import TaxEventForm
+from django.db.models import Sum
+import calendar as _calendar
+from datetime import date
+from billing.models import Payment
+from expenses.models import Expense
 
 
 @login_required
@@ -11,16 +16,47 @@ def calendar_view(request):
     today = timezone.now().date()
     events = TaxEvent.objects.select_related('assigned_to').all()
     status = request.GET.get('status', '')
+    # Optional: filter by a specific day to show payments/expenses on calendar detail
+    day_param = request.GET.get('day')
+    filter_day = None
+    day_payments = []
+    day_expenses = []
+    if day_param:
+        try:
+            from datetime import datetime
+            filter_day = datetime.strptime(day_param, '%Y-%m-%d').date()
+            day_payments = Payment.objects.filter(payment_date=filter_day).order_by('-payment_date')
+            day_expenses = Expense.objects.filter(expense_date=filter_day).order_by('-expense_date')
+        except Exception:
+            filter_day = None
     if status:
         events = events.filter(status=status)
     # Auto-mark overdue upcoming events
     TaxEvent.objects.filter(status='upcoming', due_date__lt=today).update(status='missed')
+    # Financial summary: money in (payments) and money out (approved expenses) for each day of current month
+    year = today.year
+    month = today.month
+    _, days_in_month = _calendar.monthrange(year, month)
+    month_days = [date(year, month, d) for d in range(1, days_in_month + 1)]
+    daily_summaries = {}
+    daily_list = []
+    for d in month_days:
+        money_in = Payment.objects.filter(payment_date=d).aggregate(total=Sum('amount'))['total'] or 0
+        money_out = Expense.objects.filter(expense_date=d, status='approved').aggregate(total=Sum('amount'))['total'] or 0
+        daily_summaries[d] = {'money_in': money_in, 'money_out': money_out}
+        daily_list.append((d, money_in, money_out))
     return render(request, 'taxcalendar/calendar.html', {
         'events': events,
         'status': status,
         'status_choices': TaxEvent.STATUS,
         'today': today,
         'form': TaxEventForm(),
+        'month_days': month_days,
+        'daily_summaries': daily_summaries,
+        'daily_list': daily_list,
+        'filter_day': filter_day,
+        'day_payments': day_payments,
+        'day_expenses': day_expenses,
     })
 
 

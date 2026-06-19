@@ -1,0 +1,94 @@
+<div style="display:flex;flex-direction:column;gap:.75rem;font-size:.92rem;color:#0f172a">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+    <div style="background:#f8fafc;padding:.65rem;border-radius:.45rem;border:1px solid #e2e8f0">
+      <div style="font-size:.72rem;color:#64748b">Payments</div>
+      <div style="font-weight:700;color:#059669">UGX {{ total_payments|floatformat:0|intcomma }}</div>
+    </div>
+    <div style="background:#fef2f2;padding:.65rem;border-radius:.45rem;border:1px solid #fee2e2">
+      <div style="font-size:.72rem;color:#64748b">Expenses</div>
+      <div style="font-weight:700;color:#ef4444">UGX {{ total_expenses|floatformat:0|intcomma }}</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+    <div style="background:#ecfccb;padding:.65rem;border-radius:.45rem;border:1px solid #d9f99d">
+      <div style="font-size:.72rem;color:#64748b">Other Income</div>
+      <div style="font-weight:700;color:#15803d">UGX {{ total_other_income|floatformat:0|intcomma }}</div>
+    </div>
+    <div style="background:#eff6ff;padding:.65rem;border-radius:.45rem;border:1px solid #bfdbfe">
+      <div style="font-size:.72rem;color:#64748b">Net</div>
+      <div style="font-weight:700;color:{% if net >= 0 %}#059669{% else %}#dc2626{% endif %}">UGX {{ net|floatformat:0|intcomma }}</div>
+    </div>
+  </div>
+
+  {% if payments or expenses or other_income %}
+  <div style="display:flex;flex-direction:column;gap:.85rem">
+    {% if payments %}
+    <div style="border:1px solid #e2e8f0;border-radius:.55rem;overflow:hidden">
+      <div style="background:#f8fafc;padding:.75rem;font-weight:700;color:#0f172a">Payments</div>
+      <div style="padding:.75rem;display:grid;gap:.65rem">
+        {% for payment in payments %}
+        <div style="padding:.65rem;border-radius:.45rem;border:1px solid #e2e8f0;background:#fff">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:.85rem;margin-bottom:.25rem">
+            <span style="font-weight:700">UGX {{ payment.amount|floatformat:0|intcomma }}</span>
+            <span style="font-size:.78rem;color:#475569">{{ payment.method|title }}</span>
+          </div>
+          <div style="font-size:.82rem;color:#475569">Invoice: {{ payment.invoice.invoice_number }}</div>
+          {% if payment.reference %}
+          <div style="font-size:.78rem;color:#64748b">Ref: {{ payment.reference }}</div>
+          {% endif %}
+          {% if payment.notes %}
+          <div style="margin-top:.35rem;font-size:.78rem;color:#334155">{{ payment.notes }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if expenses %}
+    <div style="border:1px solid #fee2e2;border-radius:.55rem;overflow:hidden">
+      <div style="background:#fff1f2;padding:.75rem;font-weight:700;color:#981b1c">Expenses</div>
+      <div style="padding:.75rem;display:grid;gap:.65rem">
+        {% for expense in expenses %}
+        <div style="padding:.65rem;border-radius:.45rem;border:1px solid #fee2e2;background:#fff">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:.85rem;margin-bottom:.25rem">
+            <span style="font-weight:700">UGX {{ expense.amount|floatformat:0|intcomma }}</span>
+            <span style="font-size:.78rem;color:#475569">{{ expense.category__name|default:'Other' }}</span>
+          </div>
+          <div style="font-size:.82rem;color:#475569">{{ expense.description|default:'No description' }}</div>
+          {% if expense.status %}
+          <div style="margin-top:.35rem;font-size:.78rem;color:#475569">Status: {{ expense.status|title }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if other_income %}
+    <div style="border:1px solid #d1fae5;border-radius:.55rem;overflow:hidden">
+      <div style="background:#ecfdf5;padding:.75rem;font-weight:700;color:#166534">Other Income</div>
+      <div style="padding:.75rem;display:grid;gap:.65rem">
+        {% for income in other_income %}
+        <div style="padding:.65rem;border-radius:.45rem;border:1px solid #d1fae5;background:#fff">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:.85rem;margin-bottom:.25rem">
+            <span style="font-weight:700">UGX {{ income.amount|floatformat:0|intcomma }}</span>
+            <span style="font-size:.78rem;color:#475569">{{ income.category|title }}</span>
+          </div>
+          <div style="font-size:.82rem;color:#475569">{{ income.source_name }}</div>
+          {% if income.reference %}
+          <div style="margin-top:.35rem;font-size:.78rem;color:#64748b">Ref: {{ income.reference }}</div>
+          {% endif %}
+          {% if income.description %}
+          <div style="margin-top:.25rem;font-size:.78rem;color:#334155">{{ income.description }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div style="padding:1rem;text-align:center;color:#64748b;font-size:.95rem">No transactions recorded on this day.</div>
+  {% endif %}
+</div>
