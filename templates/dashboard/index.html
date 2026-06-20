@@ -22,203 +22,206 @@
   </div>
 </div>
 
-<!-- Other Income Section -->
-<div class="card-box card-compact" style="margin-bottom:.75rem;border-left:4px solid #8b5cf6;">
-  <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
-    <span style="display:flex;align-items:center;gap:.5rem"><i class="fas fa-gift"></i> Other Income Sources</span>
-    <span style="font-size:.72rem;color:#64748b">This month</span>
-  </div>
-  <div class="card-body" style="padding:.45rem">
-    {% if other_income_month %}
-    <div style="display:flex;flex-direction:column;gap:.35rem">
-      <!-- Summary row -->
-      <div style="background:#f3f0ff;border-left:4px solid #8b5cf6;padding:.5rem;border-radius:.3rem">
-        <div style="font-weight:700;color:#7c3aed;font-size:.95rem">Total Other Income: UGX {{ other_income_month|floatformat:0|intcomma }}</div>
-        <div style="font-size:.75rem;color:#7c3aed;opacity:.8">{{ other_income_sources|length }} source{{ other_income_sources|length|pluralize }}</div>
-      </div>
-      <!-- Income sources by category -->
-      {% if other_income_by_category %}
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.35rem">
-        {% for cat, total, count in other_income_by_category %}
-        <div style="border:1px solid #e5e7eb;padding:.4rem;border-radius:.3rem;background:#fff">
-          <div style="font-size:.75rem;color:#64748b;margin-bottom:.15rem">{{ cat|title }}</div>
-          <div style="font-weight:700;color:#059669;font-size:.9rem">UGX {{ total|floatformat:0|intcomma }}</div>
-          <div style="font-size:.7rem;color:#aaa">{{ count }} transaction{{ count|pluralize }}</div>
+<!-- 2-Column Layout: Calendar on Left, Charts on Right (left column widened) -->
+<div class="dashboard-two-col">
+  <div class="dashboard-left-col">
+    <!-- LEFT: Calendar Card -->
+    <div class="card-box card-compact dashboard-calendar-card">
+      <div class="card-head dashboard-calendar-header">
+        <div style="display:flex;align-items:center;gap:.35rem">
+          <button onclick="navigateCal(-1)" class="btn btn-sm">&larr;</button>
+          <strong id="cal_label">{{ cal_label }}</strong>
+          <button onclick="navigateCal(1)" class="btn btn-sm">&rarr;</button>
         </div>
-        {% endfor %}
-      </div>
-      {% endif %}
-      <!-- Recent sources list -->
-      {% if other_income_sources %}
-      <div style="font-size:.8rem;color:#64748b;padding-top:.3rem;border-top:1px solid #e5e7eb;margin-top:.3rem">
-        {% for income in other_income_sources|slice:":3" %}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:.3rem 0;border-bottom:1px solid #f3f4f6">
-          <span>{{ income.source_name }}</span>
-          <span style="font-weight:700;color:#059669">UGX {{ income.amount|floatformat:0|intcomma }}</span>
+        <div style="display:flex;gap:.25rem">
+          <button onclick="setCalZoom('month')" class="btn btn-sm">Days</button>
+          <button onclick="setCalZoom('months')" class="btn btn-sm">Months</button>
+          <button onclick="setCalZoom('years')" class="btn btn-sm">Years</button>
         </div>
-        {% endfor %}
-        {% if other_income_sources|length > 3 %}
-        <div style="text-align:center;padding:.3rem;color:#7c3aed;font-weight:700;font-size:.75rem">+{{ other_income_sources|length|add:"-3" }} more</div>
+      </div>
+      <div class="card-body dashboard-calendar-body">
+        {% if cal_weeks %}
+          <table class="tbl dashboard-calendar-table" style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr>
+                <th class="dashboard-calendar-weekday">Mon</th><th class="dashboard-calendar-weekday">Tue</th><th class="dashboard-calendar-weekday">Wed</th>
+                <th class="dashboard-calendar-weekday">Thu</th><th class="dashboard-calendar-weekday">Fri</th><th class="dashboard-calendar-weekday">Sat</th><th class="dashboard-calendar-weekday">Sun</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for week in cal_weeks %}
+              <tr>
+                {% for day in week %}
+                <td class="dashboard-calendar-cell{% if not day or not day.has_data %} no-data{% endif %}">
+                  {% if day %}
+                  <div class="day-header">
+                    <span class="day-number">{{ day.date|date:"j" }}</span>
+                    {% if day.has_data %}
+                    <span class="day-label">{{ day.date|date:"D" }}</span>
+                    {% endif %}
+                  </div>
+                  <div role="button" class="calendar-day-button dashboard-calendar-day" data-day="{{ day.date|date:'Y-m-d' }}" {% if day.has_data %}onclick="openDayDetails(this.dataset.day)"{% endif %}>
+                    {% if day.has_data %}
+                    <div class="day-metrics">
+                      <div class="metric-row"><span class="metric-label"></span><span class="metric-value cash-in">{{ day.income|floatformat:0|intcomma }}</span></div>
+                      <div class="metric-row"><span class="metric-label"></span><span class="metric-value cash-out">{{ day.expense|floatformat:0|intcomma }}</span></div>
+                    </div>
+                    {% endif %}
+                  </div>
+                  {% endif %}
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% elif cal_months %}
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.35rem">
+            {% for mname, mi, mo in cal_months %}
+            <div style="border:1px solid #e6eef6;padding:.5rem;border-radius:.75rem;background:#fff;min-height:88px;display:flex;flex-direction:column;justify-content:space-between;transition:transform .25s ease,box-shadow .25s ease;background:rgba(255,255,255,.92);">
+              <div style="font-weight:700;font-size:.92rem">{{ mname }}</div>
+              <div style="font-size:.78rem;color:#475569">Monthly view</div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.35rem">
+            {% for y, mi, mo in cal_years %}
+            <div style="border:1px solid #e6eef6;padding:.5rem;border-radius:.75rem;background:#fff;min-height:70px;display:flex;flex-direction:column;justify-content:space-between">
+              <div style="font-weight:700;font-size:.95rem">{{ y }}</div>
+              <div style="font-size:.78rem;color:#475569">Annual overview</div>
+            </div>
+            {% endfor %}
+          </div>
         {% endif %}
       </div>
-      {% endif %}
     </div>
-    {% else %}
-    <div style="text-align:center;padding:1rem;color:#aaa;font-size:.9rem">
-      <i class="fas fa-inbox" style="font-size:1.8rem;margin-bottom:.5rem;display:block;opacity:.5"></i>
-      No other income recorded this month. <a href="{% url 'billing:otherincome_create' %}" style="color:#7c3aed;text-decoration:none;font-weight:700">Add one now</a>
-    </div>
-    {% endif %}
-  </div>
-</div>
 
-<!-- 2-Column Layout: Calendar on Left, Charts on Right -->
-<div style="display:grid;grid-template-columns:380px 1fr;gap:1rem;margin-bottom:.75rem;align-items:start">
-
-<!-- LEFT: Calendar Card -->
-  <div class="card-box card-compact" style="margin-bottom:0">
-  <!-- Compact calendar widget -->
-  <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;padding:.25rem;font-size:.85rem">
-    <div style="display:flex;align-items:center;gap:.35rem">
-      <button onclick="navigateCal(-1)" class="btn btn-sm" style="padding:.18rem .4rem;font-size:.82rem">&larr;</button>
-      <strong id="cal_label" style="font-size:.95rem">{{ cal_label }}</strong>
-      <button onclick="navigateCal(1)" class="btn btn-sm" style="padding:.18rem .4rem;font-size:.82rem">&rarr;</button>
-    </div>
-    <div style="display:flex;gap:.25rem">
-      <button onclick="setCalZoom('month')" class="btn btn-sm" style="padding:.18rem .35rem;font-size:.78rem">Days</button>
-      <button onclick="setCalZoom('months')" class="btn btn-sm" style="padding:.18rem .35rem;font-size:.78rem">Months</button>
-      <button onclick="setCalZoom('years')" class="btn btn-sm" style="padding:.18rem .35rem;font-size:.78rem">Years</button>
-    </div>
-  </div>
-  <div class="card-body" style="padding:.25rem;min-height:380px;max-height:420px;overflow:auto">
-    {% if cal_weeks %}
-      <table class="tbl" style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr style="background:#f1f5f9;color:#334155;font-size:.72rem">
-            <th style="padding:.25rem">Mon</th><th style="padding:.25rem">Tue</th><th style="padding:.25rem">Wed</th>
-            <th style="padding:.25rem">Thu</th><th style="padding:.25rem">Fri</th><th style="padding:.25rem">Sat</th><th style="padding:.25rem">Sun</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for week in cal_weeks %}
-          <tr>
-            {% for day in week %}
-            <td style="vertical-align:top;padding:.2rem;border:1px solid #f1f5f9;flex:1;height:56px;background:{% if day and day.has_data %}{% if day.status == 'positive' %}rgba(16,185,129,.14){% elif day.status == 'negative' %}rgba(239,68,68,.14){% else %}rgba(148,163,184,.12){% endif %}{% else %}#fff{% endif %};transition:transform .2s ease,box-shadow .2s ease,background-color .25s ease;position:relative;overflow:hidden;cursor:{% if day and day.has_data %}pointer{% else %}default{% endif %};border-radius:.35rem;">
-              {% if day %}
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:.68rem;margin-bottom:.15rem">
-                <span style="font-weight:700">{{ day.date|date:"j" }}</span>
-                {% if day.has_data %}
-                <span style="font-size:.62rem;padding:.15rem .3rem;border-radius:.25rem;background:rgba(15,23,42,.06);color:#334155">{{ day.date|date:"D" }}</span>
-                {% endif %}
-              </div>
-              <div role="button" class="calendar-day-button" data-day="{{ day.date|date:'Y-m-d' }}" onclick="openDayDetails(this.dataset.day)" style="color:inherit;text-decoration:none;display:block;min-height:100%;padding-bottom:.15rem">
-                {% if day.has_data %}
-                <div style="display:flex;flex-direction:column;gap:.1rem;font-size:.65rem;line-height:1.2;">
-                  <div style="color:#059669;font-weight:700">+ {{ day.income|floatformat:0|intcomma }}</div>
-                  <div style="color:#ef4444;font-weight:700">- {{ day.expense|floatformat:0|intcomma }}</div>
-                </div>
-                <div style="margin-top:.25rem;font-size:.7rem;font-weight:700;color:{% if day.status == 'positive' %}#059669{% elif day.status == 'negative' %}#ef4444{% else %}#475569{% endif %}">
-                  {% if day.status == 'positive' %}+{{ day.net|floatformat:0|intcomma }}{% elif day.status == 'negative' %}-{{ day.net|floatformat:0|intcomma }}{% else %}Break-even{% endif %}
-                </div>
-                {% endif %}
-              </div>
-              {% endif %}
-            </td>
-            {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% elif cal_months %}
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.35rem">
-        {% for mname, mi, mo in cal_months %}
-        <div style="border:1px solid #e6eef6;padding:.35rem;border-radius:.25rem;background:#fff;min-height:76px;display:flex;flex-direction:column;justify-content:space-between;transition:transform .25s ease,box-shadow .25s ease;background:{% if mi > mo %}rgba(16,185,129,.08){% elif mi < mo %}rgba(239,68,68,.08){% else %}rgba(148,163,184,.07){% endif %};">
-          <div style="font-weight:700;font-size:.88rem">{{ mname }}</div>
-          <div style="font-size:.75rem;color:#059669">+ {{ mi|floatformat:0|intcomma }}</div>
-          <div style="font-size:.75rem;color:#ef4444">- {{ mo|floatformat:0|intcomma }}</div>
-        </div>
-        {% endfor %}
+    <!-- Other Income Section -->
+    <div class="card-box card-compact dashboard-other-income-card">
+      <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
+        <span style="display:flex;align-items:center;gap:.5rem"><i class="fas fa-gift"></i> Other Income Sources</span>
+        <span style="font-size:.72rem;color:#64748b">This month</span>
       </div>
-    {% else %}
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.35rem">
-        {% for y, mi, mo in cal_years %}
-        <div style="border:1px solid #e6eef6;padding:.35rem;border-radius:.25rem;background:#fff;min-height:56px;display:flex;flex-direction:column;justify-content:space-between">
-          <div style="font-weight:700;font-size:.9rem">{{ y }}</div>
-          <div style="font-size:.72rem;color:#059669">+ {{ mi|floatformat:0|intcomma }}</div>
-          <div style="font-size:.72rem;color:#ef4444">- {{ mo|floatformat:0|intcomma }}</div>
-        </div>
-        {% endfor %}
-      </div>
-    {% endif %}
-  </div>
-</div>
-
-<!-- RIGHT: Charts and Performance -->
-<div style="display:flex;flex-direction:column;gap:.75rem">
-  <!-- Revenue Chart (full width) -->
-  <div class="card-box card-compact">
-    <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;gap:1rem">
-      <span><i class="fas fa-chart-bar"></i>Revenue, Collections &amp; Expenses — {{ period_label }}</span>
-      <form method="get" style="display:flex;align-items:center;gap:.5rem">
-        <label for="period-select" style="margin:0;color:#64748b;font-size:.9rem;font-weight:600">Period:</label>
-        <select id="period-select" name="period" onchange="this.form.submit()" style="padding:.4rem .6rem;border:1px solid #cbd5e1;border-radius:.4rem;background:#fff;color:#111;font-weight:500;cursor:pointer" title="Select the period for dashboard charts">
-          {% for value,label in period_options %}
-            <option value="{{ value }}" {% if selected_period == value %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </form>
-    </div>
-    <div class="card-body" style="min-height:260px;padding:.5rem">
-      <canvas id="revChart" style="width:100%;height:220px"></canvas>
-    </div>
-  </div>
-
-  <!-- Expenses + Staff (side by side) -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-  <div class="card-box card-compact">
-    <div class="card-head"><span><i class="fas fa-chart-pie"></i>Expenses by Category</span></div>
-    <div class="card-body" style="min-height:260px;padding:.5rem">
-      <canvas id="expChart" style="width:100%;height:200px"></canvas>
-      <div style="margin-top:.4rem">
-        {% for cat in expenses_by_cat %}
-        <div class="stat-row" style="font-size:.75rem">
-          <span>{{ cat.category__name|default:"Uncategorised" }}</span>
-          <span class="fw-7">{{ cat.total|floatformat:0|intcomma }}</span>
-        </div>
-        {% empty %}
-        <div style="text-align:center;color:#aaa;font-size:.8rem;padding:.5rem">No approved expenses this month</div>
-        {% endfor %}
-      </div>
-    </div>
-  </div>
-  <div class="card-box card-compact">
-    <div class="card-head"><span><i class="fas fa-user-tie"></i>Staff Performance</span></div>
-    <div class="card-body" style="min-height:260px;padding:.5rem;overflow:auto">
-      {% if staff_perf %}
-      <div style="display:flex;flex-direction:column;gap:.5rem">
-        {% for row in staff_perf|slice:":3" %}
-        {% widthratio row.completed row.assigned 100 as completion_pct %}
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.4rem;padding:.5rem;font-size:.8rem">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
-            <div style="font-weight:700;color:#0f172a">{{ row.user.get_full_name|default:row.user.username }}</div>
-            <span style="font-weight:700;color:#0f172a">{{ completion_pct }}%</span>
+      <div class="card-body" style="padding:.45rem">
+        {% if other_income_month %}
+        <div style="display:flex;flex-direction:column;gap:.35rem">
+          <div style="background:#f3f0ff;border-left:4px solid #8b5cf6;padding:.5rem;border-radius:.3rem">
+            <div style="font-weight:700;color:#7c3aed;font-size:.95rem">Total Other Income: UGX {{ other_income_month|floatformat:0|intcomma }}</div>
+            <div style="font-size:.75rem;color:#7c3aed;opacity:.8">{{ other_income_sources|length }} source{{ other_income_sources|length|pluralize }}</div>
           </div>
-          <div style="background:#e2e8f0;border-radius:.25rem;height:20px;overflow:hidden;margin-bottom:.3rem">
-            <div style="background:{% if completion_pct >= 80 %}#22c55e{% elif completion_pct >= 50 %}#f59e0b{% else %}#ef4444{% endif %};height:100%;width:{{ completion_pct }}%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:700;transition:width .3s ease">
-              {% if completion_pct > 10 %}{{ completion_pct }}%{% endif %}
+          {% if other_income_by_category %}
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.35rem">
+            {% for cat, total, count in other_income_by_category %}
+            <div style="border:1px solid #e5e7eb;padding:.4rem;border-radius:.3rem;background:#fff">
+              <div style="font-size:.75rem;color:#64748b;margin-bottom:.15rem">{{ cat|title }}</div>
+              <div style="font-weight:700;color:#059669;font-size:.9rem">UGX {{ total|floatformat:0|intcomma }}</div>
+              <div style="font-size:.7rem;color:#aaa">{{ count }} transaction{{ count|pluralize }}</div>
             </div>
+            {% endfor %}
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#64748b">
-            <span>{{ row.completed }}/{{ row.assigned }} done</span><span>{{ row.hours|floatformat:1 }}h</span>
+          {% endif %}
+          {% if other_income_sources %}
+          <div style="font-size:.8rem;color:#64748b;padding-top:.3rem;border-top:1px solid #e5e7eb;margin-top:.3rem">
+            {% for income in other_income_sources|slice:":3" %}
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:.3rem 0;border-bottom:1px solid #f3f4f6">
+              <span>{{ income.source_name }}</span>
+              <span style="font-weight:700;color:#059669">UGX {{ income.amount|floatformat:0|intcomma }}</span>
+            </div>
+            {% endfor %}
+            {% if other_income_sources|length > 3 %}
+            <div style="text-align:center;padding:.3rem;color:#7c3aed;font-weight:700;font-size:.75rem">+{{ other_income_sources|length|add:"-3" }} more</div>
+            {% endif %}
           </div>
+          {% endif %}
         </div>
-        {% endfor %}
+        {% else %}
+        <div style="text-align:center;padding:1rem;color:#aaa;font-size:.9rem">
+          <i class="fas fa-inbox" style="font-size:1.8rem;margin-bottom:.5rem;display:block;opacity:.5"></i>
+          No other income recorded this month. <a href="{% url 'billing:otherincome_create' %}" style="color:#7c3aed;text-decoration:none;font-weight:700">Add one now</a>
+        </div>
+        {% endif %}
       </div>
-      {% else %}
-      <div style="text-align:center;color:#64748b;font-size:.85rem;padding:1rem">No active staff performance data for this month.</div>
-      {% endif %}
     </div>
   </div>
+
+  <div class="dashboard-right-col">
+    <!-- Trend (moved up to top of right column) -->
+    <div class="card-box card-compact dashboard-trend-card" style="margin-bottom:0;">
+      <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
+        <span><i class="fas fa-chart-line"></i>Net Profit &amp; Collection Rate Trend — {{ period_label }}</span>
+        <span style="font-size:.82rem;color:#64748b">Use the period selector on the right to adjust the trend.</span>
+      </div>
+      <div class="card-body" style="min-height:220px;padding:.5rem">
+        <canvas id="trendLineChart" style="width:100%;height:180px"></canvas>
+      </div>
+    </div>
+    <!-- Revenue Chart (full width) -->
+    <div class="card-box card-compact">
+      <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;gap:1rem">
+        <span><i class="fas fa-chart-bar"></i>Revenue, Collections &amp; Expenses — {{ period_label }}</span>
+        <form method="get" style="display:flex;align-items:center;gap:.5rem">
+          <label for="period-select" style="margin:0;color:#64748b;font-size:.9rem;font-weight:600">Period:</label>
+          <select id="period-select" name="period" onchange="this.form.submit()" style="padding:.4rem .6rem;border:1px solid #cbd5e1;border-radius:.4rem;background:#fff;color:#111;font-weight:500;cursor:pointer" title="Select the period for dashboard charts">
+            {% for value,label in period_options %}
+              <option value="{{ value }}" {% if selected_period == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      <div class="card-body" style="min-height:260px;padding:.5rem">
+        <canvas id="revChart" style="width:100%;height:220px"></canvas>
+      </div>
+    </div>
+
+    <!-- Expenses + Staff (side by side) -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="card-box card-compact">
+        <div class="card-head"><span><i class="fas fa-chart-pie"></i>Expenses by Category</span></div>
+        <div class="card-body" style="min-height:260px;padding:.5rem">
+          <canvas id="expChart" style="width:100%;height:200px"></canvas>
+          <div style="margin-top:.4rem">
+            {% for cat in expenses_by_cat %}
+            <div class="stat-row" style="font-size:.75rem">
+              <span>{{ cat.category__name|default:"Uncategorised" }}</span>
+              <span class="fw-7">{{ cat.total|floatformat:0|intcomma }}</span>
+            </div>
+            {% empty %}
+            <div style="text-align:center;color:#aaa;font-size:.8rem;padding:.5rem">No approved expenses this month</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.75rem">
+        <div class="card-box card-compact">
+          <div class="card-head"><span><i class="fas fa-user-tie"></i>Staff Performance</span></div>
+          <div class="card-body" style="min-height:260px;padding:.5rem;overflow:auto">
+          {% if staff_perf %}
+          <div style="display:flex;flex-direction:column;gap:.5rem">
+            {% for row in staff_perf|slice:":3" %}
+            {% widthratio row.completed row.assigned 100 as completion_pct %}
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.4rem;padding:.5rem;font-size:.8rem">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+                <div style="font-weight:700;color:#0f172a">{{ row.user.get_full_name|default:row.user.username }}</div>
+                <span style="font-weight:700;color:#0f172a">{{ completion_pct }}%</span>
+              </div>
+              <div style="background:#e2e8f0;border-radius:.25rem;height:20px;overflow:hidden;margin-bottom:.3rem">
+                <div style="background:{% if completion_pct >= 80 %}#22c55e{% elif completion_pct >= 50 %}#f59e0b{% else %}#ef4444{% endif %};height:100%;width:{{ completion_pct }}%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:700;transition:width .3s ease">
+                  {% if completion_pct > 10 %}{{ completion_pct }}%{% endif %}
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#64748b">
+                <span>{{ row.completed }}/{{ row.assigned }} done</span><span>{{ row.hours|floatformat:1 }}h</span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div style="text-align:center;color:#64748b;font-size:.85rem;padding:1rem">No active staff performance data for this month.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -235,17 +238,7 @@
   </div>
 </div>
 
-<!-- Trend Line Chart -->
-  <div class="card-box card-compact" style="margin-bottom:.5rem;">
-  <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
-    <span><i class="fas fa-chart-line"></i>Net Profit &amp; Collection Rate Trend — {{ period_label }}</span>
-    <span style="font-size:.82rem;color:#64748b">Use the period selector above to adjust the trend.</span>
-  </div>
-  <div class="card-body" style="min-height:340px;padding:.5rem">
-    <canvas id="trendLineChart" style="width:100%;height:320px"></canvas>
-  </div>
-</div>
-
+ 
 {% endblock %}
 
 {% block extra_js %}
