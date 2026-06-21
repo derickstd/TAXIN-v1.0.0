@@ -4,7 +4,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.hashers import make_password
 from django.http import JsonResponse
-from .models import User, Company
+import logging
+from .models import User, Company, AuditLog
 from django import forms
 from django.utils.text import slugify
 from .export_utils import export_to_excel, export_to_pdf, paginate_list
@@ -87,11 +88,12 @@ class CompanySignupForm(forms.Form):
         return username
 
 
-def _create_company_database(company):
+def _create_company_database(company, changed_by=None):
     import os
     from django.conf import settings
     from django.core.management import call_command
 
+    logger = logging.getLogger(__name__)
     db_dir = os.path.join(settings.BASE_DIR, 'company_databases')
     os.makedirs(db_dir, exist_ok=True)
     db_path = os.path.join(db_dir, f"{company.slug}.sqlite3")
@@ -101,9 +103,24 @@ def _create_company_database(company):
         'NAME': db_path,
         'ATOMIC_REQUESTS': False,
     }
+    logger.info('Creating tenant DB for company %s at %s (alias=%s)', company.slug, db_path, alias)
     call_command('migrate', database=alias, interactive=False, verbosity=0)
     company.db_name = alias
     company.save(update_fields=['db_name'])
+
+    # Record an audit log so admins can notice tenant creation
+    try:
+        AuditLog.objects.create(
+            model_name='company',
+            object_id=str(company.pk),
+            action='UPDATE',
+            changed_fields={'db_name': alias},
+            changed_by=changed_by,
+            notes=f'Created tenant database {alias} at {db_path}'
+        )
+    except Exception:
+        logger.exception('Failed to record AuditLog for company DB creation: %s', company.slug)
+
     return alias
 
 
@@ -164,10 +181,22 @@ def signup(request):
             )
             company.owner = user
             company.save()
+            # Record company creation in audit log for admin visibility
+            try:
+                AuditLog.objects.create(
+                    model_name='company',
+                    object_id=str(company.pk),
+                    action='CREATE',
+                    changed_fields={'name': company.name, 'slug': company.slug},
+                    changed_by=user,
+                    notes='Company registered via signup form'
+                )
+            except Exception:
+                logging.getLogger(__name__).exception('Failed to create AuditLog for new company %s', company.slug)
             # Optionally create a dedicated sqlite DB for this company and run migrations
             if form.cleaned_data.get('create_database'):
                 try:
-                    _create_company_database(company)
+                    _create_company_database(company, changed_by=user)
                 except Exception as e:
                     import logging
                     logging.exception('Error creating company DB for %s: %s', company.slug, e)
