@@ -100,11 +100,16 @@ def _create_company_database(company, changed_by=None):
     os.makedirs(db_dir, exist_ok=True)
     db_path = os.path.join(db_dir, f"{company.slug}.sqlite3")
     alias = f'company_{company.slug}'
-    settings.DATABASES[alias] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': db_path,
-        'ATOMIC_REQUESTS': False,
-    }
+    
+    # Start with default database config, override for SQLite
+    tenant_db_config = settings.DATABASES['default'].copy()
+    tenant_db_config['ENGINE'] = 'django.db.backends.sqlite3'
+    tenant_db_config['NAME'] = db_path
+    tenant_db_config['ATOMIC_REQUESTS'] = True
+    tenant_db_config['TIME_ZONE'] = settings.TIME_ZONE
+    tenant_db_config['USE_TZ'] = settings.USE_TZ
+    
+    settings.DATABASES[alias] = tenant_db_config
     logger.info('Preparing tenant DB record for company %s at %s (alias=%s)', company.slug, db_path, alias)
 
     # Create Tenant record to track status
@@ -134,12 +139,38 @@ def _create_company_database(company, changed_by=None):
     # Run migrations synchronously (primary path - no Celery)
     try:
         logger.info('Running tenant migrations synchronously for %s', company.slug)
-        call_command('migrate', database=alias, interactive=False, verbosity=1)
+        # Migrate only business logic apps, skip system apps like django_apscheduler
+        apps_to_migrate = [
+            'auth', 'contenttypes', 'sessions', 'core', 'clients', 'services',
+            'billing', 'compliance', 'credentials', 'notifications',
+            'expenses', 'documents', 'dashboard', 'taxcalendar'
+        ]
+        for app in apps_to_migrate:
+            try:
+                call_command('migrate', app, database=alias, interactive=False, verbosity=0)
+            except Exception as e:
+                logger.warning('Failed to migrate app %s for %s: %s', app, company.slug, e)
+                # Continue with other apps
+        
         company.db_name = alias
         company.save(update_fields=['db_name'])
         if tenant:
             tenant.status = 'ready'
             tenant.save()
+        
+        # Record an audit log
+        try:
+            AuditLog.objects.create(
+                model_name='company',
+                object_id=str(company.pk),
+                action='UPDATE',
+                changed_fields={'db_name': alias},
+                changed_by=changed_by,
+                notes=f'Initiated tenant database {alias} at {db_path}'
+            )
+        except Exception:
+            logger.exception('Failed to record AuditLog for company DB creation: %s', company.slug)
+        
         logger.info('Successfully created and migrated tenant DB for %s', company.slug)
         try:
             mail_admins(f'Tenant DB created: {company.slug}', f'Database {alias} at {db_path} created successfully.')
@@ -157,21 +188,6 @@ def _create_company_database(company, changed_by=None):
         except Exception:
             logger.warning('Failed to send admin error email for tenant creation')
         raise
-
-    # Record an audit log so admins can notice tenant creation
-    try:
-        AuditLog.objects.create(
-            model_name='company',
-            object_id=str(company.pk),
-            action='UPDATE',
-            changed_fields={'db_name': alias},
-            changed_by=changed_by,
-            notes=f'Initiated tenant database {alias} at {db_path}'
-        )
-    except Exception:
-        logger.exception('Failed to record AuditLog for company DB creation: %s', company.slug)
-
-    return alias
 
 
 @never_cache

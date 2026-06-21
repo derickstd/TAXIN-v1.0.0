@@ -21,7 +21,18 @@ def run_tenant_migrations(self, tenant_id):
     tenant.save()
     alias = tenant.db_alias
     try:
-        call_command('migrate', database=alias, interactive=False, verbosity=1)
+        # Migrate only business logic apps, skip system apps like django_apscheduler
+        apps_to_migrate = [
+            'auth', 'contenttypes', 'sessions', 'core', 'clients', 'services',
+            'billing', 'compliance', 'credentials', 'notifications',
+            'expenses', 'documents', 'dashboard', 'taxcalendar'
+        ]
+        for app in apps_to_migrate:
+            try:
+                call_command('migrate', app, database=alias, interactive=False, verbosity=0)
+            except Exception as e:
+                logger.warning('Failed to migrate app %s for tenant %s: %s', app, tenant.company.slug, e)
+                # Continue with other apps
         tenant.status = 'ready'
         tenant.last_error = ''
         tenant.save()
