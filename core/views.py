@@ -93,14 +93,7 @@ def _create_company_database(company, changed_by=None):
     from django.conf import settings
     from django.core.management import call_command
     from django.core.mail import mail_admins
-    # local import to avoid circular on startup
     from .models import Tenant
-    try:
-        from . import tasks as core_tasks
-        have_celery = True
-    except Exception:
-        core_tasks = None
-        have_celery = False
 
     logger = logging.getLogger(__name__)
     db_dir = os.path.join(settings.BASE_DIR, 'company_databases')
@@ -127,50 +120,43 @@ def _create_company_database(company, changed_by=None):
         logger.exception('Failed to create Tenant record for %s', company.slug)
         tenant = None
 
-    # Try to run migrations asynchronously via Celery if available
-    if have_celery and core_tasks and tenant:
-        try:
+    # Try Celery first, fallback to synchronous
+    try:
+        from . import tasks as core_tasks
+        if tenant:
+            logger.info('Enqueuing tenant migrations via Celery for %s', company.slug)
             core_tasks.run_tenant_migrations.delay(tenant.pk)
-            subject = f'Tenant creation queued: {company.slug}'
-            mail_admins(subject, f'Migrations for tenant {alias} have been queued.')
-        except Exception:
-            logger.exception('Failed to enqueue tenant migration task for %s', company.slug)
-            # Fallback to synchronous
-            try:
-                call_command('migrate', database=alias, interactive=False, verbosity=0)
-                company.db_name = alias
-                company.save(update_fields=['db_name'])
-                if tenant:
-                    tenant.status = 'ready'
-                    tenant.save()
-                mail_admins(f'Tenant DB created: {company.slug}', f'Database {alias} created successfully.')
-            except Exception as e:
-                logger.exception('Error creating tenant DB for %s: %s', company.slug, e)
-                if tenant:
-                    tenant.status = 'failed'
-                    tenant.last_error = str(e)
-                    tenant.save()
-                mail_admins(f'Failed creating tenant DB: {company.slug}', f'Error: {e}')
-                raise
-    else:
-        # No Celery available — run migrations synchronously and notify admins
+            logger.info('Successfully queued tenant migrations for %s', company.slug)
+            return alias
+    except Exception as e:
+        logger.warning('Celery not available or import failed (%s), falling back to synchronous', str(e))
+
+    # Run migrations synchronously (primary path - no Celery)
+    try:
+        logger.info('Running tenant migrations synchronously for %s', company.slug)
+        call_command('migrate', database=alias, interactive=False, verbosity=1)
+        company.db_name = alias
+        company.save(update_fields=['db_name'])
+        if tenant:
+            tenant.status = 'ready'
+            tenant.save()
+        logger.info('Successfully created and migrated tenant DB for %s', company.slug)
         try:
-            logger.info('Running tenant migrations synchronously for %s', company.slug)
-            call_command('migrate', database=alias, interactive=False, verbosity=0)
-            company.db_name = alias
-            company.save(update_fields=['db_name'])
-            if tenant:
-                tenant.status = 'ready'
-                tenant.save()
-            mail_admins(f'Tenant DB created: {company.slug}', f'Database {alias} created successfully.')
-        except Exception as e:
-            logger.exception('Error creating tenant DB for %s: %s', company.slug, e)
-            if tenant:
-                tenant.status = 'failed'
-                tenant.last_error = str(e)
-                tenant.save()
-            mail_admins(f'Failed creating tenant DB: {company.slug}', f'Error: {e}')
-            raise
+            mail_admins(f'Tenant DB created: {company.slug}', f'Database {alias} at {db_path} created successfully.')
+        except Exception:
+            logger.warning('Failed to send admin email for tenant creation')
+        return alias
+    except Exception as e:
+        logger.exception('Error creating tenant DB for %s: %s', company.slug, e)
+        if tenant:
+            tenant.status = 'failed'
+            tenant.last_error = str(e)
+            tenant.save()
+        try:
+            mail_admins(f'Failed creating tenant DB: {company.slug}', f'Error: {str(e)[:500]}')
+        except Exception:
+            logger.warning('Failed to send admin error email for tenant creation')
+        raise
 
     # Record an audit log so admins can notice tenant creation
     try:
