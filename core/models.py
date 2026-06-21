@@ -23,6 +23,30 @@ class Company(models.Model):
         return self.name
 
 
+class Tenant(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('running', 'Running'),
+        ('ready', 'Ready'),
+        ('failed', 'Failed'),
+    ]
+
+    company = models.OneToOneField(Company, on_delete=models.CASCADE, related_name='tenant')
+    db_alias = models.CharField(max_length=100, blank=True)
+    db_path = models.CharField(max_length=1024, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_by = models.ForeignKey('core.User', null=True, blank=True, on_delete=models.SET_NULL)
+    last_error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Tenant {self.company.slug} ({self.status})"
+
+
 class User(AbstractUser):
     ROLE_CHOICES = [
         ('receptionist', 'Receptionist'),

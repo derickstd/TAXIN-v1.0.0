@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, AuditLog, Company
+from .models import User, AuditLog, Company, Tenant
 from .models import ModelVisibility, UserModelPermission
 
 
@@ -73,3 +73,11 @@ class ModelVisibilityAdmin(admin.ModelAdmin):
     list_display = ['content_type', 'enabled', 'description']
     list_filter = ['enabled', 'content_type__app_label']
     search_fields = ['content_type__app_label', 'content_type__model', 'description']
+
+
+@admin.register(Tenant)
+class TenantAdmin(admin.ModelAdmin):
+    list_display = ['company', 'db_alias', 'status', 'created_at']
+    list_filter = ['status']
+    readonly_fields = ['db_alias', 'db_path', 'status', 'created_by', 'last_error', 'created_at', 'updated_at']
+    search_fields = ['company__name', 'db_alias']
