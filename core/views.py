@@ -261,6 +261,10 @@ def signup(request):
             if form.cleaned_data.get('create_database'):
                 try:
                     _create_company_database(company, changed_by=user)
+                    # If tenant record exists, redirect user to progress page
+                    tenant = getattr(company, 'tenant', None)
+                    if tenant:
+                        return redirect('core:tenant_progress', pk=tenant.pk)
                 except Exception as e:
                     import logging
                     logging.exception('Error creating company DB for %s: %s', company.slug, e)
@@ -280,6 +284,29 @@ def signup(request):
     else:
         form = CompanySignupForm()
     return render(request, 'core/signup.html', {'form': form})
+
+
+def tenant_progress(request, pk):
+    from django.shortcuts import get_object_or_404
+    from .models import Tenant
+    tenant = get_object_or_404(Tenant, pk=pk)
+    # We will render a template that polls the status API
+    return render(request, 'core/tenant_progress.html', {'tenant': tenant})
+
+
+def tenant_status(request, pk):
+    from django.shortcuts import get_object_or_404
+    from django.http import JsonResponse
+    from .models import Tenant
+    tenant = get_object_or_404(Tenant, pk=pk)
+    # Restrict access: only creator or superusers
+    if request.user != getattr(tenant, 'created_by', None) and not request.user.is_superuser:
+        return JsonResponse({'error': 'forbidden'}, status=403)
+    return JsonResponse({
+        'status': tenant.status,
+        'message': tenant.last_error or '',
+        'progress': 100 if tenant.status == 'ready' else (0 if tenant.status == 'pending' else 50)
+    })
 
 
 @login_required

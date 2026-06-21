@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}Tenant Setup Progress{% endblock %}
+{% block content %}
+<div class="card card-compact">
+  <div class="card-hd">Setting up your company</div>
+  <div class="card-bd">
+    <p>Please wait while we prepare your company database. This may take a few minutes.</p>
+    <div class="progress">
+      <div id="progressBar" class="progress-bar" role="progressbar" style="width:0%"></div>
+    </div>
+    <div id="statusText" style="margin-top:.8rem;color:#666">Starting...</div>
+  </div>
+</div>
+<script>
+const tenantId = {{ tenant.pk }};
+async function poll(){
+  try{
+    const r = await fetch(`/core/api/tenants/${tenantId}/status/`);
+    if(r.status===403){ document.getElementById('statusText').textContent = 'Access denied'; return; }
+    const data = await r.json();
+    document.getElementById('statusText').textContent = data.message || data.status;
+    const pct = data.progress || (data.status==='running'?50:0);
+    document.getElementById('progressBar').style.width = pct + '%';
+    if(data.status==='ready'){
+      document.getElementById('statusText').textContent = 'Setup complete. You may now log in.';
+      document.getElementById('progressBar').style.width = '100%';
+      return;
+    }
+    if(data.status==='failed'){
+      document.getElementById('statusText').textContent = 'Setup failed. Please contact support.';
+      return;
+    }
+  }catch(e){
+    console.error(e);
+    document.getElementById('statusText').textContent = 'Error contacting server.';
+  }
+  setTimeout(poll,2000);
+}
+poll();
+</script>
+{% endblock %}
