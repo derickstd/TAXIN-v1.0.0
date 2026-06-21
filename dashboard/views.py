@@ -410,7 +410,15 @@ def index(request):
         for m in range(1, 13):
             mo_in = Payment.objects.filter(payment_date__year=cy, payment_date__month=m).aggregate(s=Sum('amount'))['s'] or 0
             mo_out = Expense.objects.filter(expense_date__year=cy, expense_date__month=m, status='approved').aggregate(s=Sum('amount'))['s'] or 0
-            months.append((_calendar.month_abbr[m], mo_in, mo_out))
+            net = float(mo_in) - float(mo_out)
+            months.append({
+                'label': _calendar.month_abbr[m],
+                'income': mo_in,
+                'expense': mo_out,
+                'net': net,
+                'status': 'positive' if net > 0 else 'negative' if net < 0 else 'neutral',
+                'has_data': bool(mo_in or mo_out),
+            })
         ctx.update({'cal_months': months, 'cal_label': str(cy)})
     else:
         # years view: show last 5 years totals

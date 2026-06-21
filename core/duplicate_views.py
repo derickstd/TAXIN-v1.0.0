@@ -38,8 +38,8 @@ from core.reporting import (
 
 
 def is_superuser(user):
-    """Check if user is a superuser."""
-    return user.is_superuser or user.is_staff
+    """Check if user is allowed to edit transactions."""
+    return bool(user and (getattr(user, 'is_superuser', False) or getattr(user, 'role', None) == 'admin'))
 
 
 @login_required
@@ -134,8 +134,10 @@ def duplicate_client_detail(request, pk):
 
 
 @login_required
-@user_passes_test(is_superuser)
 def transaction_edit_log(request):
+    if not is_superuser(request.user):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied()
     """View transaction edit logs (superuser only)."""
     edits = TransactionEditLog.objects.select_related('client', 'edited_by').all()
     
@@ -162,8 +164,10 @@ def transaction_edit_log(request):
 
 
 @login_required
-@user_passes_test(is_superuser)
 def edit_transaction(request, transaction_type, transaction_id):
+    if not is_superuser(request.user):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied()
     """Edit a transaction (invoice, job card, etc.) - superuser only."""
     from billing.models import Invoice
     from services.models import JobCard

@@ -45,6 +45,23 @@ def calendar_view(request):
         money_out = Expense.objects.filter(expense_date=d, status='approved').aggregate(total=Sum('amount'))['total'] or 0
         daily_summaries[d] = {'money_in': money_in, 'money_out': money_out}
         daily_list.append((d, money_in, money_out))
+    # Build calendar grid (weeks) for month view and attach events to each day
+    month_calendar = _calendar.monthcalendar(year, month)
+    events_in_month = events.filter(due_date__year=year, due_date__month=month)
+    events_by_date = {}
+    for ev in events_in_month:
+        events_by_date.setdefault(ev.due_date, []).append(ev)
+
+    month_weeks = []
+    for week in month_calendar:
+        week_days = []
+        for day in week:
+            if day == 0:
+                week_days.append({'day': 0, 'date': None, 'events': []})
+            else:
+                dobj = date(year, month, day)
+                week_days.append({'day': day, 'date': dobj, 'events': events_by_date.get(dobj, [])})
+        month_weeks.append(week_days)
     return render(request, 'taxcalendar/calendar.html', {
         'events': events,
         'status': status,
@@ -54,6 +71,10 @@ def calendar_view(request):
         'month_days': month_days,
         'daily_summaries': daily_summaries,
         'daily_list': daily_list,
+        'month_calendar': month_calendar,
+        'month_weeks': month_weeks,
+        'month': month,
+        'year': year,
         'filter_day': filter_day,
         'day_payments': day_payments,
         'day_expenses': day_expenses,

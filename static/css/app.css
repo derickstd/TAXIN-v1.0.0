@@ -455,26 +455,45 @@ img{max-width:100%}
 .dashboard-calendar-body{padding:1rem;min-height:460px;max-height:560px;overflow:auto}
 .dashboard-calendar-table{width:100%;border-collapse:collapse}
 .dashboard-calendar-weekday{padding:.6rem .45rem;text-align:left;font-size:.73rem;color:#475569;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid rgba(148,163,184,.18)}
-.dashboard-calendar-cell{vertical-align:top;padding:.35rem;border:none;background:transparent;transition:transform .22s ease,box-shadow .22s ease,background-color .22s ease;}
+.dashboard-calendar-cell{vertical-align:top;padding:.4rem;border:none;background:transparent;transition:transform .22s ease,box-shadow .22s ease,background-color .22s ease;}
 .dashboard-calendar-cell.no-data .dashboard-calendar-day{background:rgba(248,250,252,.9);box-shadow:inset 0 0 0 1px rgba(148,163,184,.08);cursor:default}
 .dashboard-calendar-cell.no-data .day-number{background:rgba(241,245,249,.95);color:#64748b}
+.dashboard-calendar-day{display:flex;width:100%;min-height:132px;padding:.75rem;border-radius:1.2rem;background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(245,247,250,.96));box-shadow:0 14px 28px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.75);transition:transform .26s ease,box-shadow .26s ease,background .26s ease,filter .26s ease;cursor:pointer;flex-direction:column;justify-content:space-between}
+.dashboard-calendar-cell.positive{background:rgba(236,253,245,.18)}
+.dashboard-calendar-cell.negative{background:rgba(255,236,236,.18)}
+.dashboard-calendar-cell.neutral{background:rgba(248,250,252,.12)}
 .dashboard-calendar-cell.positive .dashboard-calendar-day,
+.dashboard-calendar-day.positive{background:linear-gradient(180deg, rgba(240,253,244,.95), rgba(212,255,224,.96)) !important;border:1px solid rgba(16,185,129,.35) !important;}
 .dashboard-calendar-cell.negative .dashboard-calendar-day,
-.dashboard-calendar-cell.neutral .dashboard-calendar-day{background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(245,247,250,.96));}
-.dashboard-calendar-day{display:block;width:100%;min-height:110px;padding:.65rem;border-radius:1.2rem;background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(245,247,250,.96));box-shadow:0 12px 28px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.75);transition:transform .26s ease,box-shadow .26s ease,background .26s ease,filter .26s ease;cursor:pointer}
+.dashboard-calendar-day.negative{background:linear-gradient(180deg, rgba(255,236,236,.95), rgba(255,214,214,.96)) !important;border:1px solid rgba(239,68,68,.35) !important;}
+.dashboard-calendar-cell.neutral .dashboard-calendar-day,
+.dashboard-calendar-day.neutral{background:linear-gradient(180deg, rgba(248,250,252,.95), rgba(241,245,249,.96));border:1px solid rgba(148,163,184,.16);}
+.dashboard-calendar-day.positive{border-color:rgba(16,185,129,.35)}
+.dashboard-calendar-day.negative{border-color:rgba(239,68,68,.35)}
+.dashboard-calendar-day.neutral{border-color:rgba(148,163,184,.16)}
+.calendar-day-button{display:block;width:100%;height:100%}
 .dashboard-calendar-day:hover{transform:translateY(-2px);box-shadow:0 18px 36px rgba(15,23,42,.14);filter:brightness(1.015)}
 .dashboard-calendar-day.positive:hover,
 .dashboard-calendar-day.negative:hover,
-.dashboard-calendar-day.neutral:hover{box-shadow:0 20px 40px rgba(15,23,42,.16)}
+.dashboard-calendar-day.neutral:hover{box-shadow:0 22px 42px rgba(15,23,42,.18)}
+.dashboard-calendar-cell.positive .day-number{background:rgba(16,185,129,.12);color:#047857;border:1px solid rgba(16,185,129,.25)}
+.dashboard-calendar-cell.negative .day-number{background:rgba(254,226,226,.95);color:#991b1b;border:1px solid rgba(239,68,68,.25)}
+.dashboard-calendar-cell.neutral .day-number{background:rgba(241,245,249,.95);color:#475569;border:1px solid rgba(148,163,184,.14)}
+.day-status{display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;border-radius:50%;margin-top:.25rem}
+.day-status.positive{background:#059669}
+.day-status.negative{background:#dc2626}
+.day-status.neutral{background:#94a3b8;border:1px solid rgba(148,163,184,.36)}
 .day-header{display:flex;justify-content:space-between;align-items:flex-start;gap:.4rem;margin-bottom:.55rem}
-.day-number{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;font-weight:800;font-size:.95rem;background:rgba(255,255,255,.95);box-shadow:0 8px 18px rgba(15,23,42,.08);color:var(--text)}
-.day-label{font-size:.72rem;color:#64748b;padding:.18rem .4rem;border-radius:999px;background:rgba(248,250,252,.9);font-weight:700}
+.day-number{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;font-weight:800;font-size:.95rem;background:transparent;box-shadow:none;color:var(--text)}
+.day-label{font-size:.72rem;color:#475569;padding:0;font-weight:700;background:transparent;border-radius:0}
 .day-metrics{display:flex;flex-direction:column;gap:.35rem;margin-top:.35rem}
-.metric-row{display:flex;justify-content:space-between;align-items:center;font-size:.78rem}
-.metric-label{color:#475569;font-weight:700}
-.metric-value{font-weight:800;color:#0f172a}
-.metric-value.cash-in{color:#059669}
-.metric-value.cash-out{color:#dc2626}
+.metric-row{display:flex;justify-content:space-between;align-items:center;font-size:.78rem;gap:.35rem}
+.metric-label{color:#475569;font-weight:700;white-space:nowrap}
+.metric-value{font-weight:800;color:#0f172a;min-width:80px;text-align:right;background:transparent}
+.metric-value.cash-in{color:#059669;background:transparent}
+.metric-value.cash-out{color:#dc2626;background:transparent}
+.metric-row .cash-in-text{color:#059669;background:transparent}
+.metric-row .cash-out-text{color:#dc2626;background:transparent}
 .card-hd i,.card-head i,.card-box-header i{color:var(--gold)}
 .card-bd,.card-body,.card-box-body{padding:1.05rem 1rem;min-width:0}
 .card-bd.p0,.card-body.p0,.card-box-body.p0,.p-0{padding:0!important}

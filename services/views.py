@@ -33,6 +33,43 @@ def _line_item_has_content(item):
     ])
 
 
+def _parse_period_label(period_label):
+    if not period_label:
+        return None, None
+    parts = period_label.strip().split()
+    if len(parts) < 2:
+        return None, None
+    year = parts[-1]
+    month_name = ' '.join(parts[:-1])
+    try:
+        month = next(i for i in range(1, 13) if cal.month_name[i].lower() == month_name.lower())
+        return month, int(year)
+    except (StopIteration, ValueError):
+        return None, None
+
+
+def _get_first_item_period(request):
+    period_month = request.POST.get('line_items-0-period_month', '').strip()
+    period_year = request.POST.get('line_items-0-period_year', '').strip()
+    if period_month and period_year:
+        try:
+            return int(period_month), int(period_year)
+        except ValueError:
+            return None, None
+    return _parse_period_label(request.POST.get('line_items-0-period_label', '').strip())
+
+
+def _build_period_label(period_month, period_year, existing_label=''):
+    if existing_label:
+        return existing_label.strip()
+    if period_month and period_year:
+        try:
+            return f"{cal.month_name[int(period_month)]} {period_year}"
+        except (ValueError, IndexError):
+            pass
+    return ''
+
+
 def _can_manage_services(user):
     return user.is_superuser or user.is_manager_or_admin()
 
@@ -83,21 +120,20 @@ def jobcard_create(request):
 
     if request.method == 'POST':
         form = JobCardForm(request.POST)
-        formset = LineItemFormSet(request.POST)
+        formset = LineItemFormSet(request.POST, prefix='line_items')
         intake_pk = request.POST.get('walkin_intake_pk')
         from_walkin = bool(intake_pk) or bool(request.POST.get('new_job_reg'))
 
         # Before creating, check for similar existing transactions to avoid duplicates
         from core.duplicate_detection import check_duplicate_transaction
-        period_month = request.POST.get('period_month') or request.POST.get('period_month')
-        period_year = request.POST.get('period_year') or request.POST.get('period_year')
-        svc_id = request.POST.get('jobcardlineitem_set-0-service_type')
+        period_month, period_year = _get_first_item_period(request)
+        svc_id = request.POST.get('line_items-0-service_type')
         svc = ServiceType.objects.filter(pk=svc_id).first() if svc_id else None
         similar = check_duplicate_transaction(
             client=Client.objects.filter(pk=request.POST.get('client')).first(),
             service_type=svc,
-            period_year=period_year and int(period_year) or None,
-            period_month=period_month and int(period_month) or None,
+            period_year=period_year,
+            period_month=period_month,
             within_days=14,
         )
         if similar:
@@ -114,14 +150,16 @@ def jobcard_create(request):
 
         if form.is_valid() and (formset.is_valid() or from_walkin):
             job = form.save(commit=False)
+            job.period_month = period_month
+            job.period_year = period_year
             job.created_by = request.user
             job.save()
 
             if from_walkin:
                 # Build line item directly from POST — ignore formset validation entirely
-                svc_id = request.POST.get('jobcardlineitem_set-0-service_type')
-                price_raw = request.POST.get('jobcardlineitem_set-0-negotiated_price', '0')
-                default_raw = request.POST.get('jobcardlineitem_set-0-default_price', '0')
+                svc_id = request.POST.get('line_items-0-service_type')
+                price_raw = request.POST.get('line_items-0-negotiated_price', '0')
+                default_raw = request.POST.get('line_items-0-default_price', '0')
                 try:
                     price = Decimal(price_raw) if price_raw else Decimal('0')
                 except Exception:
@@ -137,13 +175,13 @@ def jobcard_create(request):
                 JobCardLineItem.objects.create(
                     job_card=job,
                     service_type=svc,
-                    custom_description='' if svc else request.POST.get('jobcardlineitem_set-0-custom_description', 'Walk-in visit'),
+                    custom_description='' if svc else request.POST.get('line_items-0-custom_description', 'Walk-in visit'),
                     default_price=default_price or (svc.default_price if svc else Decimal('0')),
                     negotiated_price=price,
                     vat_amount=vat,
                     status='not_handled',
-                    period_label=request.POST.get('jobcardlineitem_set-0-period_label', ''),
-                    notes=request.POST.get('jobcardlineitem_set-0-notes', ''),
+                    period_label=_build_period_label(period_month, period_year, request.POST.get('line_items-0-period_label', '')),
+                    notes=request.POST.get('line_items-0-notes', ''),
                 )
             else:
                 formset.instance = job
@@ -174,7 +212,7 @@ def jobcard_create(request):
             # client outstanding balance — all automatically
             if invoice and request.POST.get('payment_received') == 'yes':
                 from billing.models import Payment
-                price_raw = request.POST.get('jobcardlineitem_set-0-negotiated_price', '0')
+                price_raw = request.POST.get('line_items-0-negotiated_price', '0')
                 try:
                     full_amount = Decimal(price_raw) if price_raw else invoice.grand_total
                 except Exception:
@@ -209,10 +247,8 @@ def jobcard_create(request):
         initial = {}
         if client_id:
             initial['client'] = client_id
-        initial['period_month'] = today.month
-        initial['period_year'] = today.year
         form = JobCardForm(initial=initial)
-        formset = LineItemFormSet()
+        formset = LineItemFormSet(prefix='line_items')
 
     return render(request, 'services/jobcard_form.html', {
         'form': form, 'formset': formset, 'title': 'New Job Card',

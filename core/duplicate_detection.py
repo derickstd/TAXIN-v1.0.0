@@ -184,21 +184,21 @@ def check_duplicate_transaction(client, service_type=None, job_card=None, period
                 'status': job.status
             })
     
-    # Check for similar invoices
+    # Check for similar invoices attached to job cards for the same period
     if period_year:
         invoices = Invoice.objects.filter(
             client=client,
-            date_issued__year=period_year,
-            created_at__gte=date_threshold
+            job_card__isnull=False,
+            created_at__gte=date_threshold,
         )
-        
+        if period_month:
+            invoices = invoices.filter(job_card__period_year=period_year, job_card__period_month=period_month)
+        else:
+            invoices = invoices.filter(job_card__period_year=period_year)
         if service_type:
-            # Try to match via job card
-            invoices = invoices.filter(
-                job_card__isnull=False
-            )
-        
-        for invoice in invoices[:3]:
+            invoices = invoices.filter(job_card__line_items__service_type=service_type)
+
+        for invoice in invoices.distinct()[:3]:
             existing.append({
                 'type': 'invoice',
                 'object': invoice,

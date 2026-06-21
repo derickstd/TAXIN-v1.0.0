@@ -3,8 +3,33 @@
 {% block nav_jobs %}active{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'services:list' %}">Job Cards</a></li><li class="active">{{ title }}</li>{% endblock %}
 {% block content %}
-<div class="page-hdr">
-  <h4 class="page-title"><i class="fas fa-briefcase"></i>{{ title }}</h4>
+<div class="page-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+  <h4 class="page-title" style="display:flex;align-items:center;gap:.6rem"><i class="fas fa-briefcase"></i>{{ title }}</h4>
+  <div style="min-width:220px">
+    <div class="card" style="padding:.5rem .75rem;border-radius:8px;display:flex;flex-direction:column;align-items:flex-end">
+      <div style="font-size:.82rem;color:#666">Services <span style="font-weight:700;margin-left:.6rem" id="sumCount">0 services</span></div>
+      <div style="font-size:.82rem;color:#666;margin-top:.2rem">Subtotal <span style="font-weight:700;margin-left:.6rem" id="sumTotal">UGX 0</span></div>
+      <div style="margin-top:.4rem;padding-top:.4rem;border-top:1px solid var(--border);width:100%;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:800;color:var(--blue)">Total</span>
+        <span class="ugx fw-8" id="sumGrand" style="font-size:1.05rem;color:var(--blue)">UGX 0</span>
+      </div>
+      <div class="form-hint mt-2" style="margin-top:.4rem;font-size:.78rem" id="summaryInvoiceNote"></div>
+      <div class="form-hint mt-2 text-danger" style="margin-top:.3rem;font-size:.78rem;display:none" id="clientHistoryNote"></div>
+    </div>
+  </div>
+</div>
+<div id="floatingSummary" class="card card-compact floating-summary">
+  <div class="card-hd"><i class="fas fa-chart-pie"></i>Quick Job Summary</div>
+  <div class="card-bd">
+    <div style="font-size:.82rem;color:#666">Services <span style="font-weight:700;margin-left:.6rem" id="floatSumCount">0 services</span></div>
+    <div style="font-size:.82rem;color:#666;margin-top:.2rem">Subtotal <span style="font-weight:700;margin-left:.6rem" id="floatSumTotal">UGX 0</span></div>
+    <div style="margin-top:.4rem;padding-top:.4rem;border-top:1px solid var(--border);width:100%;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-weight:800;color:var(--blue)">Total</span>
+      <span class="ugx fw-8" id="floatSumGrand" style="font-size:1.05rem;color:var(--blue)">UGX 0</span>
+    </div>
+    <div class="form-hint mt-2" style="margin-top:.4rem;font-size:.78rem" id="floatSummaryInvoiceNote"></div>
+    <div class="form-hint mt-2 text-danger" style="margin-top:.3rem;font-size:.78rem;display:none" id="floatClientHistoryNote"></div>
+  </div>
 </div>
 <form method="post" novalidate id="jcForm">{% csrf_token %}
 <div class="layout-sidebar-main">
@@ -20,7 +45,7 @@
             <select name="client" id="clientSelect" class="s2" data-ph="Type name, TIN or ID…" required>
               <option value="">Search clients…</option>
               {% for c in form.fields.client.queryset %}
-              <option value="{{ c.pk }}" data-tin="{{ c.tin }}" data-phone="{{ c.phone_primary }}" data-type="{{ c.get_client_type_display }}"
+              <option value="{{ c.pk }}" data-tin="{{ c.tin }}" data-phone="{{ c.phone_primary }}" data-type="{{ c.get_client_type_display }}" data-prev-jobs="{{ c.prev_jobs|default:0 }}"
                 {% if form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>
                 {{ c.client_id }} — {{ c.get_display_name }}{% if c.tin %} ({{ c.tin }}){% endif %}
               </option>
@@ -34,33 +59,6 @@
             </div>
           </div>
 
-          <div class="mb-2" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-            <div>
-              <label class="form-label">Month</label>
-              <select name="period_month" id="monthSel" class="s2" data-ph="Month">
-                <option value="">Month</option>
-                <option value="1" {% if form.period_month.value == '1' %}selected{% endif %}>Jan</option>
-                <option value="2" {% if form.period_month.value == '2' %}selected{% endif %}>Feb</option>
-                <option value="3" {% if form.period_month.value == '3' %}selected{% endif %}>Mar</option>
-                <option value="4" {% if form.period_month.value == '4' %}selected{% endif %}>Apr</option>
-                <option value="5" {% if form.period_month.value == '5' %}selected{% endif %}>May</option>
-                <option value="6" {% if form.period_month.value == '6' %}selected{% endif %}>Jun</option>
-                <option value="7" {% if form.period_month.value == '7' %}selected{% endif %}>Jul</option>
-                <option value="8" {% if form.period_month.value == '8' %}selected{% endif %}>Aug</option>
-                <option value="9" {% if form.period_month.value == '9' %}selected{% endif %}>Sep</option>
-                <option value="10" {% if form.period_month.value == '10' %}selected{% endif %}>Oct</option>
-                <option value="11" {% if form.period_month.value == '11' %}selected{% endif %}>Nov</option>
-                <option value="12" {% if form.period_month.value == '12' %}selected{% endif %}>Dec</option>
-              </select>
-            </div>
-            <div>
-              <label class="form-label">Year</label>
-              <select name="period_year" id="yearSel" class="s2" data-ph="Year">
-                <option value="">Year</option>
-                {% for y in years %}<option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
-              </select>
-            </div>
-          </div>
 
           <div class="mb-2">
             <label class="form-label">Assigned To</label>
@@ -93,19 +91,7 @@
         </div>
       </div>
 
-      <!-- Fee Summary -->
-      <div class="card card-compact">
-        <div class="card-hd"><i class="fas fa-calculator"></i>Fee Summary</div>
-        <div class="card-bd">
-          <div class="stat-row"><span class="text-muted">Services</span><span class="fw-7" id="sumCount">0 services</span></div>
-          <div class="stat-row"><span class="text-muted">Subtotal</span><span class="ugx fw-7" id="sumTotal">UGX 0</span></div>
-          <div style="margin-top:.6rem;padding-top:.6rem;border-top:2px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-            <span class="fw-8 text-blue">Total</span>
-            <span class="ugx fw-8" id="sumGrand" style="font-size:1.1rem;color:var(--blue)">UGX 0</span>
-          </div>
-          <div class="form-hint mt-2"><i class="fas fa-file-invoice" style="color:var(--gold)"></i> <span id="summaryInvoiceNote">Invoice auto-generated on save</span></div>
-        </div>
-      </div>
+      
     </div>
   </div>
 
@@ -120,6 +106,8 @@
         <div id="lineItems">
           {% for f in formset %}
           <div class="li-row" style="background:#f8f9fb;border:1.5px solid var(--border);border-radius:8px;padding:.85rem;margin-bottom:.7rem">
+            {{ f.id }}
+            {{ f.job_card }}
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem">
               <span class="fw-7 text-blue fs-sm li-num">Service {{ forloop.counter }}</span>
               {% if formset.can_delete %}
@@ -160,6 +148,24 @@
                 <label class="form-label fs-xs">Status</label>
                 <select name="{{ f.status.html_name }}" class="form-ctrl" style="font-size:.83rem">
                   {% for val,label in f.fields.status.choices %}<option value="{{ val }}" {% if f.status.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="form-label fs-xs">Period Month</label>
+                <select name="{{ f.period_month.html_name }}"
+                  class="form-ctrl li-period-month" style="font-size:.83rem">
+                  {% for val,label in f.fields.period_month.choices %}
+                  <option value="{{ val }}" {% if f.period_month.value|stringformat:"s" == val|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="form-label fs-xs">Period Year</label>
+                <select name="{{ f.period_year.html_name }}"
+                  class="form-ctrl li-period-year" style="font-size:.83rem">
+                  {% for val,label in f.fields.period_year.choices %}
+                  <option value="{{ val }}" {% if f.period_year.value|stringformat:"s" == val|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
                 </select>
               </div>
               <div>
@@ -212,11 +218,55 @@
 </div>
 </form>
 {% endblock %}
+{% block extra_css %}
+<style>
+.floating-summary{
+  display:block;
+  position:fixed;
+  top:calc(var(--topbar-h) + 1rem);
+  right:1rem;
+  width:320px;
+  max-width:calc(100vw - 2rem);
+  z-index:1050;
+  box-shadow:0 18px 38px rgba(15,34,80,.16);
+}
+.floating-summary .card-bd{padding:1rem;}
+.floating-summary .card-hd{font-size:1rem;}
+@media(max-width:900px){
+  .floating-summary{
+    top:auto;
+    bottom:1rem;
+    right:.75rem;
+    left:.75rem;
+    width:auto;
+    max-width:calc(100vw - 1.5rem);
+  }
+}
+@media(max-width:520px){
+  .floating-summary{
+    right:.5rem;
+    left:.5rem;
+  }
+  .floating-summary .card-bd{padding:.75rem;}
+}
+</style>
+{% endblock %}
 {% block extra_js %}
 <script>
 $(document).ready(function(){
   // Client select2 + auto-show info strip
   $('#clientSelect').select2({theme:'bootstrap-5',allowClear:false,placeholder:'Type name, TIN or client ID…'});
+  function updateClientHistoryNote(opt){
+    var prevJobs = parseInt($(opt).data('prev-jobs')) || 0;
+    if(prevJobs > 0){
+      var message = 'Client has ' + prevJobs + ' previous job' + (prevJobs === 1 ? '' : 's') + '.';
+      $('#clientHistoryNote').text(message).show();
+      $('#floatClientHistoryNote').text(message).show();
+    } else {
+      $('#clientHistoryNote').hide().text('');
+      $('#floatClientHistoryNote').hide().text('');
+    }
+  }
   $('#clientSelect').on('select2:select',function(e){
     var opt = e.params.data.element;
     var type = $(opt).data('type'), phone = $(opt).data('phone');
@@ -225,8 +275,17 @@ $(document).ready(function(){
       $('#stripPhone').text(phone||'');
       $('#clientStrip').show();
     }
+    updateClientHistoryNote(opt);
   });
-  $('#clientSelect').on('select2:clear',function(){ $('#clientStrip').hide(); });
+  $('#clientSelect').on('select2:clear',function(){
+    $('#clientStrip').hide();
+    $('#clientHistoryNote').hide().text('');
+    $('#floatClientHistoryNote').hide().text('');
+  });
+  var currentClientOpt = $('#clientSelect option:selected')[0];
+  if(currentClientOpt && currentClientOpt.value){
+    updateClientHistoryNote(currentClientOpt);
+  }
 
   // Service selects
   $('.s2-svc').select2({theme:'bootstrap-5',allowClear:false,placeholder:'Search services…'});
@@ -235,23 +294,121 @@ $(document).ready(function(){
   $(document).on('select2:select','.s2-svc',function(e){
     var price=$(e.params.data.element).data('price')||'';
     var vat=$(e.params.data.element).data('vat')==='true';
+    var deadline=$(e.params.data.element).data('deadlinetype')||'';
     var row=$(this).closest('.li-row');
     if(price){ row.find('.li-default').val(price); if(!row.find('.li-price').val())row.find('.li-price').val(price); }
     row.find('.li-vat-badge').toggle(vat);
+    updateLinePeriodVisibility(row, deadline);
     recalcTotal();
   });
   $(document).on('input','.li-price',recalcTotal);
-  $(document).on('change','.li-delete',function(){
+  $(document).on('change','input[type=checkbox][name$="-DELETE"]',function(){
     recalcTotal();
   });
 
-  // Period label auto-fill
-  $('#monthSel,#yearSel').on('change',function(){
-    var m=$('#monthSel option:selected').text(), y=$('#yearSel').val();
-    if(m&&y&&m!=='Month'){ $('.li-period').each(function(){if(!$(this).val())$(this).val(m+' '+y);}); }
+  function recalcTotal(){
+    var total=0,count=0;
+    $('.li-row').each(function(){
+      var del=$(this).find('input[type=checkbox][name$="-DELETE"]');
+      if(del.length && del.is(':checked')) return;
+      var v=parseFloat($(this).find('.li-price').val()||0)||0;
+      if(v>0){total+=v;count++;}
+    });
+    var label = count === 1 ? ' service' : ' services';
+    $('#sumCount').text(count+label);
+    $('#sumTotal').text('UGX '+total.toLocaleString());
+    $('#sumGrand').text('UGX '+total.toLocaleString());
+    $('#floatSumCount').text(count+label);
+    $('#floatSumTotal').text('UGX '+total.toLocaleString());
+    $('#floatSumGrand').text('UGX '+total.toLocaleString());
+  }
+  window.recalcTotal = recalcTotal;
+
+  function autoFillPeriodLabel(row) {
+    var m = row.find('.li-period-month').val();
+    var y = row.find('.li-period-year').val();
+    var labelField = row.find('.li-period');
+    var monthText = row.find('.li-period-month option:selected').text();
+    var deadline = row.find('.s2-svc').find('option:selected').data('deadlinetype') || '';
+    if(deadline === 'annual_dec31'){
+      if(y){
+        var fy = (parseInt(y,10)-1) + '/' + String(y).slice(-2);
+        labelField.val(fy);
+      }
+      return;
+    }
+    if(m && y && monthText && monthText !== 'Month' && !labelField.val()){
+      labelField.val(monthText + ' ' + y);
+    }
+  }
+
+  function updateLinePeriodVisibility(row, deadlineType) {
+    var hide = !deadlineType || deadlineType === 'none';
+    // If annual (Dec 31) hide month select and only show year + label
+    if(deadlineType === 'annual_dec31'){
+      row.find('.li-period-month').closest('div').hide();
+      row.find('.li-period-year').closest('div').show();
+      row.find('.li-period').closest('div').show();
+    } else {
+      row.find('.li-period-month').closest('div').toggle(!hide);
+      row.find('.li-period-year').closest('div').toggle(!hide);
+      row.find('.li-period').closest('div').toggle(!hide);
+    }
+    // Populate year options appropriately
+    populateYearOptions(row, deadlineType);
+  }
+
+  function populateYearOptions(row, deadlineType){
+    var yearSel = row.find('.li-period-year');
+    var now = new Date();
+    var thisYear = now.getFullYear();
+    if(deadlineType === 'annual_dec31'){
+      // show end-year values but label as two-year (2024/25)
+      var years = [];
+      for(var y = thisYear - 1; y <= thisYear + 1; y++) years.push(y);
+      // rebuild options
+      yearSel.empty().append($('<option>').val('').text('Year'));
+      years.forEach(function(y){
+        var label = (y-1) + '/' + String(y).slice(-2);
+        yearSel.append($('<option>').val(y).text(label));
+      });
+      // default to most recent completed financial year
+      yearSel.val(thisYear - 1);
+    } else {
+      // restore numeric year range similar to server defaults
+      yearSel.empty().append($('<option>').val('').text('Year'));
+      for(var y = thisYear - 1; y <= thisYear + 2; y++){
+        yearSel.append($('<option>').val(y).text(y));
+      }
+      // default to previous month/year
+      var prevMonth = now.getMonth(); // 0-based -> previous month index
+      var prevYear = now.getFullYear();
+      if(prevMonth === 0){ prevMonth = 12; prevYear = prevYear - 1; } else { /*prevMonth already 1..11*/ }
+      // set month select only if present and empty
+      var msel = row.find('.li-period-month');
+      if(msel.val() === '' || !msel.val()) msel.val(prevMonth);
+      if(yearSel.val() === '' || !yearSel.val()) yearSel.val(prevYear);
+    }
+  }
+
+  function refreshAllLinePeriodVisibility() {
+    $('.li-row').each(function(){
+      var row=$(this);
+      var select=row.find('.s2-svc');
+      var deadline=select.find('option:selected').data('deadlinetype')||'';
+      updateLinePeriodVisibility(row, deadline);
+      autoFillPeriodLabel(row);
+    });
+  }
+
+  $(document).on('change','.li-period-month, .li-period-year',function(){
+    autoFillPeriodLabel($(this).closest('.li-row'));
   });
 
+  refreshAllLinePeriodVisibility();
+
   recalcTotal();
+  $('#floatSummaryInvoiceNote').text($('#summaryInvoiceNote').text());
 
   // Invoice toggle
   $('#createInvoiceChk').on('change', function(){
@@ -260,7 +417,9 @@ $(document).ready(function(){
       ? '<i class="fas fa-file-invoice" style="color:var(--gold)"></i> Invoice will be created automatically'
       : '<i class="fas fa-ban" style="color:var(--red)"></i> No invoice will be created'
     );
-    $('#summaryInvoiceNote').text(checked ? 'Invoice auto-generated on save' : 'No invoice — manual billing required');
+    var noteText = checked ? 'Invoice auto-generated on save' : 'No invoice — manual billing required';
+    $('#summaryInvoiceNote').text(noteText);
+    $('#floatSummaryInvoiceNote').text(noteText);
     $('#submitBtn').html(checked ? '<i class="fas fa-save"></i> Save & Generate Invoice' : '<i class="fas fa-save"></i> Save Job Card Only');
   });
 
@@ -300,6 +459,8 @@ $(document).ready(function(){
     });
     $('#lineItems').append(template);
     template.find('.s2-svc').select2({theme:'bootstrap-5',allowClear:false,placeholder:'Search services…'});
+    // initialize period options for the new row
+    populateYearOptions(template, '');
   });
 });
 </script>

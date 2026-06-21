@@ -52,19 +52,21 @@
               {% for week in cal_weeks %}
               <tr>
                 {% for day in week %}
-                <td class="dashboard-calendar-cell{% if not day or not day.has_data %} no-data{% endif %}">
+                <td class="dashboard-calendar-cell{% if not day or not day.has_data %} no-data{% else %} {{ day.status }}{% endif %}">
                   {% if day %}
-                  <div class="day-header">
-                    <span class="day-number">{{ day.date|date:"j" }}</span>
-                    {% if day.has_data %}
-                    <span class="day-label">{{ day.date|date:"D" }}</span>
-                    {% endif %}
-                  </div>
-                  <div role="button" class="calendar-day-button dashboard-calendar-day" data-day="{{ day.date|date:'Y-m-d' }}" {% if day.has_data %}onclick="openDayDetails(this.dataset.day)"{% endif %}>
+                  <div role="button" class="calendar-day-button dashboard-calendar-day{% if day.has_data %} {{ day.status }}{% endif %}" data-day="{{ day.date|date:'Y-m-d' }}" {% if day.has_data %}onclick="openDayDetails(this.dataset.day)"{% endif %}>
+                    <div class="day-header">
+                      <div style="display:flex;flex-direction:column;gap:.25rem">
+                        <span class="day-number">{{ day.date|date:"j" }}</span>
+                      </div>
+                      {% if day.has_data %}
+                      <span class="day-status {{ day.status }}" aria-label="{% if day.status == 'positive' %}Profit day{% elif day.status == 'negative' %}Loss day{% else %}Neutral day{% endif %}"></span>
+                      {% endif %}
+                    </div>
                     {% if day.has_data %}
                     <div class="day-metrics">
-                      <div class="metric-row"><span class="metric-label"></span><span class="metric-value cash-in">{{ day.income|floatformat:0|intcomma }}</span></div>
-                      <div class="metric-row"><span class="metric-label"></span><span class="metric-value cash-out">{{ day.expense|floatformat:0|intcomma }}</span></div>
+                      <div class="metric-row"><span class="metric-value cash-in">{{ day.income|floatformat:0|intcomma }}</span></div>
+                      <div class="metric-row"><span class="metric-value cash-out">{{ day.expense|floatformat:0|intcomma }}</span></div>
                     </div>
                     {% endif %}
                   </div>
@@ -77,10 +79,19 @@
           </table>
         {% elif cal_months %}
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.35rem">
-            {% for mname, mi, mo in cal_months %}
-            <div style="border:1px solid #e6eef6;padding:.5rem;border-radius:.75rem;background:#fff;min-height:88px;display:flex;flex-direction:column;justify-content:space-between;transition:transform .25s ease,box-shadow .25s ease;background:rgba(255,255,255,.92);">
-              <div style="font-weight:700;font-size:.92rem">{{ mname }}</div>
-              <div style="font-size:.78rem;color:#475569">Monthly view</div>
+            {% for month in cal_months %}
+            <div class="dashboard-month-card dashboard-calendar-day {{ month.status }}" style="border-radius:.75rem;min-height:120px;display:flex;flex-direction:column;justify-content:space-between;padding:.75rem;transition:transform .25s ease,box-shadow .25s ease;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+                <div>
+                  <div style="font-weight:700;font-size:.96rem">{{ month.label }}</div>
+                  <div style="font-size:.75rem;color:#475569;">Monthly totals</div>
+                </div>
+                <span class="day-status {{ month.status }}" aria-label="{% if month.status == 'positive' %}Profit month{% elif month.status == 'negative' %}Loss month{% else %}Neutral month{% endif %}"></span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:.35rem;">
+                <div class="metric-row"><span class="metric-value cash-in">UGX {{ month.income|floatformat:0|intcomma }}</span></div>
+                <div class="metric-row"><span class="metric-value cash-out">UGX {{ month.expense|floatformat:0|intcomma }}</span></div>
+              </div>
             </div>
             {% endfor %}
           </div>
