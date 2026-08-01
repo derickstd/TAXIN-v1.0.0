@@ -7,7 +7,7 @@ environ.Env.read_env(BASE_DIR / '.env')
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
-ALLOWED_HOSTS = ['127.0.0.1','*.primeserver.space','primeserver.space','www.primeserver.space']
+ALLOWED_HOSTS = ['127.0.0.1','localhost','*.primeserver.space','primeserver.space','www.primeserver.space']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -84,10 +84,10 @@ TWILIO_ACCOUNT_SID = env('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = env('TWILIO_AUTH_TOKEN', default='')
 TWILIO_WHATSAPP_NUMBER = env('TWILIO_WHATSAPP_NUMBER', default='')
 MANAGER_WHATSAPP = env('MANAGER_WHATSAPP', default='+256785230670')
-FIRM_NAME = env('FIRM_NAME', default='Taxman256')
+FIRM_NAME = env('FIRM_NAME', default='Taxin')
 FIRM_ADDRESS = env('FIRM_ADDRESS', default='Kampala, Uganda')
 FIRM_PHONE = env('FIRM_PHONE', default='+256785230670')
-FIRM_EMAIL = env('FIRM_EMAIL', default='info@taxman256.ug')
+FIRM_EMAIL = env('FIRM_EMAIL', default='info@Taxin.ug')
 
 # Email Configuration
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
@@ -96,8 +96,9 @@ EMAIL_PORT = env.int('EMAIL_PORT', default=587)
 EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
 EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Taxman256 <noreply@taxman256.ug>')
-SERVER_EMAIL = env('SERVER_EMAIL', default='noreply@taxman256.ug')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Taxin <noreply@Taxin.ug>')
+SERVER_EMAIL = env('SERVER_EMAIL', default='noreply@Taxin.ug')
 
 SESSION_COOKIE_AGE = 14400
 APSCHEDULER_DATETIME_FORMAT = "N j, Y, f:s a"
+

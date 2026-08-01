@@ -17,7 +17,7 @@
 <div class="card-box">
   <div class="card-body">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1A3C6E;padding-bottom:1rem;margin-bottom:1.2rem">
-      <div><div style="font-size:1.4rem;font-weight:900;color:#1A3C6E">TAXMAN256</div>
+      <div><div style="font-size:1.4rem;font-weight:900;color:#1A3C6E">Taxin</div>
         <div style="color:#666;font-size:.82rem">Kampala, Uganda | +256785230670</div></div>
       <div style="text-align:right">
         <div style="font-size:1rem;font-weight:800;color:#C8952A">ACCOUNT STATEMENT</div>
@@ -37,7 +37,7 @@
             <td style="font-size:.78rem;color:#888">{% if inv.job_card %}{{ inv.job_card.get_period_label }}{% endif %}</td>
             <td class="ugx" style="text-align:right">{{ inv.grand_total|floatformat:0|intcomma }}</td>
             <td class="ugx ugx-green" style="text-align:right">{{ inv.amount_paid|floatformat:0|intcomma }}</td>
-            <td class="ugx {% if inv.balance_due > 0 %}ugx-red{% endif %}" style="text-align:right;font-weight:700">{{ inv.balance_due|floatformat:0|intcomma }}</td>
+            <td class="ugx {% if inv.balance_due > 0 %}ugx-red{% elif inv.balance_due < 0 %}ugx-green{% endif %}" style="text-align:right;font-weight:700">{{ inv.balance_due|floatformat:0|intcomma }}</td>
             <td><span class="badge badge-{{ inv.status }}" style="font-size:.65rem">{{ inv.get_status_display }}</span></td>
           </tr>
           {% empty %}
@@ -58,4 +58,5 @@
   </div>
 </div>
 {% endblock %}
+
 

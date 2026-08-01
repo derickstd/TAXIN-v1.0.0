@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Manage Companies{% endblock %}
+{% block content %}
+<div style="padding:2rem;max-width:1400px;margin:0 auto;">
+  <h1 style="margin:0 0 2rem;color:#1A3C6E;font-size:1.8rem;font-weight:800;">Manage Companies</h1>
+
+  <!-- Search and Filter -->
+  <div style="background:#fff;border-radius:12px;padding:1.5rem;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:2rem;">
+    <form method="get" style="display:flex;gap:1rem;flex-wrap:wrap;">
+      <input type="text" name="search" placeholder="Search by name, slug, or email" value="{{ search_q }}" style="flex:1;min-width:250px;padding:.75rem;border:1px solid #e5e7eb;border-radius:8px;font-size:.95rem;">
+      <select name="status" style="padding:.75rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;">
+        <option value="">All Status</option>
+        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active Only</option>
+        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive Only</option>
+      </select>
+      <button type="submit" style="background:#1A3C6E;color:#fff;border:none;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;cursor:pointer;">
+        <i class="fas fa-search"></i> Filter
+      </button>
+    </form>
+  </div>
+
+  <div style="background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;">
+      <thead style="background:#f3f4f6;border-bottom:1px solid #e5e7eb;">
+        <tr>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Company Name</th>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Slug</th>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Owner</th>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Email</th>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Branches</th>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Status</th>
+          <th style="padding:1rem;text-align:center;font-weight:700;color:#374151;font-size:.9rem;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for company in companies %}
+        <tr style="border-bottom:1px solid #e5e7eb;">
+          <td style="padding:1rem;color:#374151;font-weight:600;">{{ company.name }}</td>
+          <td style="padding:1rem;color:#374151;font-family:monospace;">{{ company.slug }}</td>
+          <td style="padding:1rem;color:#374151;">{{ company.owner.username|default:"—" }}</td>
+          <td style="padding:1rem;color:#374151;">{{ company.email }}</td>
+          <td style="padding:1rem;color:#374151;">{{ company.branches.count }}</td>
+          <td style="padding:1rem;">
+            {% if company.active %}<span style="background:#d1fae5;color:#047857;padding:.25rem .75rem;border-radius:9999px;font-size:.85rem;font-weight:600;">Active</span>
+            {% else %}<span style="background:#fee2e2;color:#dc2626;padding:.25rem .75rem;border-radius:9999px;font-size:.85rem;font-weight:600;">Suspended</span>{% endif %}
+          </td>
+          <td style="padding:1rem;text-align:center;">
+            <a href="{% url 'core:admin_company_branches' company.pk %}" style="background:#2563eb;color:#fff;padding:.4rem .8rem;border-radius:4px;text-decoration:none;font-weight:600;font-size:.85rem;display:inline-block; margin-right:.35rem;">
+              <i class="fas fa-code-branch"></i> Branches
+            </a>
+            {% if company.active %}
+              <a href="{% url 'core:admin_company_suspend' company.pk %}" style="background:#ef4444;color:#fff;padding:.4rem .8rem;border-radius:4px;text-decoration:none;font-weight:600;font-size:.85rem;display:inline-block;" onclick="return confirm('Suspend {{ company.name }}?');">
+                <i class="fas fa-pause"></i> Suspend
+              </a>
+            {% else %}
+              <a href="{% url 'core:admin_company_reactivate' company.pk %}" style="background:#10b981;color:#fff;padding:.4rem .8rem;border-radius:4px;text-decoration:none;font-weight:600;font-size:.85rem;display:inline-block;">
+                <i class="fas fa-play"></i> Reactivate
+              </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" style="padding:2rem;text-align:center;color:#6b7280;">No companies found</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

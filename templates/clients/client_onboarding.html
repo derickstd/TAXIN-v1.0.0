@@ -15,7 +15,6 @@
     </div>
     <div class="quick-bar" style="margin-bottom:1rem">
       <a href="{% url 'clients:create' %}" class="btn btn-sm {% if import_section_active == 'new_client' %}btn-primary{% else %}btn-outline{% endif %}"><i class="fas fa-id-card"></i> New Client</a>
-      <a href="{% url 'clients:walkin' %}" class="btn btn-sm {% if import_section_active == 'walkin' %}btn-primary{% else %}btn-outline{% endif %}"><i class="fas fa-door-open"></i> Walk-in Intake</a>
       <a href="{% url 'clients:import' %}" class="btn btn-sm {% if import_section_active == 'batch_import' %}btn-primary{% else %}btn-outline{% endif %}"><i class="fas fa-file-import"></i> Batch Import</a>
     </div>
 
@@ -156,66 +155,6 @@
   </div>
 
   <div class="stack">
-    {% if import_section_active == 'walkin' %}
-    <div class="card-box card-compact" id="walkin-section">
-      <div class="card-head"><i class="fas fa-door-open"></i>Walk-in Intake</div>
-      <div class="card-body">
-        <div class="alert-note mb-3">Use this when an existing client visits the office and you want to capture why they came in.</div>
-        <form method="post" novalidate action="{% url 'clients:walkin' %}">
-          {% csrf_token %}
-          <div class="form-stack">
-            <div>
-              <label class="form-label">Client <span class="req">*</span></label>
-              <select name="client" class="form-select s2" data-ph="Search by name or client ID…" required>
-                <option value="">Select client…</option>
-                {% for c in walkin_form.fields.client.queryset %}<option value="{{ c.pk }}" {% if walkin_form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.client_id }} — {{ c.get_display_name }}</option>{% endfor %}
-              </select>
-              {% for e in walkin_form.client.errors %}<div class="err-msg">{{ e }}</div>{% endfor %}
-            </div>
-            <div>
-              <label class="form-label">Purpose of Visit <span class="req">*</span></label>
-              <select name="service_type" id="servicePurpose" class="form-select s2" data-ph="Select service…" required>
-                <option value="">Select service…</option>
-                {% for st in walkin_form.fields.service_type.queryset %}
-                <option value="{{ st.pk }}" {% if walkin_form.service_type.value|stringformat:"s" == st.pk|stringformat:"s" %}selected{% endif %}>{{ st.name }}</option>
-                {% endfor %}
-                <option value="add_new" style="background:#ecfeff;font-weight:600;color:#0e7490;">+ Add New Service</option>
-              </select>
-              {% for e in walkin_form.service_type.errors %}<div class="err-msg">{{ e }}</div>{% endfor %}
-            </div>
-            <div id="customPurposeDiv" style="display:none;">
-              <label class="form-label">Describe Purpose</label>
-              <textarea name="purpose" id="customPurpose" class="form-control" rows="2" placeholder="Describe the service needed…">{{ walkin_form.purpose.value|default:'' }}</textarea>
-            </div>
-            <div class="form-grid-2">
-              <div>
-                <label class="form-label">Assigned Staff</label>
-                <select name="assigned_staff" class="form-select s2" data-ph="Who is handling this?">
-                  <option value="">— Self —</option>
-                  {% for u in walkin_form.fields.assigned_staff.queryset %}<option value="{{ u.pk }}" {% if walkin_form.assigned_staff.value|stringformat:"s" == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>{% endfor %}
-                </select>
-              </div>
-              <div>
-                <label class="form-label">Outcome</label>
-                <select name="outcome" class="form-select s2" data-ph="Select outcome">
-                  {% for val,label in walkin_form.fields.outcome.choices %}<option value="{{ val }}" {% if walkin_form.outcome.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label class="form-label">Notes</label>
-              <textarea name="notes" class="form-control" rows="2" placeholder="Any additional observations">{{ walkin_form.notes.value|default:'' }}</textarea>
-            </div>
-          </div>
-          <div class="form-actions mt-3">
-            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Record Visit</button>
-            <a href="{% url 'clients:list' %}" class="btn btn-outline">Skip & Go to Clients</a>
-          </div>
-        </form>
-      </div>
-    </div>
-    {% endif %}
-
     {% if import_section_active == 'batch_import' %}
     <div class="card-box card-compact" id="import-section">
       <div class="card-head"><i class="fas fa-file-import"></i>Batch Import</div>
@@ -506,8 +445,9 @@ function downloadTemplate(){
     'Sarah Namukasa,+256700200002,individual,1009876543,sarah@mail.com,,Wakiso\n';
   var a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
-  a.download='taxman256_clients_template.csv';
+  a.download='Taxin_clients_template.csv';
   a.click();
 }
 </script>
 {% endblock %}
+

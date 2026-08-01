@@ -25,7 +25,7 @@ def get_firm_sender():
     return {
         'whatsapp': (admin.phone_whatsapp if admin else '') or getattr(settings, 'MANAGER_WHATSAPP', '+256785230670'),
         'email': (admin.email_notify if admin else '') or getattr(settings, 'FIRM_EMAIL', 'taxissues.go@gmail.com'),
-        'name': getattr(settings, 'FIRM_NAME', 'Taxman256'),
+        'name': getattr(settings, 'FIRM_NAME', 'Taxin'),
     }
 
 
@@ -171,7 +171,7 @@ def send_manager_debt_report():
     if not lines:
         lines = ['✅ No outstanding debts today.']
 
-    msg = (f"TAXMAN256 DEBT REPORT\n{timezone.now().strftime('%A %d %B %Y')}\n\n"
+    msg = (f"Taxin DEBT REPORT\n{timezone.now().strftime('%A %d %B %Y')}\n\n"
            + '\n'.join(lines) +
            f"\n\nTotal: UGX {grand_total:,.0f}\nClients: {len([l for l in lines if l.startswith('1') or '.' in l[:3]])}")
 
@@ -205,9 +205,10 @@ def send_incomplete_task_reminders():
             job_lines.append(f"• {job.job_number} — {job.client.get_display_name()}{due}{urgent}")
 
         msg = (f"Hi {user.get_full_name() or user.username},\n\n"
-               f"TAXMAN256 — Pending Tasks Reminder\n\n"
+               f"Taxin — Pending Tasks Reminder\n\n"
                f"You have {open_jobs.count()} incomplete job card(s):\n"
                + '\n'.join(job_lines) +
                (f"\n\n⚠️ {overdue_jobs.count()} job(s) are OVERDUE — please action today." if overdue_jobs.exists() else '') +
-               f"\n\nLog in to update: http://127.0.0.1:8000/jobs/\nTaxman256")
+               f"\n\nLog in to update: http://127.0.0.1:8000/jobs/\nTaxin")
         send_whatsapp_message(user.phone_whatsapp, msg, msg_type='internal_alert', triggered_by=None)
+

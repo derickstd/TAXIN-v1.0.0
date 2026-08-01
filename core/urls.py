@@ -1,9 +1,34 @@
 from django.urls import path
 from . import views
 from . import duplicate_views
+from . import admin_views
 
 app_name = 'core'
 urlpatterns = [
+    # Admin Dashboard
+    path('admin/dashboard/', admin_views.admin_dashboard, name='admin_dashboard'),
+    path('admin/users/', admin_views.admin_users, name='admin_users'),
+    path('admin/users/<int:user_id>/send-password-reset/', admin_views.admin_send_password_reset, name='admin_send_password_reset'),
+    path('admin/users/<int:user_id>/deactivate/', admin_views.admin_user_deactivate, name='admin_user_deactivate'),
+    path('admin/users/<int:user_id>/reactivate/', admin_views.admin_user_reactivate, name='admin_user_reactivate'),
+    path('admin/users/<int:user_id>/delete/', admin_views.admin_user_delete, name='admin_user_delete'),
+    path('admin/users/bulk-reset/', admin_views.admin_bulk_password_reset, name='admin_bulk_password_reset'),
+    path('admin/clients/<int:client_id>/suspend/', admin_views.admin_client_suspend, name='admin_client_suspend'),
+    path('admin/clients/<int:client_id>/reactivate/', admin_views.admin_client_reactivate, name='admin_client_reactivate'),
+    path('admin/companies/', admin_views.admin_companies, name='admin_companies'),
+    path('admin/companies/<int:company_id>/branches/', admin_views.admin_company_branches, name='admin_company_branches'),
+    path('admin/companies/<int:company_id>/suspend/', admin_views.admin_company_suspend, name='admin_company_suspend'),
+    path('admin/companies/<int:company_id>/reactivate/', admin_views.admin_company_reactivate, name='admin_company_reactivate'),
+    path('admin/tenants/', admin_views.admin_tenants, name='admin_tenants'),
+    path('admin/tenants/<int:tenant_id>/approve/', admin_views.admin_tenant_approve, name='admin_tenant_approve'),
+    path('admin/tenants/<int:tenant_id>/suspend/', admin_views.admin_tenant_suspend, name='admin_tenant_suspend'),
+    path('admin/tenants/<int:tenant_id>/reactivate/', admin_views.admin_tenant_reactivate, name='admin_tenant_reactivate'),
+    path('admin/audit-logs/', admin_views.admin_audit_logs, name='admin_audit_logs'),
+    path('admin/audit-logs/export/', admin_views.admin_export_audit_logs, name='admin_export_audit_logs'),
+    path('admin/analytics/', admin_views.admin_system_analytics, name='admin_analytics'),
+    path('admin/health/', admin_views.admin_system_health, name='admin_health'),
+    
+    # User Management
     path('users/',              views.user_list,       name='users'),
     path('users/new/',          views.user_create,     name='user_new'),
     path('users/<int:pk>/',     views.user_edit,       name='user_edit'),

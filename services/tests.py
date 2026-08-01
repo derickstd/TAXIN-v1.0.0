@@ -1,12 +1,17 @@
+from datetime import timedelta
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from decimal import Decimal
+import calendar as cal
 
 from billing.models import Invoice, Payment
 from clients.models import Client
 from core.models import User
+from core.duplicate_detection import check_duplicate_transaction
+from expenses.models import Expense, ExpenseCategory
 from services.models import JobCard, JobCardLineItem, ServiceType
+from services.views import _auto_create_invoice
 
 
 class JobCardCreateTests(TestCase):
@@ -89,6 +94,373 @@ class JobCardCreateTests(TestCase):
         self.assertEqual(item.default_price, expected_price)
         self.assertEqual(item.negotiated_price, expected_price)
         self.assertEqual(item.vat_amount, expected_price * Decimal('0.18'))
+
+    def test_create_jobcard_does_not_auto_create_invoice(self):
+        response = self.client.post(reverse('services:create'), {
+            'client': self.client_obj.pk,
+            'period_month': '4',
+            'period_year': '2026',
+            'assigned_to': '',
+            'priority': 'normal',
+            'due_date': '',
+            'notes': 'No invoice until handled',
+            'is_periodic': '',
+            'line_items-TOTAL_FORMS': '1',
+            'line_items-INITIAL_FORMS': '0',
+            'line_items-MIN_NUM_FORMS': '0',
+            'line_items-MAX_NUM_FORMS': '1000',
+            'line_items-0-service_type': '',
+            'line_items-0-custom_description': 'Manual consulting',
+            'line_items-0-default_price': '0',
+            'line_items-0-negotiated_price': '150000',
+            'line_items-0-status': 'not_handled',
+            'line_items-0-period_label': 'April 2026',
+            'line_items-0-notes': 'Manual fee',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        job = JobCard.objects.get()
+        self.assertFalse(Invoice.objects.filter(job_card=job).exists())
+
+    def test_jobcard_quick_create_creates_jobcard_and_invoice_payment(self):
+        service = ServiceType.objects.create(
+            name='VAT Filing',
+            category='ura_filing',
+            default_price=Decimal('100000'),
+            vat_applicable=True,
+        )
+        staff = User.objects.create_user(
+            username='taxstaff',
+            password='pass1234',
+            role='tax_officer',
+        )
+
+        response = self.client.post(reverse('services:quick_create'), {
+            'client': self.client_obj.pk,
+            'service_type': service.pk,
+            'assigned_to': staff.pk,
+            'priority': 'urgent',
+            'notes': 'Quick create test',
+            'create_invoice': 'yes',
+            'payment_received': 'yes',
+            'payment_amount': '120000',
+            'payment_method': 'cash',
+            'payment_reference': 'REF123',
+            'jobcardlineitem_set-TOTAL_FORMS': '1',
+            'jobcardlineitem_set-INITIAL_FORMS': '0',
+            'jobcardlineitem_set-MIN_NUM_FORMS': '0',
+            'jobcardlineitem_set-MAX_NUM_FORMS': '1000',
+            'jobcardlineitem_set-0-service_type': str(service.pk),
+            'jobcardlineitem_set-0-default_price': '100000',
+            'jobcardlineitem_set-0-negotiated_price': '100000',
+            'jobcardlineitem_set-0-status': 'not_handled',
+            'jobcardlineitem_set-0-period_label': 'April 2026',
+            'jobcardlineitem_set-0-notes': 'Quick job',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        job = JobCard.objects.latest('pk')
+        self.assertEqual(job.client, self.client_obj)
+        self.assertEqual(job.assigned_to, staff)
+        self.assertEqual(job.priority, 'urgent')
+        self.assertEqual(job.notes, 'Quick create test')
+        self.assertTrue(job.line_items.exists())
+        self.assertTrue(Invoice.objects.filter(job_card=job).exists())
+        invoice = Invoice.objects.get(job_card=job)
+        self.assertEqual(invoice.grand_total, Decimal('118000'))
+        self.assertTrue(invoice.payments.exists())
+        payment = invoice.payments.first()
+        self.assertEqual(payment.amount, Decimal('120000'))
+        self.assertEqual(payment.reference, 'REF123')
+
+    def test_ajax_check_duplicate_falls_back_to_current_period_for_recurring_service(self):
+        service = ServiceType.objects.create(
+            name='VAT Return',
+            category='ura_filing',
+            default_price=Decimal('100000'),
+            deadline_type='monthly_15',
+            is_recurring=True,
+        )
+        now = timezone.now()
+        existing_job = JobCard.objects.create(
+            client=self.client_obj,
+            period_month=now.month,
+            period_year=now.year,
+            created_by=self.user,
+        )
+        JobCardLineItem.objects.create(
+            job_card=existing_job,
+            service_type=service,
+            default_price=Decimal('100000'),
+            negotiated_price=Decimal('100000'),
+            vat_amount=Decimal('18000'),
+            status='not_handled',
+            period_label=f"{cal.month_name[now.month]} {now.year}",
+        )
+
+        response = self.client.get(reverse('services:ajax_check_duplicate'), {
+            'client': self.client_obj.pk,
+            'service_type': service.pk,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json().get('matches'))
+        self.assertTrue(any(item['type'] == 'job_card' for item in response.json()['matches']))
+
+
+class DuplicateTransactionDetectionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='dupchecker',
+            password='pass1234',
+            role='tax_officer',
+        )
+        self.client.force_login(self.user)
+        self.client_obj = Client.objects.create(
+            full_name='Duplicate Test Client',
+            phone_primary='+256700444555',
+            created_by=self.user,
+        )
+
+    def test_duplicate_detection_uses_same_period_and_relevant_deadline_rules(self):
+        service = ServiceType.objects.create(
+            name='VAT Return',
+            category='ura_filing',
+            default_price=Decimal('100000'),
+            deadline_type='monthly_15',
+            is_recurring=True,
+        )
+        existing_job = JobCard.objects.create(
+            client=self.client_obj,
+            period_month=4,
+            period_year=2026,
+            created_by=self.user,
+        )
+        JobCardLineItem.objects.create(
+            job_card=existing_job,
+            service_type=service,
+            default_price=Decimal('100000'),
+            negotiated_price=Decimal('100000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+            period_label='April 2026',
+        )
+
+        similar = check_duplicate_transaction(
+            self.client_obj,
+            service_type=service,
+            period_year=2026,
+            period_month=4,
+            within_days=30,
+        )
+
+        self.assertTrue(any(item['type'] == 'job_card' for item in similar))
+
+    def test_ajax_check_duplicate_endpoint_returns_existing_jobcard(self):
+        service = ServiceType.objects.create(
+            name='VAT Return',
+            category='ura_filing',
+            default_price=Decimal('100000'),
+            deadline_type='monthly_15',
+            is_recurring=True,
+        )
+        existing_job = JobCard.objects.create(
+            client=self.client_obj,
+            period_month=4,
+            period_year=2026,
+            created_by=self.user,
+        )
+        JobCardLineItem.objects.create(
+            job_card=existing_job,
+            service_type=service,
+            default_price=Decimal('100000'),
+            negotiated_price=Decimal('100000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+            period_label='April 2026',
+        )
+
+        response = self.client.get(reverse('services:ajax_check_duplicate'), {
+            'client': self.client_obj.pk,
+            'service_type': service.pk,
+            'period_month': '4',
+            'period_year': '2026',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('matches', response.json())
+        self.assertTrue(any(item['type'] == 'job_card' for item in response.json()['matches']))
+
+    def test_duplicate_detection_skips_services_outside_allowed_deadline_rules(self):
+        service = ServiceType.objects.create(
+            name='Advisory Service',
+            category='advisory',
+            default_price=Decimal('50000'),
+            deadline_type='none',
+            is_recurring=False,
+        )
+        existing_job = JobCard.objects.create(
+            client=self.client_obj,
+            period_month=4,
+            period_year=2026,
+            created_by=self.user,
+        )
+        JobCardLineItem.objects.create(
+            job_card=existing_job,
+            service_type=service,
+            default_price=Decimal('50000'),
+            negotiated_price=Decimal('50000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+            period_label='April 2026',
+        )
+
+        similar = check_duplicate_transaction(
+            self.client_obj,
+            service_type=service,
+            period_year=2026,
+            period_month=4,
+            within_days=30,
+        )
+
+        self.assertEqual(similar, [])
+
+    def test_duplicate_detection_flags_same_period_transaction_even_when_old(self):
+        service = ServiceType.objects.create(
+            name='VAT Return',
+            category='ura_filing',
+            default_price=Decimal('100000'),
+            deadline_type='monthly_15',
+            is_recurring=True,
+        )
+        existing_job = JobCard.objects.create(
+            client=self.client_obj,
+            period_month=4,
+            period_year=2026,
+            created_by=self.user,
+        )
+        JobCard.objects.filter(pk=existing_job.pk).update(created_at=timezone.now() - timedelta(days=45))
+        JobCardLineItem.objects.create(
+            job_card=existing_job,
+            service_type=service,
+            default_price=Decimal('100000'),
+            negotiated_price=Decimal('100000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+            period_label='April 2026',
+        )
+
+        similar = check_duplicate_transaction(
+            self.client_obj,
+            service_type=service,
+            period_year=2026,
+            period_month=4,
+            within_days=14,
+        )
+
+        self.assertTrue(any(item['type'] == 'job_card' for item in similar))
+
+
+class JobCardDetailDuplicateStatusTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='detailstatus',
+            password='pass1234',
+            role='tax_officer',
+        )
+        self.client.force_login(self.user)
+        self.client_obj = Client.objects.create(
+            full_name='Duplicate Status Client',
+            phone_primary='+256700333444',
+            created_by=self.user,
+        )
+
+    def test_jobcard_detail_marks_duplicate_transaction_for_same_period_service(self):
+        service = ServiceType.objects.create(
+            name='VAT Return',
+            category='ura_filing',
+            default_price=Decimal('100000'),
+            deadline_type='monthly_15',
+            is_recurring=True,
+        )
+        existing_job = JobCard.objects.create(
+            client=self.client_obj,
+            period_month=4,
+            period_year=2026,
+            created_by=self.user,
+        )
+        JobCardLineItem.objects.create(
+            job_card=existing_job,
+            service_type=service,
+            default_price=Decimal('100000'),
+            negotiated_price=Decimal('100000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+            period_label='April 2026',
+        )
+        current_job = JobCard.objects.create(
+            client=self.client_obj,
+            period_month=4,
+            period_year=2026,
+            created_by=self.user,
+        )
+        JobCardLineItem.objects.create(
+            job_card=current_job,
+            service_type=service,
+            default_price=Decimal('100000'),
+            negotiated_price=Decimal('100000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+            period_label='April 2026',
+        )
+
+        response = self.client.get(reverse('services:detail', kwargs={'pk': current_job.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['is_duplicate_transaction'])
+
+    def test_jobcard_list_marks_duplicate_transaction_for_same_period_service(self):
+        service = ServiceType.objects.create(
+            name='VAT Return',
+            category='ura_filing',
+            default_price=Decimal('100000'),
+            deadline_type='monthly_15',
+            is_recurring=True,
+        )
+        existing_job = JobCard.objects.create(
+            client=self.client_obj,
+            period_month=4,
+            period_year=2026,
+            created_by=self.user,
+        )
+        JobCardLineItem.objects.create(
+            job_card=existing_job,
+            service_type=service,
+            default_price=Decimal('100000'),
+            negotiated_price=Decimal('100000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+            period_label='April 2026',
+        )
+        current_job = JobCard.objects.create(
+            client=self.client_obj,
+            period_month=4,
+            period_year=2026,
+            created_by=self.user,
+        )
+        JobCardLineItem.objects.create(
+            job_card=current_job,
+            service_type=service,
+            default_price=Decimal('100000'),
+            negotiated_price=Decimal('100000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+            period_label='April 2026',
+        )
+
+        response = self.client.get(reverse('services:list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('duplicate_statuses', response.context)
+        self.assertTrue(response.context['duplicate_statuses'].get(current_job.pk, False))
 
 
 class ServiceCatalogueManagementTests(TestCase):
@@ -256,3 +628,54 @@ class JobCardLineItemStatusTests(TestCase):
         self.assertEqual(invoice.amount_paid, invoice.grand_total)
         self.assertEqual(item.status, 'paid_not_handled')
         self.assertNotEqual(job.status, 'completed')
+
+    def test_handled_line_item_auto_creates_invoice(self):
+        job = JobCard.objects.create(client=self.client_obj, created_by=self.user)
+        item = JobCardLineItem.objects.create(
+            job_card=job,
+            service_type=self.service,
+            default_price=Decimal('90000'),
+            negotiated_price=Decimal('90000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+        )
+
+        response = self.client.post(reverse('services:line_status', args=[item.pk]), {
+            'status': 'handled_not_paid',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        job.refresh_from_db()
+        self.assertTrue(Invoice.objects.filter(job_card=job).exists())
+        invoice = job.invoice
+        self.assertEqual(invoice.status, 'sent')
+        self.assertEqual(invoice.grand_total, Decimal('90000'))
+
+    def test_auto_created_invoice_includes_billable_linked_expenses(self):
+        job = JobCard.objects.create(client=self.client_obj, created_by=self.user)
+        JobCardLineItem.objects.create(
+            job_card=job,
+            service_type=self.service,
+            default_price=Decimal('90000'),
+            negotiated_price=Decimal('90000'),
+            vat_amount=Decimal('0'),
+            status='not_handled',
+        )
+        category = ExpenseCategory.objects.create(name='Transport', approval_required=False)
+        Expense.objects.create(
+            expense_date=timezone.now().date(),
+            category=category,
+            description='Taxi to client site',
+            amount=Decimal('25000'),
+            paid_by=self.user,
+            client=self.client_obj,
+            job_card=job,
+            is_billable=True,
+            created_by=self.user,
+            status='submitted',
+        )
+
+        invoice = _auto_create_invoice(job, self.user)
+
+        self.assertEqual(invoice.subtotal, Decimal('115000'))
+        self.assertEqual(invoice.grand_total, Decimal('115000'))

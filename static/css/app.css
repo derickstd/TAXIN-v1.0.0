@@ -448,17 +448,17 @@ img{max-width:100%}
   display:flex;align-items:center;justify-content:space-between;
   gap:.5rem;flex-wrap:wrap}
 
-.dashboard-calendar-card{overflow:hidden}
-.dashboard-calendar-header{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1rem;font-size:.95rem;gap:1rem}
+.dashboard-calendar-card{overflow:hidden;max-height:calc(100vh - 12rem);display:flex;flex-direction:column}
+.dashboard-calendar-header{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1rem;font-size:.95rem;gap:1rem;flex-wrap:wrap}
 .dashboard-calendar-header .btn-sm{padding:.3rem .55rem;font-size:.82rem}
 .dashboard-calendar-header strong#cal_label{font-size:1rem}
-.dashboard-calendar-body{padding:1rem;min-height:460px;max-height:560px;overflow:auto}
-.dashboard-calendar-table{width:100%;border-collapse:collapse}
-.dashboard-calendar-weekday{padding:.6rem .45rem;text-align:left;font-size:.73rem;color:#475569;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid rgba(148,163,184,.18)}
-.dashboard-calendar-cell{vertical-align:top;padding:.4rem;border:none;background:transparent;transition:transform .22s ease,box-shadow .22s ease,background-color .22s ease;}
+.dashboard-calendar-body{padding:.75rem;min-height:0;flex:1 1 auto;overflow:auto;max-height:min(70vh, 560px)}
+.dashboard-calendar-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.dashboard-calendar-weekday{padding:.4rem .3rem;text-align:left;font-size:.68rem;color:#475569;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid rgba(148,163,184,.18)}
+.dashboard-calendar-cell{vertical-align:top;padding:.25rem;border:none;background:transparent;transition:transform .22s ease,box-shadow .22s ease,background-color .22s ease;}
 .dashboard-calendar-cell.no-data .dashboard-calendar-day{background:rgba(248,250,252,.9);box-shadow:inset 0 0 0 1px rgba(148,163,184,.08);cursor:default}
 .dashboard-calendar-cell.no-data .day-number{background:rgba(241,245,249,.95);color:#64748b}
-.dashboard-calendar-day{display:flex;width:100%;min-height:132px;padding:.75rem;border-radius:1.2rem;background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(245,247,250,.96));box-shadow:0 14px 28px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.75);transition:transform .26s ease,box-shadow .26s ease,background .26s ease,filter .26s ease;cursor:pointer;flex-direction:column;justify-content:space-between}
+.dashboard-calendar-day{display:flex;width:100%;min-height:clamp(84px, 9vh, 112px);padding:.6rem;border-radius:1rem;background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(245,247,250,.96));box-shadow:0 12px 24px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.75);transition:transform .26s ease,box-shadow .26s ease,background .26s ease,filter .26s ease;cursor:pointer;flex-direction:column;justify-content:space-between}
 .dashboard-calendar-cell.positive{background:rgba(236,253,245,.18)}
 .dashboard-calendar-cell.negative{background:rgba(255,236,236,.18)}
 .dashboard-calendar-cell.neutral{background:rgba(248,250,252,.12)}
@@ -483,11 +483,11 @@ img{max-width:100%}
 .day-status.positive{background:#059669}
 .day-status.negative{background:#dc2626}
 .day-status.neutral{background:#94a3b8;border:1px solid rgba(148,163,184,.36)}
-.day-header{display:flex;justify-content:space-between;align-items:flex-start;gap:.4rem;margin-bottom:.55rem}
-.day-number{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;font-weight:800;font-size:.95rem;background:transparent;box-shadow:none;color:var(--text)}
+.day-header{display:flex;justify-content:space-between;align-items:flex-start;gap:.4rem;margin-bottom:.35rem}
+.day-number{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;font-weight:800;font-size:.85rem;background:transparent;box-shadow:none;color:var(--text)}
 .day-label{font-size:.72rem;color:#475569;padding:0;font-weight:700;background:transparent;border-radius:0}
-.day-metrics{display:flex;flex-direction:column;gap:.35rem;margin-top:.35rem}
-.metric-row{display:flex;justify-content:space-between;align-items:center;font-size:.78rem;gap:.35rem}
+.day-metrics{display:flex;flex-direction:column;gap:.2rem;margin-top:.2rem}
+.metric-row{display:flex;justify-content:space-between;align-items:center;font-size:.7rem;gap:.35rem}
 .metric-label{color:#475569;font-weight:700;white-space:nowrap}
 .metric-value{font-weight:800;color:#0f172a;min-width:80px;text-align:right;background:transparent}
 .metric-value.cash-in{color:#059669;background:transparent}
@@ -732,6 +732,31 @@ input[type=file].form-control{padding:.38rem .65rem}
 .modal-hd h5{margin:0;font-weight:800;color:var(--blue);font-size:1.1rem;line-height:1.25}
 .modal-close{background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--muted);padding:.3rem;line-height:1;border-radius:8px;transition:background .2s,color .2s}
 .modal-close:hover{background:var(--surface-2);color:var(--blue)}
+
+/* ── DASHBOARD POPUP / DETAIL CARD ── */
+#dayDetailPopup{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(8px);z-index:2200;align-items:center;justify-content:center;padding:1rem;overflow:auto}
+#dayDetailPopup .day-detail-modal{background:#fff;border-radius:1rem;max-width:min(760px,100%);width:min(100%,760px);max-height:min(88vh,860px);box-shadow:0 30px 80px rgba(15,23,42,.25);display:flex;flex-direction:column;overflow:hidden}
+#dayDetailPopup .day-detail-modal__header{display:flex;justify-content:space-between;align-items:flex-start;padding:1rem 1.2rem;border-bottom:1px solid #e2e8f0;gap:1rem}
+#dayDetailPopup .day-detail-modal__title{margin:0;font-size:1rem;color:#0f172a}
+#dayDetailPopup .day-detail-modal__subtitle{font-size:.82rem;color:#64748b;margin-top:.2rem}
+#dayDetailPopup .day-detail-modal__body{padding:1rem;max-height:calc(100vh - 140px);overflow:auto}
+#dayDetailPopup .day-detail-shell{display:flex;flex-direction:column;gap:.75rem;font-size:.92rem;color:#0f172a}
+#dayDetailPopup .day-detail-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
+#dayDetailPopup .day-detail-summary-card{padding:.7rem;border-radius:.7rem;border:1px solid #e2e8f0;background:#f8fafc}
+#dayDetailPopup .day-detail-summary-card strong{display:block;font-size:.72rem;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.2rem}
+#dayDetailPopup .day-detail-summary-card span{font-weight:700;font-size:.95rem}
+#dayDetailPopup .day-detail-summary-card.is-positive span{color:#059669}
+#dayDetailPopup .day-detail-summary-card.is-negative span{color:#dc2626}
+#dayDetailPopup .day-detail-summary-card.is-neutral span{color:#0f172a}
+#dayDetailPopup .day-detail-section{border:1px solid #e2e8f0;border-radius:.7rem;overflow:hidden;background:#fff}
+#dayDetailPopup .day-detail-section__head{padding:.75rem 1rem;background:#f8fafc;font-weight:700;color:#0f172a}
+#dayDetailPopup .day-detail-section__body{padding:.75rem;display:grid;gap:.6rem}
+#dayDetailPopup .day-detail-item{padding:.7rem;border-radius:.6rem;border:1px solid #e2e8f0;background:#fff;display:flex;flex-direction:column;gap:.3rem}
+#dayDetailPopup .day-detail-item__top{display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem}
+#dayDetailPopup .day-detail-item__amount{font-weight:700;color:#0f172a}
+#dayDetailPopup .day-detail-item__meta{font-size:.78rem;color:#64748b}
+#dayDetailPopup .day-detail-item__note{font-size:.78rem;color:#334155}
+#dayDetailPopup .day-detail-empty{padding:1rem;text-align:center;color:#64748b;font-size:.95rem;border:1px dashed #dbe3ec;border-radius:.7rem;background:#f8fafc}
 
 /* ── MISC ── */
 .fillable-gap{background:#fff9c4;border:1.5px dashed #f0ad4e;

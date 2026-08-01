@@ -56,7 +56,7 @@
           <td style="font-size:.78rem;{% if inv.days_overdue > 0 %}color:#e74c3c;font-weight:700{% endif %}">{{ inv.due_date }}</td>
           <td class="ugx">{{ inv.grand_total|floatformat:0|intcomma }}</td>
           <td class="ugx ugx-green">{{ inv.amount_paid|floatformat:0|intcomma }}</td>
-          <td class="ugx {% if inv.balance_due > 0 %}ugx-red{% endif %}">{{ inv.balance_due|floatformat:0|intcomma }}</td>
+          <td class="ugx {% if inv.balance_due > 0 %}ugx-red{% elif inv.balance_due < 0 %}ugx-green{% endif %}">{{ inv.balance_due|floatformat:0|intcomma }}</td>
           <td><span class="badge badge-{{ inv.status }}">{{ inv.get_status_display }}</span></td>
           <td><a href="{% url 'billing:detail' inv.pk %}" class="btn btn-outline btn-sm">View</a></td>
         </tr>

@@ -110,6 +110,19 @@ def find_duplicate_clients(client=None, full_name=None, phone=None, whatsapp=Non
     return sorted(duplicates, key=lambda x: x[1], reverse=True)
 
 
+def _is_duplicate_candidate_service(service_type, deadline_type=None):
+    """Only recurring services with the supported deadline rules qualify for duplicate checks."""
+    if not service_type and not deadline_type:
+        return False
+
+    rule = deadline_type or (service_type.deadline_type if service_type else None)
+    if not rule:
+        return False
+
+    allowed = {'monthly_15', 'annual_dec31', 'annual_jun30', 'annual_ursb'}
+    return rule in allowed
+
+
 def check_duplicate_transaction(client, service_type=None, job_card=None, period_year=None, 
                                 period_month=None, deadline_type=None, within_days=7):
     """
@@ -134,6 +147,9 @@ def check_duplicate_transaction(client, service_type=None, job_card=None, period
     existing = []
     now = timezone.now().date()
     date_threshold = now - timedelta(days=within_days)
+
+    if not _is_duplicate_candidate_service(service_type, deadline_type):
+        return existing
     
     # Check for similar compliance deadlines
     if service_type or deadline_type:
@@ -162,27 +178,47 @@ def check_duplicate_transaction(client, service_type=None, job_card=None, period
                 'status': deadline.status
             })
     
-    # Check for similar job cards
+    # Check for similar job cards only when the same recurring service appears in the same period.
     if job_card or (period_year and period_month):
-        jobs = JobCard.objects.filter(
-            client=client,
-            created_at__gte=date_threshold
-        )
+        jobs = JobCard.objects.filter(client=client)
         
         if job_card:
             jobs = jobs.exclude(pk=job_card.pk)
         
         if period_year and period_month:
             jobs = jobs.filter(period_year=period_year, period_month=period_month)
-        
+        else:
+            jobs = jobs.filter(created_at__gte=date_threshold)
+
         for job in jobs[:5]:
-            existing.append({
-                'type': 'job_card',
-                'object': job,
-                'description': f"{job.job_number} - {job.get_period_label()}",
-                'created_at': job.created_at,
-                'status': job.status
-            })
+            if not job.line_items.exists():
+                continue
+
+            matching_items = []
+            for line in job.line_items.select_related('service_type').all():
+                if not line.service_type:
+                    continue
+                if not _is_duplicate_candidate_service(line.service_type, deadline_type=None):
+                    continue
+                if service_type and line.service_type_id != service_type.pk:
+                    continue
+                if service_type:
+                    name_a = (service_type.name or '').strip().lower()
+                    name_b = (line.service_type.name or '').strip().lower()
+                    if not name_a or not name_b:
+                        continue
+                    if fuzz.token_set_ratio(name_a, name_b) < 70:
+                        continue
+                matching_items.append(line)
+
+            if matching_items:
+                existing.append({
+                    'type': 'job_card',
+                    'object': job,
+                    'description': f"{job.job_number} - {job.get_period_label()}",
+                    'created_at': job.created_at,
+                    'status': job.status
+                })
     
     # Check for similar invoices attached to job cards for the same period
     if period_year:

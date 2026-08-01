@@ -6,7 +6,7 @@ from django.utils import timezone
 from .models import Client, WalkInIntake, CommunicationLog
 from core.utils import paginate_queryset
 from .forms import ClientForm, WalkInIntakeForm
-from billing.models import Invoice
+from billing.models import Invoice, Payment
 
 UGANDA_DISTRICTS = [
     'Kampala','Wakiso','Mukono','Jinja','Gulu','Mbarara','Masaka','Mbale',
@@ -223,6 +223,12 @@ def client_detail(request, pk):
     invoices = client.invoices.order_by('-date_issued')[:20]
     total_invoiced = client.invoices.aggregate(s=Sum('grand_total'))['s'] or 0
     total_paid = client.invoices.aggregate(s=Sum('amount_paid'))['s'] or 0
+    client_payments = (
+        Payment.objects.filter(invoice__client=client)
+        .select_related('invoice', 'received_by')
+        .order_by('-payment_date', '-created_at')[:20]
+    )
+    total_collected = client_payments.aggregate(s=Sum('amount'))['s'] or 0
     walkins = client.walkin_intakes.order_by('-visit_date')[:5]
     from credentials.models import ClientCredential
     from compliance.models import ComplianceObligation
@@ -246,6 +252,7 @@ def client_detail(request, pk):
     return render(request, 'clients/client_detail.html', {
         'client': client, 'job_cards': job_cards, 'invoices': invoices,
         'total_invoiced': total_invoiced, 'total_paid': total_paid,
+        'total_collected': total_collected, 'client_payments': client_payments,
         'balance': total_invoiced - total_paid,
         'walkins': walkins, 'creds_count': creds_count,
         'obligations': obligations, 'details': details,
@@ -283,10 +290,11 @@ def client_create(request):
                 if request.POST.get('force_create') == '1':
                     pass
                 else:
-                        return render(request, 'clients/duplicate_found.html', {
+                        return render(request, 'clients/client_create.html', {
                             'form': form,
                             'duplicates': dup_candidates,
                             'orig_post': request.POST,
+                            'show_duplicate_modal': True,
                         })
             from core.email_utils import send_welcome_email
             from credentials.models import ClientCredential

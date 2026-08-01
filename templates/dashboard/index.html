@@ -3,25 +3,6 @@
 {% block nav_dash %}active{% endblock %}
 {% block breadcrumbs %}<li class="active">Dashboard</li>{% endblock %}
 {% block content %}
-<!-- Monthly Performance Summary -->
-  <div class="card-box card-compact" style="margin-bottom:.75rem;border-left:4px solid #1D4ED8;">
-  <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
-    <span style="display:flex;align-items:center;gap:.5rem"><i class="fas fa-history"></i> Monthly Performance Summary</span>
-    <span style="font-size:.72rem;color:#64748b">Month to date</span>
-  </div>
-  <div class="card-body" style="padding:.45rem">
-    <div class="stats-grid">
-      {% for stat in performance_comparison %}
-      <a href="{{ stat.url }}" class="kpi-card {{ stat.state }}" style="text-decoration:none">
-        <div class="kpi-label"><i class="{{ stat.icon }}" style="margin-right:.35rem"></i>{{ stat.label }}</div>
-        <div class="kpi-value">{% if stat.currency %}{{ stat.currency }} {{ stat.current|floatformat:0|intcomma }}{% else %}{{ stat.current|floatformat:1 }}{% if stat.label == 'Collection Rate' %}%{% endif %}{% endif %}</div>
-        <div class="kpi-sub">{{ stat.subtitle }}</div>
-      </a>
-      {% endfor %}
-    </div>
-  </div>
-</div>
-
 <!-- 2-Column Layout: Calendar on Left, Charts on Right (left column widened) -->
 <div class="dashboard-two-col">
   <div class="dashboard-left-col">
@@ -54,7 +35,7 @@
                 {% for day in week %}
                 <td class="dashboard-calendar-cell{% if not day or not day.has_data %} no-data{% else %} {{ day.status }}{% endif %}">
                   {% if day %}
-                  <div role="button" class="calendar-day-button dashboard-calendar-day{% if day.has_data %} {{ day.status }}{% endif %}" data-day="{{ day.date|date:'Y-m-d' }}" {% if day.has_data %}onclick="openDayDetails(this.dataset.day)"{% endif %}>
+                  <div role="button" tabindex="0" class="calendar-day-button dashboard-calendar-day{% if day.has_data %} {{ day.status }}{% endif %}" data-day="{{ day.date|date:'Y-m-d' }}" onclick="openDayDetails(this.dataset.day)" onkeydown="if(event.key==='Enter' || event.key===' '){event.preventDefault(); openDayDetails(this.dataset.day);}">
                     <div class="day-header">
                       <div style="display:flex;flex-direction:column;gap:.25rem">
                         <span class="day-number">{{ day.date|date:"j" }}</span>
@@ -210,15 +191,14 @@
           {% if staff_perf %}
           <div style="display:flex;flex-direction:column;gap:.5rem">
             {% for row in staff_perf|slice:":3" %}
-            {% widthratio row.completed row.assigned 100 as completion_pct %}
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.4rem;padding:.5rem;font-size:.8rem">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
                 <div style="font-weight:700;color:#0f172a">{{ row.user.get_full_name|default:row.user.username }}</div>
-                <span style="font-weight:700;color:#0f172a">{{ completion_pct }}%</span>
+                <span style="font-weight:700;color:#0f172a">{{ row.completion_pct }}%</span>
               </div>
               <div style="background:#e2e8f0;border-radius:.25rem;height:20px;overflow:hidden;margin-bottom:.3rem">
-                <div style="background:{% if completion_pct >= 80 %}#22c55e{% elif completion_pct >= 50 %}#f59e0b{% else %}#ef4444{% endif %};height:100%;width:{{ completion_pct }}%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:700;transition:width .3s ease">
-                  {% if completion_pct > 10 %}{{ completion_pct }}%{% endif %}
+                <div style="background:{{ row.completion_color }};height:100%;width:{{ row.completion_pct }}%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;font-weight:700;transition:width .3s ease">
+                  {% if row.completion_pct > 10 %}{{ row.completion_pct }}%{% endif %}
                 </div>
               </div>
               <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#64748b">
@@ -236,16 +216,16 @@
   </div>
 </div>
 
-<div id="dayDetailPopup" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:2200;align-items:center;justify-content:center;padding:1rem;overflow:auto">
-  <div style="background:#fff;border-radius:.8rem;max-width:720px;width:100%;box-shadow:0 30px 80px rgba(15,23,42,.25);position:relative">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:1rem 1.2rem;border-bottom:1px solid #e2e8f0">
+<div id="dayDetailPopup">
+  <div class="day-detail-modal">
+    <div class="day-detail-modal__header">
       <div>
-        <h3 style="margin:0;font-size:1rem;color:#0f172a">Transactions for <span id="dayDetailTitle"></span></h3>
-        <div style="font-size:.82rem;color:#64748b">Daily details for selected calendar date</div>
+        <h3 class="day-detail-modal__title">Transactions for <span id="dayDetailTitle"></span></h3>
+        <div class="day-detail-modal__subtitle">Daily details for the selected date</div>
       </div>
-      <button type="button" onclick="closeDayDetails()" style="border:none;background:none;font-size:1.6rem;cursor:pointer;color:#475569;padding:.2rem">&times;</button>
+      <button type="button" class="modal-close" onclick="closeDayDetails()" aria-label="Close transactions popup">&times;</button>
     </div>
-    <div id="dayDetailContent" style="padding:1rem;max-height:calc(100vh - 140px);overflow:auto"></div>
+    <div id="dayDetailContent" class="day-detail-modal__body"></div>
   </div>
 </div>
 
@@ -276,7 +256,7 @@ function openDayDetails(day){
   const title = document.getElementById('dayDetailTitle');
   const content = document.getElementById('dayDetailContent');
   title.textContent = day;
-  content.innerHTML = '<div style="padding:1rem;text-align:center;color:#64748b;font-size:.95rem">Loading details…</div>';
+  content.innerHTML = '<div class="day-detail-empty">Loading details…</div>';
   popup.style.display = 'flex';
 
   fetch('{% url "dashboard:day_transactions" %}?day=' + encodeURIComponent(day), {
@@ -285,13 +265,13 @@ function openDayDetails(day){
     .then(response => response.json())
     .then(data => {
       if (data.error) {
-        content.innerHTML = '<div style="padding:1rem;text-align:center;color:#b91c1c;font-size:.95rem">' + data.error + '</div>';
+        content.innerHTML = '<div class="day-detail-empty" style="color:#b91c1c">' + data.error + '</div>';
       } else {
         content.innerHTML = data.html;
       }
     })
     .catch(() => {
-      content.innerHTML = '<div style="padding:1rem;text-align:center;color:#b91c1c;font-size:.95rem">Unable to load transactions.</div>';
+      content.innerHTML = '<div class="day-detail-empty" style="color:#b91c1c">Unable to load transactions.</div>';
     });
 }
 

@@ -11,7 +11,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS('=' * 60))
-        self.stdout.write(self.style.SUCCESS('TAXMAN256 SYSTEM DIAGNOSTICS'))
+        self.stdout.write(self.style.SUCCESS('Taxin SYSTEM DIAGNOSTICS'))
         self.stdout.write(self.style.SUCCESS('=' * 60))
         
         # Database counts
@@ -118,3 +118,4 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('\n✅ SYSTEM IS WORKING!'))
         
         self.stdout.write('=' * 60)
+

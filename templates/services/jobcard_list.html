@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
-{% block title %}Job Cards{% endblock %}
+{% block title %}Engagements{% endblock %}
 {% block nav_jobs %}active{% endblock %}
-{% block breadcrumbs %}<li class="active">Job Cards</li>{% endblock %}
+{% block breadcrumbs %}<li class="active">Engagements</li>{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h4 class="page-title"><i class="fas fa-briefcase"></i>Job Cards</h4>
-  <a href="{% url 'services:create' %}" class="btn btn-primary"><i class="fas fa-plus"></i>New Job Card</a>
+  <h4 class="page-title"><i class="fas fa-briefcase"></i>Engagements</h4>
+  <a href="{% url 'services:create' %}" class="btn btn-primary"><i class="fas fa-plus"></i>New Engagement</a>
 </div>
 <div class="layout-main-sidebar" style="margin-bottom:.9rem">
   <div class="card-box card-compact">
@@ -22,7 +22,8 @@
       <div class="d-flex flex-wrap align-items-center gap-2 mt-2" style="font-size:.82rem;color:var(--text-muted)">
         <div style="display:flex;align-items:center;gap:.35rem"><span class="badge badge-open" style="font-size:.82rem;padding:.3rem .55rem">Visible</span><span class="fw-7">{{ jobs|length }}</span></div>
         <div style="display:flex;align-items:center;gap:.35rem"><span>Status</span><span class="text-muted">{{ status|default:"All" }}</span></div>
-        <div style="display:flex;align-items:center;gap:.35rem"><span>Cols</span><span class="text-muted">{{ status_choices|length }}</span></div>
+        <div style="display:flex;align-items:center;gap:.35rem"><span>Duplicates</span><span class="text-muted">{{ duplicate_count }}</span></div>
+        <button id="duplicateFilterBtn" type="button" class="btn btn-outline btn-sm" onclick="toggleDuplicateFilter()">Show duplicates only</button>
         <a href="{% url 'services:create' %}" class="btn btn-outline btn-sm">New Job</a>
       </div>
     </div>
@@ -47,13 +48,17 @@
     </div>
     <div id="kcol-body-{{ s_val }}">
       {% for job in col_jobs %}
-      <a href="{% url 'services:detail' job.pk %}" class="kanban-card {% if job.priority == 'urgent' %}urgent{% endif %}" style="display:block;text-decoration:none">
+      <a href="{% url 'services:detail' job.pk %}" class="kanban-card {% if job.priority == 'urgent' %}urgent{% endif %}{% if job.is_duplicate_transaction %} duplicate-card{% endif %}" style="display:block;text-decoration:none;"> 
         <div class="kc-title">{{ job.job_number }}</div>
         <div class="kc-client">{{ job.client.get_display_name|truncatechars:20 }}</div>
         <div style="font-size:.72rem;color:#aaa;margin-top:.15rem">{{ job.get_period_label }}</div>
-        <div class="kc-foot">
+        <div class="kc-foot" style="display:flex;justify-content:space-between;align-items:center;gap:.4rem;flex-wrap:wrap">
           <span class="ugx" style="font-size:.75rem;color:#1A3C6E">{{ job.total_fee|floatformat:0|intcomma }}</span>
-          {% if job.priority == 'urgent' %}<span style="font-size:.62rem;color:#e74c3c">URGENT</span>{% endif %}
+          {% if job.is_duplicate_transaction %}
+          <span class="badge badge-danger" style="font-size:.65rem">Duplicate</span>
+          {% elif job.priority == 'urgent' %}
+          <span style="font-size:.62rem;color:#e74c3c">URGENT</span>
+          {% endif %}
         </div>
       </a>
       {% endfor %}
@@ -71,16 +76,17 @@
   <div id="joblist">
     <div class="tbl-wrap">
       <table class="tbl">
-        <thead><tr><th>Job #</th><th>Client</th><th>Period</th><th>Assigned</th><th>Total</th><th>Status</th><th>Due</th><th></th></tr></thead>
+        <thead><tr><th>Job #</th><th>Client</th><th>Period</th><th>Assigned</th><th>Total</th><th>Status</th><th>Duplicate</th><th>Due</th><th></th></tr></thead>
         <tbody>
           {% for job in jobs %}
-          <tr>
+          <tr class="journey-row{% if job.is_duplicate_transaction %} duplicate-row{% endif %}" data-duplicate="{% if job.is_duplicate_transaction %}1{% else %}0{% endif %}">
             <td><a href="{% url 'services:detail' job.pk %}" style="font-weight:700">{{ job.job_number }}</a></td>
             <td><a href="{% url 'clients:detail' job.client.pk %}">{{ job.client.get_display_name|truncatechars:18 }}</a></td>
             <td style="font-size:.8rem">{{ job.get_period_label }}</td>
             <td style="font-size:.78rem;color:#888">{{ job.assigned_to.get_full_name|default:"—" }}</td>
             <td class="ugx" style="font-size:.82rem">{{ job.total_fee|floatformat:0|intcomma }}</td>
             <td><span class="badge badge-{{ job.status }}">{{ job.get_status_display }}</span></td>
+            <td><span class="badge badge-{{ job.is_duplicate_transaction|yesno:"danger,success" }}" style="font-size:.7rem" title="{% if job.is_duplicate_transaction %}Duplicate because a same-period recurring service match was detected.{% else %}No duplicate was detected for this job card.{% endif %}">{% if job.is_duplicate_transaction %}Duplicate{% else %}Clear{% endif %}</span></td>
             <td style="font-size:.78rem;{% if job.due_date and job.due_date < today %}color:#e74c3c;font-weight:700{% endif %}">{{ job.due_date|default:"—" }}</td>
             <td><a href="{% url 'services:detail' job.pk %}" class="btn btn-outline btn-sm">View</a></td>
           </tr>
@@ -144,6 +150,57 @@ function toggleKanbanCol(val) {
     if (b) b.style.display = 'none';
     if (i) i.style.transform = 'rotate(180deg)';
   }
+
+  applyDuplicateFilterButton();
 })();
+
+function applyDuplicateFilterButton() {
+  var btn = document.getElementById('duplicateFilterBtn');
+  if (!btn) return;
+  var s = loadState();
+  var active = s['showDuplicatesOnly'] === true;
+  btn.textContent = active ? 'Show all jobs' : 'Show duplicates only';
+  btn.className = active ? 'btn btn-danger btn-sm' : 'btn btn-outline btn-sm';
+  filterDuplicateRows(active);
+}
+
+function toggleDuplicateFilter() {
+  var s = loadState();
+  var active = s['showDuplicatesOnly'] === true;
+  s['showDuplicatesOnly'] = !active;
+  saveState(s);
+  applyDuplicateFilterButton();
+  showAlert(active ? 'Showing all job cards' : 'Showing duplicates only');
+}
+
+function filterDuplicateRows(active) {
+  var rows = document.querySelectorAll('tr[data-duplicate]');
+  rows.forEach(function(row){
+    if (!active) {
+      row.style.display = '';
+      return;
+    }
+    row.style.display = row.dataset.duplicate === '1' ? '' : 'none';
+  });
+}
+
+function showAlert(message) {
+  var existing = document.getElementById('duplicateFilterAlert');
+  if (existing) existing.remove();
+  var alert = document.createElement('div');
+  alert.id = 'duplicateFilterAlert';
+  alert.style.position = 'fixed';
+  alert.style.bottom = '1rem';
+  alert.style.right = '1rem';
+  alert.style.background = 'rgba(48, 63, 159, 0.95)';
+  alert.style.color = '#fff';
+  alert.style.padding = '0.8rem 1rem';
+  alert.style.borderRadius = '999px';
+  alert.style.boxShadow = '0 8px 25px rgba(0,0,0,.18)';
+  alert.style.fontSize = '0.9rem';
+  alert.textContent = message;
+  document.body.appendChild(alert);
+  setTimeout(function(){ if (alert.parentNode) alert.parentNode.removeChild(alert); }, 2200);
+}
 </script>
 {% endblock %}

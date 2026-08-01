@@ -30,7 +30,7 @@
         <div><label class="form-label">Notification Email</label>
           <input type="email" name="email_notify" value="{{ form.email_notify.value|default:'' }}" class="form-ctrl" placeholder="e.g. taxissues.go@gmail.com">
           <div class="form-hint">Emails sent from this address</div></div>
-        <div><label class="form-label">Login Email</label><input type="email" name="email" value="{{ form.email.value|default:'' }}" class="form-ctrl" placeholder="user@taxman256.ug"></div>
+        <div><label class="form-label">Login Email</label><input type="email" name="email" value="{{ form.email.value|default:'' }}" class="form-ctrl" placeholder="user@Taxin.ug"></div>
         <div><label class="form-label">Date Joined Firm</label><input type="date" name="date_joined_firm" value="{{ form.date_joined_firm.value|default:'' }}" class="form-ctrl"></div>
         <div><label class="form-label">Theme</label>
           <select name="ui_theme" class="s2" data-ph="Select theme">
@@ -88,3 +88,4 @@
 {% block extra_js %}
 <script>$(document).ready(function(){$('.s2').select2({theme:'bootstrap-5',allowClear:false});});</script>
 {% endblock %}
+

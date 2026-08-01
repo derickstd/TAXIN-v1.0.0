@@ -2,49 +2,113 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Login — Taxman256</title>
+<title>Login — Taxin</title>
 <link rel="stylesheet" href="{% static 'css/app.css' %}">
 <style>
-body{background:linear-gradient(135deg,#1A3C6E 0%,#0d2040 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
-.login-card{background:#fff;border-radius:14px;padding:2.2rem;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
-.login-logo{text-align:center;margin-bottom:1.5rem}
-.login-logo h2{color:#1A3C6E;font-weight:900;font-size:1.8rem;letter-spacing:1px;margin:0}
-.login-logo p{color:#C8952A;font-size:.8rem;margin:.3rem 0 0}
-.form-group{margin-bottom:1rem}
-.btn-login{background:#1A3C6E;color:#fff;border:none;border-radius:7px;padding:.65rem;width:100%;font-size:.95rem;font-weight:700;cursor:pointer;margin-top:.5rem}
-.btn-login:hover{background:#122a50}
-.error-box{background:#f8d7da;color:#721c24;border-left:4px solid #e74c3c;padding:.6rem .9rem;border-radius:4px;margin-bottom:1rem;font-size:.84rem}
-.slug-suggestion{margin-top:.55rem;font-size:.8rem;color:#6b7280;display:flex;align-items:center;gap:.35rem}
+:root{--surface:#ffffff;--surface-strong:#f4f7ff;--surface-soft:#eef3ff;--brand:#1A3C6E;--brand-dark:#122a50;--accent:#C8952A;--text:#1e293b;--border:#d7e0ef}
+body{background:radial-gradient(circle at top left, rgba(255,255,255,.15) 0%, transparent 35%),linear-gradient(135deg,#122c5c 0%,#0b1b38 46%,#081424 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--text);overflow-x:hidden}
+body::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at right, rgba(200,149,42,.18), transparent 28%),radial-gradient(circle at left bottom, rgba(50,140,255,.12), transparent 24%);pointer-events:none}
+.login-layout{display:grid;grid-template-columns:minmax(250px,1.25fr) minmax(330px,1fr);gap:2rem;width:100%;max-width:1120px;align-items:center;position:relative;z-index:1}
+.login-hero{display:grid;gap:1rem}
+.hero-copy{padding:2rem 1.6rem;border-radius:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);box-shadow:0 32px 80px rgba(0,0,0,.14);backdrop-filter:blur(14px);overflow:hidden;position:relative}
+.hero-copy::before{content:'';position:absolute;inset:-40px -20px -40px auto;background:radial-gradient(circle at top left, rgba(255,255,255,.18), transparent 24%);pointer-events:none}
+.hero-copy h3{margin:0 0 1rem;color:#f8fbff;font-size:1.95rem;line-height:1.05;font-weight:900}
+.hero-copy p{margin:0 1rem 1.4rem 0;color:#d9e2ff;line-height:1.75;font-size:.97rem}
+.hero-stats{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.stat-block{border-radius:20px;padding:1rem 1.1rem;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.14);color:#eef5ff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.02)}
+.stat-block strong{display:block;font-size:1.5rem;margin-bottom:.3rem;color:#fff}
+.stat-block span{font-size:.85rem;color:#c7d2ff}
+.hero-graphic{position:relative;min-height:360px;border-radius:34px;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.14);box-shadow:0 40px 90px rgba(0,0,0,.18);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.hero-graphic::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at top left, rgba(87,165,255,.18), transparent 28%),radial-gradient(circle at right, rgba(255,199,100,.12), transparent 20%)}
+.hero-graphic .hero-center{position:relative;z-index:1;width:220px;height:220px;border-radius:32px;background:linear-gradient(135deg,rgba(31,75,165,.95),rgba(32,92,211,.9));box-shadow:0 30px 90px rgba(8,24,70,.35);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff}
+.hero-graphic .hero-center::after{content:'';position:absolute;inset:-16px;z-index:-1;border-radius:36px;background:radial-gradient(circle,rgba(255,255,255,.18),transparent 56%)}
+.hero-graphic .hero-dot{position:absolute;width:24px;height:24px;border-radius:100%;background:rgba(255,255,255,.55);box-shadow:0 0 20px rgba(255,255,255,.3);animation:float 6s ease-in-out infinite}
+.hero-graphic .hero-dot:nth-child(2){top:18%;left:72%;width:18px;height:18px;animation-duration:5.2s}
+.hero-graphic .hero-dot:nth-child(3){bottom:14%;right:20%;width:22px;height:22px;animation-duration:7.4s}
+.hero-graphic .hero-dot:nth-child(4){top:52%;left:10%;width:16px;height:16px;animation-duration:5.8s}
+.login-shell{position:relative;max-width:430px;width:100%;transform-style:preserve-3d;perspective:1200px}
+.login-shell::before,.login-shell::after{content:'';position:absolute;border-radius:33px;z-index:0;transition:transform .3s ease}
+.login-shell::before{width:220px;height:220px;right:-80px;top:-80px;background:rgba(200,149,42,.16);box-shadow:0 40px 90px rgba(0,0,0,.14);transform:rotate(35deg)}
+.login-shell::after{width:180px;height:180px;left:-60px;bottom:-70px;background:rgba(56,118,255,.12);box-shadow:0 30px 85px rgba(0,0,0,.1);transform:rotate(-18deg)}
+.login-card{position:relative;z-index:1;background:linear-gradient(180deg,rgba(255,255,255,.98) 0%,#f8fbff 100%);border:1px solid rgba(255,255,255,.45);border-radius:28px;padding:2.6rem 2.4rem 2.2rem;box-shadow:0 36px 90px rgba(0,0,0,.28),0 0 0 1px rgba(255,255,255,.06);backdrop-filter:blur(10px);transform:translateZ(30px);overflow:hidden;transition:transform .3s ease,box-shadow .3s ease}
+.login-card:hover{transform:translateY(-10px) translateZ(30px);box-shadow:0 44px 106px rgba(0,0,0,.32)}
+.login-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at top right, rgba(200,149,42,.12), transparent 22%),radial-gradient(circle at left bottom, rgba(34,86,255,.08), transparent 30%);pointer-events:none}
+.login-logo{text-align:center;margin-bottom:1.8rem;position:relative;z-index:2}
+.login-logo h2{color:var(--brand);font-weight:900;font-size:2rem;letter-spacing:1px;margin:.65rem 0 0}
+.login-logo p{color:#56657a;font-size:.88rem;margin:.35rem 0 0}
+.login-logo .logo-mark{width:52px;height:52px;background:linear-gradient(135deg,rgba(200,149,42,1),rgba(255,213,134,1));border-radius:15px;display:inline-flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:1.4rem;color:#fff;box-shadow:0 18px 35px rgba(15,42,85,.16)}
+.form-group{margin-bottom:1.2rem;position:relative;z-index:2}
+.form-label{display:block;margin-bottom:.45rem;font-weight:700;color:#334155;font-size:.95rem}
+.form-control{width:100%;padding:.95rem 1rem;border-radius:14px;border:1px solid var(--border);background:#f7f9ff;color:#16263f;font-size:.95rem;box-shadow:inset 0 1px 1px rgba(15,23,42,.06);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.form-control:focus{outline:none;border-color:rgba(58,103,216,.85);box-shadow:0 0 0 4px rgba(59,110,246,.1);transform:translateY(-1px)}
+.btn-login{background:linear-gradient(135deg,var(--brand),var(--brand-dark));color:#fff;border:none;border-radius:14px;padding:.85rem 1rem;width:100%;font-size:.96rem;font-weight:800;cursor:pointer;margin-top:.75rem;box-shadow:0 18px 30px rgba(26,46,96,.24);transition:transform .2s ease,box-shadow .2s ease}
+.btn-login:hover{transform:translateY(-2px);box-shadow:0 24px 38px rgba(26,46,96,.3);background:linear-gradient(135deg,#143a6c,#0f234f)}
+.error-box{background:#fff2f4;color:#861f2d;border-left:4px solid #df476f;padding:.75rem 1rem;border-radius:12px;margin-bottom:1rem;font-size:.9rem;box-shadow:0 10px 24px rgba(20,33,64,.08)}
+.slug-suggestion{margin-top:.55rem;font-size:.82rem;color:#60708f;display:flex;align-items:center;gap:.35rem}
 .slug-suggestion span{font-weight:700;color:#1e3a8a}
-.hint{text-align:center;color:#aaa;font-size:.73rem;margin-top:1.2rem}
+.hint{position:relative;z-index:2;text-align:center;color:#6b7280;font-size:.78rem;margin-top:1.35rem;line-height:1.55}
+.hint a{color:#1A3C6E;text-decoration:none;font-weight:700}
+.hint a:hover{text-decoration:underline}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-18px)}}
+@media (max-width:880px){.login-layout{grid-template-columns:1fr;max-width:680px}.login-hero{order:2}.login-shell{order:1}}
+@media (max-width:520px){body{padding:.9rem} .login-shell::before,.login-shell::after{display:none}.login-card{padding:2rem 1.5rem 1.8rem;border-radius:22px}}
 </style>
 </head>
 <body>
-<div class="login-card">
-  <div class="login-logo">
-    <div style="width:50px;height:50px;background:#C8952A;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto .8rem;font-size:1.4rem;color:#fff">&#9632;</div>
-    <h2>TAXMAN256</h2>
-    <p>Tax Consultation &amp; Compliance Services — Kampala, Uganda</p>
-  </div>
-  {% if form.errors %}
-  <div class="error-box"><i class="fas fa-exclamation-circle" style="margin-right:.4rem"></i>Invalid username or password. Please try again.</div>
-  {% endif %}
-  <form method="post">
-    {% csrf_token %}
-    <div class="form-group">
-      <label class="form-label">Username</label>
-      <input id="login-username" type="text" name="username" class="form-control" placeholder="Enter your username" autofocus autocomplete="username">
-      <div class="slug-suggestion" id="slug-suggestion">Suggested login slug: <span id="slug-preview">taxman256</span></div>
+<div class="login-layout">
+  <section class="login-hero">
+    <div class="hero-copy">
+      <h3>Smarter tax workflows, made personal.</h3>
+      <p>Sign in to your Taxin workspace and continue managing clients, returns and filings with a secure, modern platform designed for growing practices.</p>
+      <div class="hero-stats">
+        <div class="stat-block"><strong>624k</strong><span>Loans last month</span></div>
+        <div class="stat-block"><strong>124k</strong><span>Repayments last week</span></div>
+      </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Password</label>
-      <input type="password" name="password" class="form-control" placeholder="Enter your password" autocomplete="current-password">
+    <div class="hero-graphic">
+      <div class="hero-center"><strong>Smart</strong><span style="font-size:.98rem;color:rgba(255,255,255,.78);letter-spacing:.08em;margin-top:.45rem;">Loans</span></div>
+      <div class="hero-dot"></div>
+      <div class="hero-dot"></div>
+      <div class="hero-dot"></div>
+      <div class="hero-dot"></div>
     </div>
-    <button type="submit" class="btn-login">Sign In to Taxman256</button>
-  </form>
-  <div class="hint">
-    <a href="{% url 'signup' %}">Register a new company</a> &nbsp;|&nbsp; Default: admin / admin123<br>
-    Taxman256 Practice Management System v2.0
+  </section>
+  <div class="login-shell">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="logo-mark">&#9632;</div>
+        <h2>TAXIN</h2>
+        <p>Practice Management System</p>
+      </div>
+      {% if form.errors %}
+      <div class="error-box"><i class="fas fa-exclamation-circle" style="margin-right:.4rem"></i>Invalid username or password. Please try again.</div>
+      {% endif %}
+      <form method="post" action="{% url 'login' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.GET.next }}">
+        <div class="form-group">
+          <label class="form-label">Username</label>
+          <input id="login-username" type="text" name="username" class="form-control" placeholder="Enter your username" autofocus autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Company Slug</label>
+          <input id="company-slug" type="text" name="company_slug" class="form-control" placeholder="Enter your company slug" value="{{ company_slug }}" autocomplete="organization">
+          <div class="slug-suggestion" id="slug-suggestion">Your company slug helps identify which tenant login to use.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" name="password" class="form-control" placeholder="Enter your password" autocomplete="current-password">
+        </div>
+        <div style="margin:.5rem 0 .25rem;text-align:right;font-size:.9rem;">
+          <a href="{% url 'password_reset' %}" style="color:#1A3C6E;text-decoration:none;font-weight:700;">Forgot password?</a>
+        </div>
+        <button type="submit" class="btn-login">Sign In to Taxin</button>
+      </form>
+      <div class="hint">
+        <a href="{% url 'signup' %}">Register a new company</a> &nbsp;|&nbsp; Default: admin / admin123<br>
+        Taxin Practice Management System v2.0
+      </div>
+    </div>
   </div>
 </div>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -63,23 +127,34 @@ body{background:linear-gradient(135deg,#1A3C6E 0%,#0d2040 100%);min-height:100vh
   document.addEventListener('DOMContentLoaded', function() {
     var usernameInput = document.getElementById('login-username');
     var slugPreview = document.getElementById('slug-preview');
-    if (!usernameInput || !slugPreview) return;
+    var form = usernameInput && usernameInput.closest('form');
+    if (!usernameInput || !slugPreview || !form) return;
 
     function updateSlug() {
       var stored = null;
-      try{ stored = localStorage.getItem('last_company_slug'); }catch(e){}
-      var value = usernameInput.value || stored || 'taxman256';
-      // prefer stored slug when username is empty
-      if(usernameInput.value){
-        slugPreview.textContent = buildSlug(usernameInput.value) || (stored || 'taxman256');
-      } else {
-        slugPreview.textContent = stored || 'taxman256';
+      try { stored = localStorage.getItem('last_company_slug'); } catch(e) {}
+      var slug = stored ? buildSlug(stored) : 'Taxin';
+      slugPreview.textContent = 'username@' + slug;
+      usernameInput.placeholder = stored ? 'username@' + slug : 'Enter your username';
+    }
+
+    function preserveSlugOnSubmit(event) {
+      var stored = null;
+      try { stored = localStorage.getItem('last_company_slug'); } catch(e) {}
+      if (!stored) return;
+      var usernameValue = usernameInput.value.trim();
+      if (!usernameValue) return;
+      if (usernameValue.includes('@')) return;
+      var slug = buildSlug(stored);
+      if (slug) {
+        usernameInput.value = usernameValue + '@' + slug;
       }
     }
 
     usernameInput.addEventListener('input', updateSlug);
-    updateSlug();
+    form.addEventListener('submit', preserveSlugOnSubmit);
   });
 </script>
 </body>
 </html>
+

@@ -3,6 +3,36 @@
 {% block nav_inv %}active{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">Create Document</li>{% endblock %}
 {% block content %}
+{% if show_duplicate_modal %}
+<div class="modal-overlay open" id="duplicateModal" style="z-index:1300">
+  <div class="modal-box" style="max-width:600px">
+    <div class="modal-hd">
+      <h5><i class="fas fa-exclamation-triangle"></i> Possible duplicate invoice</h5>
+      <button type="button" class="modal-close" onclick="document.getElementById('duplicateModal').classList.remove('open')">&times;</button>
+    </div>
+    <div class="card-body">
+      <p style="margin-bottom:.8rem;font-size:.9rem">There are recent invoices for this client with a very similar amount. Review them before creating a new document.</p>
+      <ul style="margin:0 0 1rem 1.1rem;padding:0;font-size:.88rem">
+        {% for inv in similar_invoices %}
+        <li style="margin-bottom:.35rem"><strong>{{ inv.invoice_number }}</strong> — UGX {{ inv.grand_total|floatformat:0|intcomma }}{% if inv.notes %} — {{ inv.notes }}{% endif %} <a href="{% url 'billing:detail' inv.pk %}" target="_blank">View</a></li>
+        {% endfor %}
+      </ul>
+      <form method="post">
+        {% csrf_token %}
+        {% if orig_post %}
+          {% for k, v in orig_post.items %}
+            <input type="hidden" name="{{ k }}" value="{{ v }}" />
+          {% endfor %}
+        {% endif %}
+        <div class="form-actions">
+          <button type="submit" name="force_create" value="1" class="btn btn-success"><i class="fas fa-check"></i> Force create</button>
+          <a href="{% url 'billing:list' %}" class="btn btn-outline">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
 <div class="modal-overlay open" id="invoiceCreateModal">
   <div class="modal-box" style="width:min(100%,1024px);max-width:1024px;">
     <div class="modal-hd">

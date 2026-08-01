@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 from decimal import Decimal, InvalidOperation
 from .models import Invoice, Payment, OtherIncome
+from .forms import InvoiceForm
 from clients.models import Client
 from core.utils import paginate_queryset
 from core.duplicate_detection import check_duplicate_transaction
@@ -39,16 +40,16 @@ def invoice_list(request):
 def invoice_detail(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
     payments = invoice.payments.order_by('payment_date', 'pk')
-    # Build running balance per payment
+    # Build running balance per payment (allow negative balance when overpaid)
     running = invoice.grand_total
     payments_with_balance = []
     for pmt in payments:
         running -= pmt.amount
-        payments_with_balance.append((pmt, max(running, 0)))
+        payments_with_balance.append((pmt, running))
     from django.conf import settings
     firm_address = getattr(settings, 'FIRM_ADDRESS', 'Kampala, Uganda')
     firm_phone   = getattr(settings, 'FIRM_PHONE',   '+256 785 230 670')
-    firm_email   = getattr(settings, 'FIRM_EMAIL',   'info@taxman256.com')
+    firm_email   = getattr(settings, 'FIRM_EMAIL',   'info@Taxin.com')
     return render(request, 'billing/invoice_detail.html', {
         'invoice': invoice,
         'payments': payments,
@@ -122,10 +123,15 @@ def invoice_create(request):
                 continue
 
         if not allow_create and request.POST.get('force_create') != '1':
-            return render(request, 'billing/duplicate_invoice.html', {
+            return render(request, 'billing/invoice_create.html', {
+                'clients': Client.objects.filter(status__in=['active', 'dormant', 'suspended']).order_by('full_name'),
                 'client': client,
                 'document_type': document_type,
                 'amount': amount,
+                'description': desc,
+                'due_date': due_date_str,
+                'valid_until': valid_until_str,
+                'show_duplicate_modal': True,
                 'similar_invoices': similar_invoices[:5],
                 'orig_post': request.POST,
             })
@@ -145,6 +151,40 @@ def invoice_create(request):
 
 
 @login_required
+def invoice_edit(request, pk):
+    invoice = get_object_or_404(Invoice, pk=pk)
+    if request.method == 'POST':
+        form = InvoiceForm(request.POST, instance=invoice)
+        if form.is_valid():
+            inv = form.save(commit=False)
+            if invoice.document_type != 'invoice' and inv.document_type == 'invoice':
+                inv.invoice_number = Invoice.next_invoice_number('invoice', exclude_pk=invoice.pk)
+                inv.status = 'sent'
+            inv.save()
+            messages.success(request, f'Invoice {inv.invoice_number} updated.')
+            return redirect('billing:detail', pk=inv.pk)
+    else:
+        form = InvoiceForm(instance=invoice)
+    return render(request, 'billing/invoice_form.html', {
+        'form': form, 'invoice': invoice, 'title': f'Edit {invoice.invoice_number}'
+    })
+
+
+@login_required
+def invoice_delete(request, pk):
+    invoice = get_object_or_404(Invoice, pk=pk)
+    if invoice.payments.exists():
+        messages.error(request, 'Cannot delete an invoice with recorded payments.')
+        return redirect('billing:detail', pk=pk)
+    if request.method == 'POST':
+        invoice_number = invoice.invoice_number
+        invoice.delete()
+        messages.success(request, f'Invoice {invoice_number} deleted.')
+        return redirect('billing:list')
+    return render(request, 'billing/invoice_confirm_delete.html', {'invoice': invoice})
+
+
+@login_required
 def record_payment(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
     if request.method == 'POST':
@@ -159,33 +199,67 @@ def record_payment(request, pk):
 
             # Reload fresh from DB before calculating balance — never use stale in-memory value
             invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
-            balance_due = invoice.grand_total - invoice.amount_paid
-            if balance_due <= 0:
-                messages.info(request, 'This invoice is already fully paid.')
-                return redirect('billing:detail', pk=pk)
-            # Cap at actual balance — signal will enforce this too but cap here for clean UX
-            amount = min(amount, balance_due)
-
             method = request.POST.get('method', 'cash')
             reference = request.POST.get('reference', '')
-            # Creating the Payment triggers the billing signal which recalculates
-            # amount_paid, updates invoice status, and refreshes client outstanding
-            payment = Payment.objects.create(
-                invoice=invoice, amount=amount, method=method,
-                reference=reference, received_by=request.user)
-            # Reload invoice to get signal-updated values
+            remaining = amount
+            created_payments = []
+
+            # Apply the payment to the current invoice first, then to earlier unpaid
+            # invoices for the same client if the amount exceeds the current invoice balance.
+            earlier_invoices = list(
+                Invoice.objects.filter(client=invoice.client)
+                .exclude(pk=invoice.pk)
+                .exclude(status__in=['paid', 'written_off'])
+                .filter(
+                    Q(date_issued__lt=invoice.date_issued)
+                    | Q(date_issued=invoice.date_issued, pk__lt=invoice.pk)
+                )
+                .order_by('date_issued', 'pk')
+            )
+            candidate_invoices = earlier_invoices + [invoice]
+            for inv in candidate_invoices:
+                if remaining <= 0:
+                    break
+                inv.refresh_from_db(fields=['grand_total', 'amount_paid'])
+                balance = inv.grand_total - inv.amount_paid
+                if balance <= 0 and inv != invoice:
+                    continue
+                to_apply = min(balance, remaining) if balance > 0 else remaining
+                if to_apply <= 0:
+                    continue
+                payment = Payment.objects.create(
+                    invoice=inv, amount=to_apply, method=method,
+                    reference=reference, received_by=request.user)
+                created_payments.append(payment)
+                remaining -= to_apply
+
+            if remaining > 0:
+                # Any leftover amount becomes overpayment on the current invoice.
+                overpayment = Payment.objects.create(
+                    invoice=invoice, amount=remaining, method=method,
+                    reference=reference, received_by=request.user)
+                created_payments.append(overpayment)
+                remaining = Decimal('0')
+
+            if not created_payments:
+                messages.info(request, 'No outstanding balance could be allocated.')
+                return redirect('billing:detail', pk=pk)
+
             invoice.refresh_from_db()
             client = invoice.client
 
-            # Send payment receipt email
-            if client.email:
-                send_payment_receipt(payment)
+            # Send payment receipt email for the first payment created
+            if client.email and created_payments:
+                send_payment_receipt(created_payments[0])
 
-            new_balance = invoice.grand_total - invoice.amount_paid
-            if new_balance <= 0:
-                messages.success(request, f'Payment of UGX {amount:,.0f} recorded. Invoice fully paid.')
+            current_balance = invoice.grand_total - invoice.amount_paid
+            if current_balance <= 0:
+                if len(created_payments) > 1:
+                    messages.success(request, f'Payment of UGX {amount:,.0f} recorded and applied to this invoice and earlier outstanding invoices.')
+                else:
+                    messages.success(request, f'Payment of UGX {amount:,.0f} recorded. Invoice fully paid.')
             else:
-                messages.success(request, f'Payment of UGX {amount:,.0f} recorded. Remaining balance: UGX {new_balance:,.0f}.')
+                messages.success(request, f'Payment of UGX {amount:,.0f} recorded. Remaining balance: UGX {current_balance:,.0f}.')
         except (InvalidOperation, TypeError) as e:
             messages.error(request, f'Invalid payment amount: {e}')
     return redirect('billing:detail', pk=pk)
@@ -216,7 +290,8 @@ def record_client_payment(request):
         messages.error(request, 'Payment amount must be greater than zero.')
         return redirect('billing:detail', pk=client.invoices.first().pk if client.invoices.exists() else 'billing:list')
 
-    # Fetch unpaid invoices oldest-first and allocate
+    # Fetch unpaid invoices oldest-first and allocate the lump sum across all
+    # outstanding invoices for the client so earlier periods are cleared first.
     unpaid = (Invoice.objects.filter(client=client)
                          .exclude(status__in=['paid', 'written_off'])
                          .order_by('date_issued', 'pk'))
@@ -231,6 +306,8 @@ def record_client_payment(request):
         if balance <= 0:
             continue
         to_apply = min(balance, remaining)
+        if to_apply <= 0:
+            continue
         Payment.objects.create(
             invoice=inv,
             amount=to_apply,
@@ -240,6 +317,19 @@ def record_client_payment(request):
         )
         remaining -= to_apply
         created_count += 1
+
+    if remaining > 0:
+        latest_invoice = Invoice.objects.filter(client=client).order_by('-date_issued', '-pk').first()
+        if latest_invoice:
+            Payment.objects.create(
+                invoice=latest_invoice,
+                amount=remaining,
+                method=method,
+                reference=reference,
+                received_by=request.user
+            )
+            created_count += 1
+            remaining = Decimal('0')
 
     # Update client's last transaction date and outstanding via signals
     if created_count:
@@ -269,7 +359,7 @@ def send_invoice_whatsapp(request, pk):
     
     # Prepare WhatsApp message
     msg = (f"Dear {invoice.client.get_display_name()},\n\n"
-           f"Invoice {invoice.invoice_number} from Taxman256.\n"
+           f"Invoice {invoice.invoice_number} from Taxin.\n"
            f"Total: UGX {invoice.grand_total:,.0f}\n"
            f"Balance Due: UGX {invoice.balance_due:,.0f}\n"
            f"Due Date: {invoice.due_date}\n\n"
@@ -458,3 +548,4 @@ def other_income_delete(request, pk):
         return redirect('billing:otherincome_list')
     
     return render(request, 'billing/otherincome_confirm_delete.html', {'income': income})
+

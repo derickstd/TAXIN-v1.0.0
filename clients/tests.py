@@ -43,6 +43,13 @@ class ClientOnboardingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Client Onboarding', response.content)
 
+    def test_onboarding_page_does_not_render_walkin_intake_section(self):
+        request = self.factory.get(reverse('clients:create'))
+        request.user = self.user
+        response = views.client_create(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b'Walk-in Intake', response.content)
+
     def test_import_route_uses_merged_onboarding_page(self):
         request = self.factory.get(reverse('clients:import'))
         request.user = self.user

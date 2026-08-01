@@ -43,7 +43,7 @@ class Command(BaseCommand):
             if outstanding_invoices.count() > 3:
                 msg += f"\n...and {outstanding_invoices.count() - 3} more.\n"
             
-            msg += "\nPlease settle your account. Contact us for payment details.\n\nTaxman256"
+            msg += "\nPlease settle your account. Contact us for payment details.\n\nTaxin"
             
             if send_whatsapp_message(wa, msg, client=client, msg_type='debt_reminder'):
                 whatsapp_count += 1
@@ -51,3 +51,4 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'✓ Sent {email_count} emails and {whatsapp_count} WhatsApp messages'
         ))
+

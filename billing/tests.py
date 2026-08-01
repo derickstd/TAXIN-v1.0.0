@@ -4,9 +4,41 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.models import Invoice
+from billing.models import Invoice, Payment
 from clients.models import Client
 from core.models import User
+
+
+class ClientPaymentFlowTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='clientpaytester',
+            password='pass1234',
+            role='admin',
+        )
+        self.client.force_login(self.user)
+        self.client_obj = Client.objects.create(
+            full_name='Lump Sum Client',
+            phone_primary='+256700555666',
+            created_by=self.user,
+        )
+
+    def test_client_detail_page_exposes_lump_sum_payment_form(self):
+        Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.now().date(),
+            subtotal=Decimal('1000'),
+            grand_total=Decimal('1000'),
+            status='sent',
+            created_by=self.user,
+        )
+
+        response = self.client.get(reverse('clients:detail', args=[self.client_obj.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Record Lump-Sum Payment')
+        self.assertContains(response, reverse('billing:client_pay'))
+        self.assertContains(response, 'earliest periods first')
 
 
 class InvoiceNumberingTests(TestCase):
@@ -22,6 +54,96 @@ class InvoiceNumberingTests(TestCase):
             phone_primary='+256700333444',
             created_by=self.user,
         )
+
+    def test_client_lump_sum_payment_clears_oldest_unpaid_invoices(self):
+        older = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.now().date(),
+            subtotal=Decimal('1000'),
+            grand_total=Decimal('1000'),
+            status='sent',
+            created_by=self.user,
+        )
+        newer = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.now().date(),
+            subtotal=Decimal('1000'),
+            grand_total=Decimal('1000'),
+            status='sent',
+            created_by=self.user,
+        )
+
+        response = self.client.post(reverse('billing:client_pay'), {
+            'client': self.client_obj.pk,
+            'amount': '1500',
+            'method': 'cash',
+            'reference': 'bulk-pay',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        older.refresh_from_db()
+        newer.refresh_from_db()
+        self.assertEqual(older.amount_paid, Decimal('1000'))
+        self.assertEqual(newer.amount_paid, Decimal('500'))
+        self.assertEqual(Payment.objects.filter(invoice=older).count(), 1)
+        self.assertEqual(Payment.objects.filter(invoice=newer).count(), 1)
+
+    def test_client_overpayment_updates_negative_client_balance(self):
+        invoice = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.now().date(),
+            subtotal=Decimal('1000'),
+            grand_total=Decimal('1000'),
+            status='sent',
+            created_by=self.user,
+        )
+
+        response = self.client.post(reverse('billing:client_pay'), {
+            'client': self.client_obj.pk,
+            'amount': '1500',
+            'method': 'cash',
+            'reference': 'overpay',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        invoice.refresh_from_db()
+        self.client_obj.refresh_from_db()
+        self.assertEqual(invoice.amount_paid, Decimal('1500'))
+        self.assertEqual(invoice.balance_due, Decimal('-500'))
+        self.assertEqual(self.client_obj.total_outstanding, Decimal('-500'))
+        self.assertEqual(Payment.objects.filter(invoice=invoice).count(), 2)
+
+    def test_payment_on_current_invoice_can_clear_older_unpaid_invoices(self):
+        older = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.now().date(),
+            subtotal=Decimal('1000'),
+            grand_total=Decimal('1000'),
+            status='sent',
+            created_by=self.user,
+        )
+        newer = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.now().date(),
+            subtotal=Decimal('1000'),
+            grand_total=Decimal('1000'),
+            status='sent',
+            created_by=self.user,
+        )
+
+        response = self.client.post(reverse('billing:pay', args=[newer.pk]), {
+            'amount': '1500',
+            'method': 'cash',
+            'reference': 'current-pay',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        older.refresh_from_db()
+        newer.refresh_from_db()
+        self.assertEqual(older.amount_paid, Decimal('1000'))
+        self.assertEqual(newer.amount_paid, Decimal('500'))
+        self.assertEqual(Payment.objects.filter(invoice=older).count(), 1)
+        self.assertEqual(Payment.objects.filter(invoice=newer).count(), 1)
 
     def test_manual_invoice_uses_next_highest_existing_number(self):
         year = timezone.now().year
@@ -43,7 +165,7 @@ class InvoiceNumberingTests(TestCase):
         Invoice.objects.filter(pk=older.pk).update(invoice_number=f'INV-{year}-0010')
         Invoice.objects.filter(pk=newer.pk).update(invoice_number=f'INV-{year}-0002')
 
-        response = self.client.post(reverse('billing:create_manual'), {
+        response = self.client.post(reverse('billing:create'), {
             'client': self.client_obj.pk,
             'description': 'Manual invoice regression',
             'amount': '3500',

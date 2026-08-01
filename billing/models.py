@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from django.db import IntegrityError
 from django.utils import timezone
@@ -23,6 +24,7 @@ class Invoice(models.Model):
     invoice_number  = models.CharField(max_length=30, unique=True, editable=False)
     document_type   = models.CharField(max_length=20, choices=DOC_TYPE, default='invoice')
     client          = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='invoices')
+    branch          = models.ForeignKey('core.Branch', null=True, blank=True, on_delete=models.SET_NULL, related_name='invoices')
     job_card        = models.OneToOneField(JobCard, on_delete=models.CASCADE,
                                            related_name='invoice', null=True, blank=True)
     date_issued     = models.DateField(auto_now_add=True)
@@ -122,6 +124,35 @@ class Invoice(models.Model):
     def get_doc_label(self):
         return dict(self.DOC_TYPE).get(self.document_type, 'Invoice')
 
+    def get_display_line_items(self):
+        if not self.job_card:
+            return []
+
+        items = []
+        for line in self.job_card.line_items.all():
+            items.append({
+                'description': line.get_description(),
+                'period': line.period_label or '—',
+                'list_rate': line.default_price or Decimal('0'),
+                'your_price': line.negotiated_price or Decimal('0'),
+                'total': (line.negotiated_price or Decimal('0')) + (line.vat_amount or Decimal('0')),
+                'is_expense': False,
+            })
+
+        from expenses.models import Expense
+        for expense in Expense.objects.filter(job_card=self.job_card, is_billable=True).order_by('expense_date', 'pk'):
+            items.append({
+                'description': f"Expense: {expense.description or expense.category.name if expense.category else 'Billable expense'}",
+                'period': expense.expense_date.strftime('%b %Y'),
+                'list_rate': Decimal('0'),
+                'your_price': expense.amount or Decimal('0'),
+                'total': expense.amount or Decimal('0'),
+                'is_expense': True,
+                'expense': expense,
+            })
+
+        return items
+
     def __str__(self):
         return f"{self.invoice_number} — {self.client.get_display_name()}"
 
@@ -136,6 +167,7 @@ class Payment(models.Model):
     received_by   = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     notes         = models.TextField(blank=True)
     created_at    = models.DateTimeField(auto_now_add=True)
+    branch = models.ForeignKey('core.Branch', null=True, blank=True, on_delete=models.SET_NULL, related_name='payments')
 
     @property
     def receipt_number(self):

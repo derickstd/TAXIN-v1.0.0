@@ -24,7 +24,7 @@
           <td>{{ inv.client.get_display_name|truncatechars:22 }}</td>
           <td style="font-size:.8rem">{{ inv.due_date }}</td>
           <td>{% if inv.days_overdue > 0 %}<span class="badge badge-overdue">{{ inv.days_overdue }}d</span>{% else %}<span class="badge badge-active">Current</span>{% endif %}</td>
-          <td class="ugx ugx-red" style="text-align:right;font-weight:700">UGX {{ inv.balance_due|floatformat:0|intcomma }}</td>
+          <td class="ugx {% if inv.balance_due > 0 %}ugx-red{% elif inv.balance_due < 0 %}ugx-green{% endif %}" style="text-align:right;font-weight:700">UGX {{ inv.balance_due|floatformat:0|intcomma }}</td>
           <td><a href="{% url 'billing:detail' inv.pk %}" class="btn btn-outline btn-sm">Pay</a></td>
         </tr>
         {% endfor %}

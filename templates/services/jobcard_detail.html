@@ -8,6 +8,20 @@
 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:.8rem">
   <div>
     <h4 class="page-title" style="margin:0"><i class="fas fa-briefcase"></i>{{ job.job_number }}</h4>
+    {% if is_duplicate_transaction %}
+    <div style="margin-top:.25rem">
+      <span class="badge badge-danger" style="font-size:.72rem" title="Marked duplicate because a similar recurring service exists in the same period and meets the duplicate-check rules.">
+        <i class="fas fa-exclamation-triangle"></i> Duplicate transaction
+      </span>
+      <span style="margin-left:.5rem;font-size:.75rem;color:#777;cursor:help" title="Duplicate detection checks same-period recurring services with monthly 15th or annual Dec 31 deadlines.">Why?</span>
+    </div>
+    {% else %}
+    <div style="margin-top:.25rem">
+      <span class="badge badge-success" style="font-size:.72rem" title="No matching duplicate transaction was found for this job card.">
+        <i class="fas fa-check-circle"></i> Not a duplicate transaction
+      </span>
+    </div>
+    {% endif %}
     <span style="color:#aaa;font-size:.78rem">
       <a href="{% url 'clients:detail' job.client.pk %}" style="color:var(--blue)">{{ job.client.get_display_name }}</a>
       &bull; {{ job.get_period_label }}
@@ -18,6 +32,8 @@
   <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
     <span class="badge badge-{{ job.priority }}" style="font-size:.72rem">{{ job.get_priority_display }}</span>
     <span class="badge badge-{{ job.status }}" style="font-size:.72rem">{{ job.get_status_display }}</span>
+    <a href="{% url 'services:edit' job.pk %}" class="btn btn-primary btn-sm"><i class="fas fa-edit"></i> Edit</a>
+    <a href="{% url 'services:delete' job.pk %}" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Delete</a>
     {% if job.invoice %}
     <a href="{% url 'billing:detail' job.invoice.pk %}" class="btn btn-gold btn-sm"><i class="fas fa-file-invoice"></i> Invoice</a>
     {% endif %}
@@ -108,8 +124,37 @@
   </div>
 
   <!-- RIGHT: Summary pinned to far right -->
-  <div style="width:210px;flex-shrink:0;margin-left:auto;align-self:start">
+  <div style="width:240px;flex-shrink:0;margin-left:auto;align-self:start">
 
+    <!-- Quick Job Summary -->
+    <div class="card card-compact mb-2">
+      <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+        <span><i class="fas fa-info-circle"></i>Quick Job Summary</span>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="toggleQuickSummary()" id="quickSummaryToggle">View more</button>
+      </div>
+      <div class="card-bd" style="padding:.5rem .8rem">
+        <div class="stat-row" style="font-size:.81rem"><span style="color:#888">Paid tasks</span><span class="fw-7">{{ paid_task_count }}</span></div>
+        <div class="stat-row" style="font-size:.81rem"><span style="color:#888">Unpaid tasks</span><span class="fw-7">{{ unpaid_task_count }}</span></div>
+        <div id="quickSummaryDetails" style="display:none;margin-top:.75rem;border-top:1px solid var(--border);padding-top:.75rem">
+          <div style="font-size:.78rem;color:#555;line-height:1.5">
+            This job is marked duplicate when another recurring service exists in the same period and matches our duplicate rules.
+          </div>
+          {% if duplicate_candidates %}
+          <div style="margin-top:.75rem">
+            <div style="font-size:.78rem;color:#888;margin-bottom:.35rem">Duplicate matches</div>
+            <ul style="padding-left:1rem;margin:0;font-size:.78rem;color:#444;list-style:disc;">
+              {% for candidate in duplicate_candidates|slice:3 %}
+              <li>{{ candidate.description }}</li>
+              {% endfor %}
+              {% if duplicate_candidates|length > 3 %}
+              <li><em>and {{ duplicate_candidates|length|add:'-3' }} more...</em></li>
+              {% endif %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
     <!-- Job + Invoice merged card -->
     <div class="card card-compact mb-2">
       <div class="card-hd"><i class="fas fa-info-circle"></i>Summary</div>
@@ -166,5 +211,14 @@ document.querySelectorAll('.tab-btn').forEach(function(btn){
     this.style.color = 'var(--blue)';
   });
 });
+
+function toggleQuickSummary() {
+  var details = document.getElementById('quickSummaryDetails');
+  var btn = document.getElementById('quickSummaryToggle');
+  if (!details || !btn) return;
+  var visible = details.style.display !== 'none';
+  details.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? 'View more' : 'View less';
+}
 </script>
 {% endblock %}

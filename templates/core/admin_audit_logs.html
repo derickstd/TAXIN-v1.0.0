@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Audit Logs{% endblock %}
+{% block nav_audit %}active{% endblock %}
+{% block content %}
+<div style="padding:2rem;max-width:1400px;margin:0 auto;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;">
+    <h1 style="margin:0;color:#1A3C6E;font-size:1.8rem;font-weight:800;">Audit Logs</h1>
+    <a href="{% url 'core:admin_export_audit_logs' %}?days={{ days_filter }}" style="background:#10b981;color:#fff;padding:.75rem 1.5rem;border-radius:8px;text-decoration:none;font-weight:700;font-size:.9rem;">
+      <i class="fas fa-download"></i> Export CSV
+    </a>
+  </div>
+
+  <!-- Search and Filter -->
+  <div style="background:#fff;border-radius:12px;padding:1.5rem;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:2rem;">
+    <form method="get" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;align-items:end;">
+      <div>
+        <label style="display:block;color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Search</label>
+        <input type="text" name="search" placeholder="Search logs..." value="{{ search_q }}" style="width:100%;padding:.75rem;border:1px solid #e5e7eb;border-radius:8px;font-size:.95rem;">
+      </div>
+      <div>
+        <label style="display:block;color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Model</label>
+        <select name="model" style="width:100%;padding:.75rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;">
+          <option value="">All Models</option>
+          <option value="user" {% if model_filter == 'user' %}selected{% endif %}>User</option>
+          <option value="company" {% if model_filter == 'company' %}selected{% endif %}>Company</option>
+          <option value="tenant" {% if model_filter == 'tenant' %}selected{% endif %}>Tenant</option>
+          <option value="audit_log" {% if model_filter == 'audit_log' %}selected{% endif %}>Audit Log</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Action</label>
+        <select name="action" style="width:100%;padding:.75rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;">
+          <option value="">All Actions</option>
+          <option value="CREATE" {% if action_filter == 'CREATE' %}selected{% endif %}>CREATE</option>
+          <option value="UPDATE" {% if action_filter == 'UPDATE' %}selected{% endif %}>UPDATE</option>
+          <option value="DELETE" {% if action_filter == 'DELETE' %}selected{% endif %}>DELETE</option>
+          <option value="READ" {% if action_filter == 'READ' %}selected{% endif %}>READ</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Days</label>
+        <select name="days" style="width:100%;padding:.75rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;">
+          <option value="7" {% if days_filter == '7' %}selected{% endif %}>Last 7 Days</option>
+          <option value="30" {% if days_filter == '30' %}selected{% endif %}>Last 30 Days</option>
+          <option value="90" {% if days_filter == '90' %}selected{% endif %}>Last 90 Days</option>
+          <option value="365" {% if days_filter == '365' %}selected{% endif %}>Last Year</option>
+        </select>
+      </div>
+      <button type="submit" style="background:#1A3C6E;color:#fff;border:none;padding:.75rem 1.5rem;border-radius:8px;font-weight:700;cursor:pointer;width:100%;">
+        <i class="fas fa-search"></i> Filter
+      </button>
+    </form>
+  </div>
+
+  <div style="background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;">
+      <thead style="background:#f3f4f6;border-bottom:1px solid #e5e7eb;">
+        <tr>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Timestamp</th>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Model</th>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Object ID</th>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Action</th>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Changed By</th>
+          <th style="padding:1rem;text-align:left;font-weight:700;color:#374151;font-size:.9rem;">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr style="border-bottom:1px solid #e5e7eb;">
+          <td style="padding:1rem;color:#6b7280;font-size:.85rem;">{{ log.changed_at|date:"M d, Y H:i" }}</td>
+          <td style="padding:1rem;color:#374151;font-weight:600;">{{ log.model_name }}</td>
+          <td style="padding:1rem;color:#374151;font-family:monospace;font-size:.85rem;">{{ log.object_id }}</td>
+          <td style="padding:1rem;">
+            {% if log.action == 'CREATE' %}<span style="background:#d1fae5;color:#047857;padding:.25rem .75rem;border-radius:9999px;font-size:.85rem;font-weight:600;">CREATE</span>
+            {% elif log.action == 'UPDATE' %}<span style="background:#dbeafe;color:#0c4a6e;padding:.25rem .75rem;border-radius:9999px;font-size:.85rem;font-weight:600;">UPDATE</span>
+            {% elif log.action == 'DELETE' %}<span style="background:#fee2e2;color:#dc2626;padding:.25rem .75rem;border-radius:9999px;font-size:.85rem;font-weight:600;">DELETE</span>
+            {% elif log.action == 'READ' %}<span style="background:#f3e8ff;color:#7c3aed;padding:.25rem .75rem;border-radius:9999px;font-size:.85rem;font-weight:600;">READ</span>
+            {% endif %}
+          </td>
+          <td style="padding:1rem;color:#374151;">{{ log.changed_by.username|default:"System" }}</td>
+          <td style="padding:1rem;color:#6b7280;font-size:.85rem;">{{ log.notes }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" style="padding:2rem;text-align:center;color:#6b7280;">No audit logs found</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

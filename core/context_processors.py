@@ -3,7 +3,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def global_context(request):
-    ctx = {'firm_name': 'Taxman256', 'firm_phone': '+256785230670', 'firm_email': 'taxissues.go@gmail.com'}
+    ctx = {'firm_name': 'Taxin', 'firm_phone': '+256785230670', 'firm_email': 'taxissues.go@gmail.com'}
     if not request.user.is_authenticated:
         return ctx
     try:
@@ -21,3 +21,4 @@ def global_context(request):
     except Exception:
         logger.exception('global_context failed')
     return ctx
+

@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Delete Invoice{% endblock %}
+{% block nav_inv %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">Delete Invoice</li>{% endblock %}
+{% block content %}
+<div class="page-hdr">
+  <h4 class="page-title"><i class="fas fa-trash"></i> Delete Invoice</h4>
+</div>
+<div class="card-box card-compact">
+  <div class="card-body">
+    <p>Are you sure you want to delete invoice <strong>{{ invoice.invoice_number }}</strong> for <strong>{{ invoice.client.get_display_name }}</strong>?</p>
+    <form method="post">{% csrf_token %}
+      <div class="flex gap-2 mt-3">
+        <button type="submit" class="btn btn-danger">Yes, delete</button>
+        <a href="{% url 'billing:detail' invoice.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

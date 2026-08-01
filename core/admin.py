@@ -1,12 +1,12 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, AuditLog, Company, Tenant
+from .models import User, AuditLog, Company, Tenant, Branch
 from .models import ModelVisibility, UserModelPermission
 
 
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
-    list_display = ['name', 'slug', 'registration_number', 'tin', 'active', 'owner']
+    list_display = ['name', 'slug', 'registration_number', 'tin', 'active', 'owner', 'default_branch']
     search_fields = ['name', 'slug', 'tin', 'registration_number', 'email']
     list_filter = ['active']
     prepopulated_fields = {'slug': ('name',)}
@@ -21,7 +21,7 @@ class UserModelPermissionInline(admin.TabularInline):
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
     fieldsets = UserAdmin.fieldsets + (
-        ('Taxman256', {'fields': ('company', 'role', 'phone_whatsapp', 'email_notify',
+        ('Taxin', {'fields': ('company', 'role', 'phone_whatsapp', 'email_notify',
                                   'is_active_staff', 'date_joined_firm',
                                   'receive_debt_alerts', 'receive_task_reminders',
                                   'ui_theme')}),
@@ -81,3 +81,11 @@ class TenantAdmin(admin.ModelAdmin):
     list_filter = ['status']
     readonly_fields = ['db_alias', 'db_path', 'status', 'created_by', 'last_error', 'created_at', 'updated_at']
     search_fields = ['company__name', 'db_alias']
+
+
+@admin.register(Branch)
+class BranchAdmin(admin.ModelAdmin):
+    list_display = ['company', 'name', 'is_active']
+    search_fields = ['company__name', 'name', 'slug']
+    list_filter = ['company', 'is_active']
+

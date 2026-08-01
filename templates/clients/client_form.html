@@ -3,6 +3,36 @@
 {% block nav_client_new %}active{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">{{ title }}</li>{% endblock %}
 {% block content %}
+{% if show_duplicate_modal %}
+<div class="modal-overlay open" id="duplicateModal" style="z-index:1300">
+  <div class="modal-box" style="max-width:640px">
+    <div class="modal-hd">
+      <h5><i class="fas fa-exclamation-triangle"></i> Possible duplicate client</h5>
+      <button type="button" class="modal-close" onclick="document.getElementById('duplicateModal').classList.remove('open')">&times;</button>
+    </div>
+    <div class="card-body">
+      <p style="margin-bottom:.8rem;font-size:.9rem">The system found existing clients with similar details. Review them before creating a new client.</p>
+      <ul style="margin:0 0 1rem 1.1rem;padding:0;font-size:.88rem">
+        {% for client_candidate, score, reason in duplicates %}
+        <li style="margin-bottom:.35rem"><strong>{{ client_candidate.get_display_name }}</strong> — {{ reason }} <a href="{% url 'clients:detail' client_candidate.pk %}" target="_blank">View</a></li>
+        {% endfor %}
+      </ul>
+      <form method="post">
+        {% csrf_token %}
+        {% if orig_post %}
+          {% for k, v in orig_post.items %}
+            <input type="hidden" name="{{ k }}" value="{{ v }}" />
+          {% endfor %}
+        {% endif %}
+        <div class="d-flex gap-2">
+          <button type="submit" name="force_create" value="1" class="btn btn-success"><i class="fas fa-check"></i> Force create</button>
+          <a href="{% url 'clients:list' %}" class="btn btn-outline">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
 <div class="page-header">
   <h4 class="page-title"><i class="fas fa-user-plus"></i>{{ title }}</h4>
 </div>

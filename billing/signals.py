@@ -9,13 +9,11 @@ def recalc_client_outstanding(client):
     Sum of (grand_total - amount_paid) for every unpaid invoice.
     This is the single correct formula — never mixes different sets.
     """
-    unpaid = Invoice.objects.filter(
-        client=client
-    ).exclude(status__in=['paid', 'written_off'])
+    invoices = Invoice.objects.filter(client=client).exclude(status__in=['written_off'])
 
     balance = sum(
-        max(Decimal('0'), inv.grand_total - inv.amount_paid)
-        for inv in unpaid
+        inv.grand_total - inv.amount_paid
+        for inv in invoices
     )
 
     if client.total_outstanding != balance:
@@ -30,11 +28,10 @@ update_client_outstanding = recalc_client_outstanding
 def _sync_invoice_after_payment(invoice):
     """
     Recalculate amount_paid from actual Payment records (source of truth),
-    cap it at grand_total so balance_due never goes negative,
+    allow overpayment when payment records exceed grand_total,
     then update status. If fully paid, cascade to job card.
     """
     total_paid = sum(p.amount for p in invoice.payments.all())
-    total_paid = min(total_paid, invoice.grand_total)
     total_paid = max(Decimal('0'), total_paid)
 
     Invoice.objects.filter(pk=invoice.pk).update(amount_paid=total_paid)

@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Delete Job Card{% endblock %}
+{% block nav_jobs %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'services:list' %}">Job Cards</a></li><li class="active">Delete Job Card</li>{% endblock %}
+{% block content %}
+<div class="page-hdr">
+  <h4 class="page-title"><i class="fas fa-trash"></i> Delete Job Card</h4>
+</div>
+<div class="card-box card-compact">
+  <div class="card-body">
+    <p>Are you sure you want to delete job card <strong>{{ job.job_number }}</strong> for <strong>{{ job.client.get_display_name }}</strong>?</p>
+    {% if job.invoice %}
+      <p class="text-danger">This job has an associated invoice. The invoice will also be deleted if it has no payments recorded.</p>
+    {% endif %}
+    <form method="post">{% csrf_token %}
+      <div class="flex gap-2 mt-3">
+        <button type="submit" class="btn btn-danger">Yes, delete</button>
+        <a href="{% url 'services:detail' job.pk %}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

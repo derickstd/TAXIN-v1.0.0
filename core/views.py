@@ -1,12 +1,14 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.hashers import make_password
 from django.http import JsonResponse
 import logging
-from .models import User, Company, AuditLog
+from .models import User, Company, AuditLog, Branch
 from django import forms
+from django.forms.models import inlineformset_factory
 from django.utils.text import slugify
 from .export_utils import export_to_excel, export_to_pdf, paginate_list
 
@@ -39,6 +41,22 @@ class UserSettingsForm(forms.ModelForm):
             'first_name', 'last_name', 'email_notify', 'phone_whatsapp',
             'receive_debt_alerts', 'receive_task_reminders', 'ui_theme',
         ]
+
+
+class CompanySettingsForm(forms.ModelForm):
+    class Meta:
+        model = Company
+        fields = ['name', 'registration_number', 'tin', 'email', 'phone', 'address', 'default_branch']
+        widgets = {
+            'address': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['default_branch'].queryset = self.instance.branches.all()
+        else:
+            self.fields['default_branch'].queryset = Branch.objects.none()
 
 
 class CompanySignupForm(forms.Form):
@@ -247,6 +265,19 @@ def signup(request):
             )
             company.owner = user
             company.save()
+            # Create a default branch for the new company
+            try:
+                default_branch = Branch.objects.create(
+                    company=company,
+                    name='Main',
+                    slug=f'{company.slug}-main',
+                    is_active=True
+                )
+                company.default_branch = default_branch
+                company.save(update_fields=['default_branch'])
+            except Exception:
+                logging.getLogger(__name__).exception('Failed to create default branch for company %s', company.slug)
+
             # Record company creation in audit log for admin visibility
             try:
                 AuditLog.objects.create(
@@ -343,7 +374,6 @@ def user_create(request):
                 f'password = {p}. '
                 f'Ask them to change it after first login.'
             )
-            return redirect('core:users')
     else:
         form = UserForm()
     role_guide = [
@@ -355,6 +385,71 @@ def user_create(request):
     ]
     return render(request, 'core/user_form.html', {
         'form': form, 'title': 'New User', 'is_new': True, 'role_guide': role_guide,
+    })
+
+
+@ensure_csrf_cookie
+@csrf_protect
+@never_cache
+def custom_login(request):
+    """Custom login that validates tenant is ready before allowing login."""
+    from django.contrib.auth import authenticate, login
+
+    login_company_slug = request.session.get('login_company_slug', '')
+
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password')
+        company_slug = request.POST.get('company_slug', '').strip().lower()
+
+        # Accept explicit slug field first, then fallback to username@slug notation.
+        if company_slug:
+            login_company_slug = company_slug
+            request.session['login_company_slug'] = login_company_slug
+        elif '@' in username:
+            username, slug_part = username.split('@', 1)
+            username = username.strip()
+            slug_part = slug_part.strip().lower()
+            if slug_part:
+                login_company_slug = slug_part
+                request.session['login_company_slug'] = login_company_slug
+
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None:
+            if user.company_id:
+                try:
+                    tenant = user.company.tenant
+                    if tenant.status != 'ready':
+                        messages.error(
+                            request,
+                            f'Your company database is still being set up ({tenant.status}). '
+                            f'Please try again in a moment.'
+                        )
+                        return render(request, 'core/login.html', {
+                            'company_slug': login_company_slug,
+                        })
+                except Exception as e:
+                    messages.error(
+                        request,
+                        'Your company database is not yet initialized. Please contact support.'
+                    )
+                    logging.warning('Tenant check failed for user %s: %s', username, e)
+                    return render(request, 'core/login.html', {
+                        'company_slug': login_company_slug,
+                    })
+
+            login(request, user)
+            next_url = request.POST.get('next') or request.GET.get('next', 'dashboard:index')
+            return redirect(next_url)
+        else:
+            messages.error(request, 'Invalid username or password.')
+            return render(request, 'core/login.html', {
+                'company_slug': login_company_slug,
+            })
+
+    return render(request, 'core/login.html', {
+        'company_slug': login_company_slug,
     })
 
 
@@ -422,17 +517,39 @@ def user_settings(request):
         ('ocean',    'Ocean Teal',    'A fresh cyan and teal palette inspired by coastal clarity.'),
         ('dark',     'Dark Mode',     'A polished night mode with luminous accents and deep contrast.'),
     ]
+    company = getattr(request.user, 'company', None)
+    can_manage_branches = company and request.user.is_manager_or_admin()
+    BranchFormSet = inlineformset_factory(
+        Company, Branch, fields=('name', 'slug', 'address', 'phone', 'is_active'),
+        extra=1, can_delete=True, widgets={
+            'address': forms.Textarea(attrs={'rows': 2}),
+        }
+    )
+
     if request.method == 'POST':
-        form = UserSettingsForm(request.POST, instance=request.user)
-        if form.is_valid():
-            form.save()
+        user_form = UserSettingsForm(request.POST, instance=request.user)
+        company_form = CompanySettingsForm(request.POST, instance=company) if company else None
+        branch_formset = BranchFormSet(request.POST, instance=company) if can_manage_branches else None
+        if user_form.is_valid() and (company_form is None or company_form.is_valid()) and (branch_formset is None or branch_formset.is_valid()):
+            user_form.save()
+            if company_form:
+                company_form.save()
+            if branch_formset:
+                branch_formset.save()
             messages.success(request, 'Your settings were updated.')
             return redirect('core:settings')
     else:
-        form = UserSettingsForm(instance=request.user)
+        user_form = UserSettingsForm(instance=request.user)
+        company_form = CompanySettingsForm(instance=company) if company else None
+        branch_formset = BranchFormSet(instance=company) if can_manage_branches else None
+
     return render(request, 'core/settings.html', {
-        'form': form,
+        'form': user_form,
+        'company_form': company_form,
+        'branch_formset': branch_formset,
+        'can_manage_branches': can_manage_branches,
         'theme_guide': theme_guide,
+        'company': company,
     })
 
 

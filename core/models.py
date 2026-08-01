@@ -15,12 +15,35 @@ class Company(models.Model):
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     owner = models.ForeignKey('core.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='owned_companies')
+    default_branch = models.ForeignKey('core.Branch', null=True, blank=True,
+                                       on_delete=models.SET_NULL,
+                                       related_name='default_for_company')
 
     class Meta:
         ordering = ['name']
 
     def __str__(self):
         return self.name
+
+
+class Branch(models.Model):
+    """
+    Company branches/locations. Records may be assigned to a branch
+    to enable per-branch reporting and selection in forms.
+    """
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='branches')
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=100, blank=True)
+    address = models.TextField(blank=True)
+    phone = models.CharField(max_length=50, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['company', 'name']
+
+    def __str__(self):
+        return f"{self.company.slug} — {self.name}"
 
 
 class Tenant(models.Model):

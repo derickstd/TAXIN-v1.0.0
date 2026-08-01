@@ -33,15 +33,15 @@ EXPENSE_CATEGORIES = [
 ]
 
 class Command(BaseCommand):
-    help = 'Set up Taxman256 system with initial data'
+    help = 'Set up Taxin system with initial data'
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS('Setting up Taxman256...'))
+        self.stdout.write(self.style.SUCCESS('Setting up Taxin...'))
         self._setup_services()
         self._setup_expense_categories()
         self._setup_admin()
         self._setup_sample_data()
-        self.stdout.write(self.style.SUCCESS('\n✅ Taxman256 setup complete! Login: admin / admin123'))
+        self.stdout.write(self.style.SUCCESS('\n✅ Taxin setup complete! Login: admin / admin123'))
 
     def _setup_services(self):
         from services.models import ServiceType
@@ -58,7 +58,7 @@ class Command(BaseCommand):
     def _setup_admin(self):
         if not User.objects.filter(username='admin').exists():
             User.objects.create_superuser(
-                username='admin', email='admin@taxman256.ug', password='admin123',
+                username='admin', email='admin@Taxin.ug', password='admin123',
                 first_name='System', last_name='Admin', role='admin',
                 is_active_staff=True,
             )
@@ -68,13 +68,13 @@ class Command(BaseCommand):
             User.objects.create_user(
                 username='officer1', password='pass1234',
                 first_name='Grace', last_name='Nakato', role='tax_officer',
-                email='grace@taxman256.ug', is_active_staff=True,
+                email='grace@Taxin.ug', is_active_staff=True,
             )
         if not User.objects.filter(username='manager1').exists():
             User.objects.create_user(
                 username='manager1', password='pass1234',
                 first_name='Samuel', last_name='Ssemakula', role='manager',
-                email='samuel@taxman256.ug', is_active_staff=True,
+                email='samuel@Taxin.ug', is_active_staff=True,
                 phone_whatsapp='+256785230670',
             )
 
@@ -161,3 +161,4 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(f'  ✓ Sample data created ({len(created_clients)} clients, job cards, invoices, expenses)')
+

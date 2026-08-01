@@ -26,6 +26,7 @@ class Client(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_clients')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    branch = models.ForeignKey('core.Branch', null=True, blank=True, on_delete=models.SET_NULL, related_name='clients')
 
     class Meta:
         ordering = ['-created_at']

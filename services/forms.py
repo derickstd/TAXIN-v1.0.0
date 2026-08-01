@@ -1,6 +1,6 @@
 from django import forms
 from django.utils import timezone
-from django.db.models import Count
+from django.db.models import Count, Q
 from .models import JobCard, JobCardLineItem, ServiceType
 from clients.models import Client
 from core.models import User
@@ -28,7 +28,11 @@ class JobCardForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['client'].queryset = Client.objects.order_by('full_name').annotate(prev_jobs=Count('job_cards'))
+        self.fields['client'].queryset = Client.objects.order_by('full_name').annotate(
+            prev_jobs=Count('job_cards'),
+            total_invoices=Count('invoices'),
+            unpaid_invoices=Count('invoices', filter=Q(invoices__status__in=['sent','partially_paid','overdue']))
+        )
         self.fields['assigned_to'].queryset = User.objects.filter(
             is_active_staff=True, is_active=True).order_by('first_name')
         self.fields['assigned_to'].required = False

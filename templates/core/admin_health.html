@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}System Health{% endblock %}
+{% block content %}
+<div style="padding:2rem;max-width:1000px;margin:0 auto;">
+  <h1 style="margin:0 0 2rem;color:#1A3C6E;font-size:1.8rem;font-weight:800;">System Health & Diagnostics</h1>
+
+  <!-- Core Services Status -->
+  <div style="background:#fff;border-radius:12px;padding:2rem;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:2rem;">
+    <h3 style="margin:0 0 1.5rem;color:#1A3C6E;font-weight:800;font-size:1.1rem;">Core Services</h3>
+    
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:1rem;color:#6b7280;font-weight:600;">Database</td>
+        <td style="padding:1rem;text-align:right;">
+          <span style="background:#d1fae5;color:#047857;padding:.25rem .75rem;border-radius:9999px;font-size:.85rem;font-weight:600;">
+            ✓ {{ health.database }}
+          </span>
+        </td>
+      </tr>
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:1rem;color:#6b7280;font-weight:600;">Authentication System</td>
+        <td style="padding:1rem;text-align:right;">
+          <span style="background:#d1fae5;color:#047857;padding:.25rem .75rem;border-radius:9999px;font-size:.85rem;font-weight:600;">
+            ✓ {{ health.auth_system }}
+          </span>
+        </td>
+      </tr>
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:1rem;color:#6b7280;font-weight:600;">Audit Logging</td>
+        <td style="padding:1rem;text-align:right;">
+          <span style="background:#d1fae5;color:#047857;padding:.25rem .75rem;border-radius:9999px;font-size:.85rem;font-weight:600;">
+            ✓ {{ health.audit_logging }}
+          </span>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Configuration -->
+  <div style="background:#fff;border-radius:12px;padding:2rem;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:2rem;">
+    <h3 style="margin:0 0 1.5rem;color:#1A3C6E;font-weight:800;font-size:1.1rem;">Configuration</h3>
+    
+    <table style="width:100%;border-collapse:collapse;font-size:.95rem;">
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:.75rem;color:#6b7280;font-weight:600;width:40%;">Email Backend</td>
+        <td style="padding:.75rem;color:#374151;font-family:monospace;word-break:break-word;">{{ health.email_backend }}</td>
+      </tr>
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:.75rem;color:#6b7280;font-weight:600;">Debug Mode</td>
+        <td style="padding:.75rem;color:#374151;">
+          {% if health.debug_mode %}
+            <span style="background:#fee2e2;color:#dc2626;padding:.25rem .75rem;border-radius:4px;font-size:.85rem;font-weight:600;">ON (Development)</span>
+          {% else %}
+            <span style="background:#d1fae5;color:#047857;padding:.25rem .75rem;border-radius:4px;font-size:.85rem;font-weight:600;">OFF (Production)</span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:.75rem;color:#6b7280;font-weight:600;">Allowed Hosts</td>
+        <td style="padding:.75rem;color:#374151;">{{ health.allowed_hosts }} configured</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Data Summary -->
+  <div style="background:#fff;border-radius:12px;padding:2rem;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:2rem;">
+    <h3 style="margin:0 0 1.5rem;color:#1A3C6E;font-weight:800;font-size:1.1rem;">Data Summary</h3>
+    
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;">
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #1A3C6E;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Companies</div>
+        <div style="font-size:1.6rem;font-weight:800;color:#1A3C6E;">{{ health.total_companies }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #10b981;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Users</div>
+        <div style="font-size:1.6rem;font-weight:800;color:#10b981;">{{ health.total_users }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #f59e0b;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Tenants</div>
+        <div style="font-size:1.6rem;font-weight:800;color:#f59e0b;">{{ health.total_tenants }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #8b5cf6;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Audit Logs</div>
+        <div style="font-size:1.6rem;font-weight:800;color:#8b5cf6;">{{ health.audit_logs_count }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  {% if health.pending_tenants > 0 or health.failed_tenants > 0 %}
+  <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:1.5rem;border-radius:8px;margin-bottom:2rem;">
+    <h4 style="margin:0 0 1rem;color:#92400e;font-weight:700;font-size:.95rem;">⚠️ Alerts</h4>
+    <ul style="margin:0;padding:0 0 0 1.5rem;color:#92400e;font-size:.95rem;">
+      {% if health.pending_tenants > 0 %}
+      <li style="margin-bottom:.5rem;">
+        <strong>{{ health.pending_tenants }}</strong> pending tenant(s) awaiting approval
+        <a href="{% url 'core:admin_tenants' %}?status=pending" style="color:#92400e;font-weight:700;text-decoration:underline;">Review →</a>
+      </li>
+      {% endif %}
+      {% if health.failed_tenants > 0 %}
+      <li>
+        <strong>{{ health.failed_tenants }}</strong> failed tenant(s) need attention
+        <a href="{% url 'core:admin_tenants' %}?status=failed" style="color:#92400e;font-weight:700;text-decoration:underline;">Review →</a>
+      </li>
+      {% endif %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div style="display:flex;gap:1rem;">
+    <a href="{% url 'core:admin_dashboard' %}" style="background:#6b7280;color:#fff;padding:.75rem 1.5rem;border-radius:8px;text-decoration:none;font-weight:700;">
+      ← Back to Dashboard
+    </a>
+  </div>
+</div>
+{% endblock %}

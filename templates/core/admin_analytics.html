@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}System Analytics{% endblock %}
+{% block content %}
+<div style="padding:2rem;max-width:1400px;margin:0 auto;">
+  <h1 style="margin:0 0 2rem;color:#1A3C6E;font-size:1.8rem;font-weight:800;">System Analytics</h1>
+
+  <!-- Company Statistics -->
+  <div style="background:#fff;border-radius:12px;padding:2rem;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:2rem;">
+    <h3 style="margin:0 0 1.5rem;color:#1A3C6E;font-weight:800;font-size:1.2rem;border-bottom:2px solid #e5e7eb;padding-bottom:1rem;">Companies</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #1A3C6E;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Total Companies</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#1A3C6E;">{{ analytics.total_companies }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #10b981;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Active Companies</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#10b981;">{{ analytics.active_companies }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #f59e0b;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Last 7 Days</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#f59e0b;">{{ analytics.companies_last_7days }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #3b82f6;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Last 30 Days</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#3b82f6;">{{ analytics.companies_last_30days }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Statistics -->
+  <div style="background:#fff;border-radius:12px;padding:2rem;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:2rem;">
+    <h3 style="margin:0 0 1.5rem;color:#1A3C6E;font-weight:800;font-size:1.2rem;border-bottom:2px solid #e5e7eb;padding-bottom:1rem;">Users</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #1A3C6E;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Total Users</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#1A3C6E;">{{ analytics.total_users }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #10b981;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Active Users</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#10b981;">{{ analytics.active_users }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #8b5cf6;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Admin Users</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#8b5cf6;">{{ analytics.admin_users }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #f59e0b;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Last 7 Days</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#f59e0b;">{{ analytics.users_last_7days }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #3b82f6;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Last 30 Days</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#3b82f6;">{{ analytics.users_last_30days }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tenant Statistics -->
+  <div style="background:#fff;border-radius:12px;padding:2rem;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:2rem;">
+    <h3 style="margin:0 0 1.5rem;color:#1A3C6E;font-weight:800;font-size:1.2rem;border-bottom:2px solid #e5e7eb;padding-bottom:1rem;">Tenants</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #1A3C6E;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Total Tenants</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#1A3C6E;">{{ analytics.total_tenants }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #10b981;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Ready Tenants</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#10b981;">{{ analytics.ready_tenants }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #f59e0b;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Pending Tenants</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#f59e0b;">{{ analytics.pending_tenants }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #ef4444;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Failed Tenants</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#ef4444;">{{ analytics.failed_tenants }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #94a3b8;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Suspended Tenants</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#94a3b8;">{{ analytics.suspended_tenants }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit Log Statistics -->
+  <div style="background:#fff;border-radius:12px;padding:2rem;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:2rem;">
+    <h3 style="margin:0 0 1.5rem;color:#1A3C6E;font-weight:800;font-size:1.2rem;border-bottom:2px solid #e5e7eb;padding-bottom:1rem;">Audit Logs</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:2rem;">
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #1A3C6E;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Total Logs</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#1A3C6E;">{{ analytics.total_audit_logs }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #f59e0b;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Last 7 Days</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#f59e0b;">{{ analytics.audit_logs_7days }}</div>
+      </div>
+      <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #3b82f6;">
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Last 30 Days</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#3b82f6;">{{ analytics.audit_logs_30days }}</div>
+      </div>
+    </div>
+
+    <!-- Activity by Model -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2rem;">
+      <div>
+        <h4 style="color:#374151;font-weight:700;margin:0 0 1rem;font-size:.95rem;">Activity by Model</h4>
+        <table style="width:100%;font-size:.9rem;">
+          <tr style="border-bottom:1px solid #e5e7eb;">
+            <th style="padding:.5rem;text-align:left;color:#6b7280;font-weight:600;">Model</th>
+            <th style="padding:.5rem;text-align:right;color:#6b7280;font-weight:600;">Count</th>
+          </tr>
+          {% for entry in analytics.logs_by_model %}
+          <tr style="border-bottom:1px solid #f3f4f6;">
+            <td style="padding:.5rem;color:#374151;font-weight:500;">{{ entry.model_name }}</td>
+            <td style="padding:.5rem;text-align:right;color:#6b7280;font-weight:600;">{{ entry.count }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+
+      <div>
+        <h4 style="color:#374151;font-weight:700;margin:0 0 1rem;font-size:.95rem;">Activity by Action</h4>
+        <table style="width:100%;font-size:.9rem;">
+          <tr style="border-bottom:1px solid #e5e7eb;">
+            <th style="padding:.5rem;text-align:left;color:#6b7280;font-weight:600;">Action</th>
+            <th style="padding:.5rem;text-align:right;color:#6b7280;font-weight:600;">Count</th>
+          </tr>
+          {% for entry in analytics.logs_by_action %}
+          <tr style="border-bottom:1px solid #f3f4f6;">
+            <td style="padding:.5rem;color:#374151;font-weight:500;">{{ entry.action }}</td>
+            <td style="padding:.5rem;text-align:right;color:#6b7280;font-weight:600;">{{ entry.count }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:1rem;margin-top:2rem;">
+    <a href="{% url 'core:admin_dashboard' %}" style="background:#6b7280;color:#fff;padding:.75rem 1.5rem;border-radius:8px;text-decoration:none;font-weight:700;">
+      ← Back to Dashboard
+    </a>
+  </div>
+</div>
+{% endblock %}

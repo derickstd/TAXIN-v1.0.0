@@ -51,7 +51,6 @@ def send_task_reminders():
 
 def generate_monthly_jobcards():
     from services.models import ClientServiceSubscription, JobCard, JobCardLineItem
-    from billing.models import Invoice
     from core.models import User
     import calendar
     today = timezone.now().date()
@@ -79,14 +78,6 @@ def generate_monthly_jobcards():
             default_price=sub.service_type.default_price, negotiated_price=sub.negotiated_price,
             status='not_handled', period_label=label)
         job.update_total()
-        if new:
-            try:
-                Invoice.objects.create(client=sub.client, job_card=job,
-                    due_date=job.due_date or (today + timezone.timedelta(days=14)),
-                    subtotal=sub.negotiated_price, vat_total=0, grand_total=sub.negotiated_price,
-                    status='draft', created_by=admin)
-            except Exception:
-                pass
         created += 1
     logger.info(f"Monthly job cards: {created} created for {label}")
 

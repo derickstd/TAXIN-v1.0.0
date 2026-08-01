@@ -1,5 +1,5 @@
 """
-Email utility functions for Taxman256 PMS
+Email utility functions for Taxin PMS
 Handles all email sending with HTML templates
 """
 from django.core.mail import EmailMultiAlternatives
@@ -74,7 +74,7 @@ def send_invoice_email(invoice):
         logger.warning(f"No email for client {invoice.client.client_id}")
         return False
     
-    subject = f"Invoice {invoice.invoice_number} from Taxman256"
+    subject = f"Invoice {invoice.invoice_number} from Taxin"
     context = {'invoice': invoice}
     
     return send_email(
@@ -148,7 +148,7 @@ def send_welcome_email(client):
         logger.warning(f"No email for client {client.client_id}")
         return False
     
-    subject = "Welcome to Taxman256 Professional Management Services"
+    subject = "Welcome to Taxin Professional Management Services"
     context = {'client': client}
     
     return send_email(
@@ -231,3 +231,4 @@ def send_bulk_compliance_reminders(days_ahead=15):
     
     logger.info(f"Bulk compliance reminders sent: {sent_count} emails ({days_ahead} days ahead)")
     return sent_count
+

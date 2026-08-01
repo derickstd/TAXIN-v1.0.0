@@ -7,6 +7,12 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         import os
+        import sys
+
+        # Skip scheduler startup during manage.py checks and other non-server commands.
+        if 'check' in sys.argv or 'migrate' in sys.argv or 'makemigrations' in sys.argv:
+            return
+
         # Prevent double-start in Django's auto-reloader (dev) and in manage.py commands
         if os.environ.get('RUN_MAIN') == 'true' or not os.environ.get('DJANGO_SETTINGS_MODULE'):
             return
@@ -89,7 +95,7 @@ class CoreConfig(AppConfig):
         )
 
         scheduler.start()
-        log.info("✅ Taxman256 scheduler started — 7 jobs registered")
+        log.info("✅ Taxin scheduler started — 7 jobs registered")
 
 
 def _mark_overdue_invoices():
@@ -103,3 +109,4 @@ def _mark_overdue_invoices():
     if updated:
         import logging
         logging.getLogger(__name__).info(f"Marked {updated} invoices as overdue")
+

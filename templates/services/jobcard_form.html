@@ -19,7 +19,10 @@
   </div>
 </div>
 <div id="floatingSummary" class="card card-compact floating-summary">
-  <div class="card-hd"><i class="fas fa-chart-pie"></i>Quick Job Summary</div>
+  <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+    <span><i class="fas fa-chart-pie"></i>Quick Job Summary</span>
+    <button type="button" class="btn btn-sm btn-outline" id="summaryToggleBtn" onclick="toggleFloatingSummary()">View more</button>
+  </div>
   <div class="card-bd">
     <div style="font-size:.82rem;color:#666">Services <span style="font-weight:700;margin-left:.6rem" id="floatSumCount">0 services</span></div>
     <div style="font-size:.82rem;color:#666;margin-top:.2rem">Subtotal <span style="font-weight:700;margin-left:.6rem" id="floatSumTotal">UGX 0</span></div>
@@ -29,8 +32,82 @@
     </div>
     <div class="form-hint mt-2" style="margin-top:.4rem;font-size:.78rem" id="floatSummaryInvoiceNote"></div>
     <div class="form-hint mt-2 text-danger" style="margin-top:.3rem;font-size:.78rem;display:none" id="floatClientHistoryNote"></div>
+    <div id="floatingSummaryDetails" style="display:none;margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border);font-size:.8rem;color:#444;">
+      <p style="margin:0 .1rem .6rem 0">View more details about the current job summary, including how the invoice is handled and whether the selected services are ready for billing.</p>
+      <div id="clientInvoiceSummary" style="margin-bottom:.85rem;font-size:.85rem;color:#333;">
+        <div><strong>Client invoices:</strong> <span id="clientInvoiceCount">0</span> issued, <span id="clientUnpaidCount">0</span> unpaid</div>
+        <div id="clientInvoiceBreakdown" style="margin-top:.3rem;color:#555;">Select a client to show the latest billing summary.</div>
+      </div>
+      <div id="duplicateSummary" style="margin-bottom:.85rem;font-size:.85rem;color:#333;">
+        <strong>Possible duplicate transactions</strong>
+        {% if duplicate_similar %}
+        <ul style="margin:0.5rem 0 0 1rem;padding-left:1rem;color:#555;">
+          {% for item in duplicate_similar %}
+          <li style="margin-bottom:.4rem;">
+            <strong>{{ item.type|title }}</strong>: {{ item.description }}{% if item.due_date %} — Due {{ item.due_date }}{% elif item.date %} — Date {{ item.date }}{% endif %}
+            {% if item.type == 'invoice' %}
+              <a href="/billing/{{ item.object.pk }}/" target="_blank">View Invoice</a>
+            {% elif item.type == 'job_card' %}
+              <a href="/services/{{ item.object.pk }}/" target="_blank">View Job</a>
+            {% elif item.type == 'compliance_deadline' %}
+              <a href="/compliance/{{ item.object.pk }}/" target="_blank">View Deadline</a>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div style="margin-top:.5rem;color:#555;">No duplicate transactions detected yet. Submit the job card to verify after selecting service and period.</div>
+        {% endif %}
+      </div>
+      <ul style="padding-left:1rem;margin:0;list-style:disc;">
+        <li>Toggle invoice creation on the left panel to control whether billing is generated automatically.</li>
+        <li>Service totals update live as you add, remove, or edit line items.</li>
+        <li>A duplicate warning appears if the selected service and period match an existing recurring transaction.</li>
+      </ul>
+    </div>
   </div>
 </div>
+{% if duplicate_warning %}
+<div class="modal-overlay open" id="duplicateModal" style="z-index:1200">
+  <div class="modal-box" style="max-width:620px">
+    <div class="modal-hd">
+      <h5><i class="fas fa-exclamation-triangle"></i> Possible duplicate transaction</h5>
+      <button type="button" class="modal-close" onclick="document.getElementById('duplicateModal').classList.remove('open')">&times;</button>
+    </div>
+    <div class="card-bd">
+      <p style="margin-bottom:.8rem;font-size:.9rem">The system found similar recurring transactions for this client and period. Review them before creating a new one.</p>
+      <ul style="margin:0 0 1rem 1.1rem;padding:0;font-size:.88rem">
+        {% for item in duplicate_similar %}
+        <li style="margin-bottom:.35rem">
+          <strong>{{ item.type|title }}</strong>: {{ item.description }}{% if item.due_date %} — Due {{ item.due_date }}{% elif item.date %} — Date {{ item.date }}{% endif %}
+          {% if item.type == 'invoice' %}
+            <a href="/billing/{{ item.object.pk }}/" target="_blank">View Invoice</a>
+          {% elif item.type == 'job_card' %}
+            <a href="/services/{{ item.object.pk }}/" target="_blank">View Job</a>
+          {% elif item.type == 'compliance_deadline' %}
+            <a href="/compliance/{{ item.object.pk }}/" target="_blank">View Deadline</a>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      <form method="post" id="duplicateActionForm">
+        {% csrf_token %}
+        {% if duplicate_orig_post %}
+          {% for k, v in duplicate_orig_post.items %}
+            {% if v and k != 'csrfmiddlewaretoken' %}
+              <input type="hidden" name="{{ k }}" value="{{ v }}" />
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        <div class="flex gap-2">
+          <button type="submit" name="force_create" value="1" class="btn btn-success"><i class="fas fa-check"></i> Force create</button>
+          <a href="{% url 'services:list' %}" class="btn btn-outline">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
 <form method="post" novalidate id="jcForm">{% csrf_token %}
 <div class="layout-sidebar-main">
 
@@ -46,6 +123,7 @@
               <option value="">Search clients…</option>
               {% for c in form.fields.client.queryset %}
               <option value="{{ c.pk }}" data-tin="{{ c.tin }}" data-phone="{{ c.phone_primary }}" data-type="{{ c.get_client_type_display }}" data-prev-jobs="{{ c.prev_jobs|default:0 }}"
+                data-total-invoices="{{ c.total_invoices|default:0 }}" data-unpaid-invoices="{{ c.unpaid_invoices|default:0 }}"
                 {% if form.client.value|stringformat:"s" == c.pk|stringformat:"s" %}selected{% endif %}>
                 {{ c.client_id }} — {{ c.get_display_name }}{% if c.tin %} ({{ c.tin }}){% endif %}
               </option>
@@ -119,7 +197,7 @@
             <div class="form-grid-2" style="gap:.6rem">
               <div style="grid-column:1/-1">
                 <label class="form-label fs-xs">Service Type</label>
-                <select name="{{ f.service_type.html_name }}" class="s2-svc"
+                <select name="{{ f.service_type.html_name }}" class="form-ctrl s2 s2-svc"
                   data-ph="Search services…" style="font-size:.83rem">
                   <option value="">Search services…</option>
                   {% for st in f.fields.service_type.queryset %}
@@ -276,31 +354,19 @@ $(document).ready(function(){
       $('#clientStrip').show();
     }
     updateClientHistoryNote(opt);
+    updateClientInvoiceSummary(opt);
   });
   $('#clientSelect').on('select2:clear',function(){
     $('#clientStrip').hide();
     $('#clientHistoryNote').hide().text('');
     $('#floatClientHistoryNote').hide().text('');
+    updateClientInvoiceSummary();
   });
   var currentClientOpt = $('#clientSelect option:selected')[0];
   if(currentClientOpt && currentClientOpt.value){
     updateClientHistoryNote(currentClientOpt);
+    updateClientInvoiceSummary(currentClientOpt);
   }
-
-  // Service selects
-  $('.s2-svc').select2({theme:'bootstrap-5',allowClear:false,placeholder:'Search services…'});
-
-  // service select → auto-fill price
-  $(document).on('select2:select','.s2-svc',function(e){
-    var price=$(e.params.data.element).data('price')||'';
-    var vat=$(e.params.data.element).data('vat')==='true';
-    var deadline=$(e.params.data.element).data('deadlinetype')||'';
-    var row=$(this).closest('.li-row');
-    if(price){ row.find('.li-default').val(price); if(!row.find('.li-price').val())row.find('.li-price').val(price); }
-    row.find('.li-vat-badge').toggle(vat);
-    updateLinePeriodVisibility(row, deadline);
-    recalcTotal();
-  });
   $(document).on('input','.li-price',recalcTotal);
   $(document).on('change','input[type=checkbox][name$="-DELETE"]',function(){
     recalcTotal();
@@ -322,6 +388,48 @@ $(document).ready(function(){
     $('#floatSumTotal').text('UGX '+total.toLocaleString());
     $('#floatSumGrand').text('UGX '+total.toLocaleString());
   }
+
+  function updateClientInvoiceSummary(opt){
+    if (!opt || !opt.value){
+      $('#clientInvoiceCount').text('0');
+      $('#clientUnpaidCount').text('0');
+      $('#clientInvoiceBreakdown').text('Select a client to show the latest billing summary.');
+      return;
+    }
+    var totalInvoices = parseInt($(opt).data('total-invoices')) || 0;
+    var unpaidInvoices = parseInt($(opt).data('unpaid-invoices')) || 0;
+    $('#clientInvoiceCount').text(totalInvoices);
+    $('#clientUnpaidCount').text(unpaidInvoices);
+    var breakdown = unpaidInvoices > 0
+      ? unpaidInvoices + ' unpaid invoice' + (unpaidInvoices === 1 ? '' : 's') + ' remain outstanding.'
+      : 'No unpaid invoices at present.';
+    $('#clientInvoiceBreakdown').text(breakdown);
+  }
+
+  function updateServiceLineFromSelection(row, opt){
+    if(!row || !opt) return;
+    var price = parseFloat($(opt).data('price')) || 0;
+    var vat = $(opt).data('vat');
+    var deadline = $(opt).data('deadlinetype') || '';
+    if(price){
+      row.find('.li-default').val(price);
+      var negotiated = row.find('.li-price');
+      if(!negotiated.val() || parseFloat(negotiated.val()) === 0){
+        negotiated.val(price);
+      }
+    }
+    row.find('.li-vat-badge').toggle(!!vat);
+    updateLinePeriodVisibility(row, deadline);
+    autoFillPeriodLabel(row);
+    recalcTotal();
+  }
+  $(document).on('select2:select','.s2-svc',function(e){
+    updateServiceLineFromSelection($(this).closest('.li-row'), e.params.data.element);
+  });
+  $(document).on('change','.s2-svc',function(){
+    updateServiceLineFromSelection($(this).closest('.li-row'), $(this).find('option:selected')[0]);
+  });
+
   window.recalcTotal = recalcTotal;
 
   function autoFillPeriodLabel(row) {
@@ -423,6 +531,16 @@ $(document).ready(function(){
     $('#submitBtn').html(checked ? '<i class="fas fa-save"></i> Save & Generate Invoice' : '<i class="fas fa-save"></i> Save Job Card Only');
   });
 
+  // Floating summary view more toggle
+  window.toggleFloatingSummary = function(){
+    var details = document.getElementById('floatingSummaryDetails');
+    var btn = document.getElementById('summaryToggleBtn');
+    if (!details || !btn) return;
+    var expanded = details.style.display === 'block';
+    details.style.display = expanded ? 'none' : 'block';
+    btn.textContent = expanded ? 'View more' : 'View less';
+  };
+
   // Confirmation popup
   window.confirmAndSubmit = function(){
     var client = $('#clientSelect option:selected').text().trim();
@@ -448,6 +566,7 @@ $(document).ready(function(){
     template.find('.li-num').text('Service '+(total+1));
     template.find('.s2-svc').removeClass('select2-hidden-accessible').next('.select2').remove();
     template.find('.li-vat-badge').hide();
+    template.find('input[type=checkbox][name$="-DELETE"]').prop('checked', false);
     var mgmt=$('input[name$="-TOTAL_FORMS"]');
     mgmt.val(parseInt(mgmt.val())+1);
     template.find('input,select,textarea').each(function(){
@@ -459,8 +578,10 @@ $(document).ready(function(){
     });
     $('#lineItems').append(template);
     template.find('.s2-svc').select2({theme:'bootstrap-5',allowClear:false,placeholder:'Search services…'});
-    // initialize period options for the new row
     populateYearOptions(template, '');
+    template.find('.li-period-month').val('');
+    template.find('.li-period-year').val('');
+    template.find('.li-period').val('');
   });
 });
 </script>

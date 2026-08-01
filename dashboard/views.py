@@ -13,7 +13,7 @@ from notifications.models import NotificationLog
 from credentials.models import ClientCredential
 from core.automation import get_automation_status, get_automation_recommendations
 from core.reporting import calculate_monthly_trends
-from datetime import date
+from datetime import date, datetime, time
 import calendar as _calendar
 
 
@@ -23,6 +23,8 @@ def index(request):
     this_month = today.replace(day=1)
     last_month = (this_month - timezone.timedelta(days=1)).replace(day=1)
     last_month_end = this_month - timezone.timedelta(days=1)
+    this_month_start = timezone.make_aware(datetime.combine(this_month, time.min))
+    last_month_start = timezone.make_aware(datetime.combine(last_month, time.min))
     seven_days = today + timezone.timedelta(days=7)
 
     period = request.GET.get('period', '30d')
@@ -92,7 +94,7 @@ def index(request):
     unpaid_qs       = Invoice.objects.exclude(status__in=['paid', 'written_off'])
     total_outstanding = (unpaid_qs.aggregate(s=Sum('grand_total'))['s'] or 0) - \
                         (unpaid_qs.aggregate(s=Sum('amount_paid'))['s'] or 0)
-    jobs_completed  = JobCard.objects.filter(status='completed', completed_at__gte=this_month).count()
+    jobs_completed  = JobCard.objects.filter(status='completed', completed_at__gte=this_month_start).count()
 
     # ── Expenses this month ──
     expenses_month     = Expense.objects.filter(expense_date__gte=this_month)
@@ -113,9 +115,24 @@ def index(request):
     # ── Net profit this month ──
     net_profit_month = total_income_month - float(total_expenses_month)
     collection_rate_month = round((float(collected_month) / float(invoiced_month) * 100), 1) if invoiced_month else 0
-    new_clients_this_month = Client.objects.filter(created_at__gte=this_month).count()
-    new_jobcards_this_month = JobCard.objects.filter(created_at__gte=this_month).count()
-    notifications_this_month = NotificationLog.objects.filter(created_at__gte=this_month).count()
+    new_clients_this_month = Client.objects.filter(created_at__gte=this_month_start).count()
+    new_jobcards_this_month = JobCard.objects.filter(created_at__gte=this_month_start).count()
+    notifications_this_month = NotificationLog.objects.filter(created_at__gte=this_month_start).count()
+
+    company = getattr(request.user, 'company', None)
+    company_stats = None
+    if company:
+        company_stats = {
+            'name': company.name,
+            'slug': company.slug,
+            'branch_count': company.branches.count(),
+            'active_branch_count': company.branches.filter(is_active=True).count(),
+            'default_branch': company.default_branch.name if company.default_branch else 'Not set',
+            'total_clients': Client.objects.filter(company=company).count(),
+            'total_invoices': Invoice.objects.filter(client__company=company).count(),
+            'total_jobcards': JobCard.objects.filter(client__company=company).count(),
+            'outstanding_amount': total_outstanding,
+        }
 
     invoiced_last_month = Invoice.objects.filter(date_issued__gte=last_month, date_issued__lte=last_month_end).aggregate(s=Sum('grand_total'))['s'] or 0
     collected_last_month = Payment.objects.filter(payment_date__gte=last_month, payment_date__lte=last_month_end).aggregate(s=Sum('amount'))['s'] or 0
@@ -123,9 +140,9 @@ def index(request):
     total_income_last_month = float(collected_last_month) + float(other_income_last_month)
     expenses_last_month = Expense.objects.filter(expense_date__gte=last_month, expense_date__lte=last_month_end).aggregate(s=Sum('amount'))['s'] or 0
     net_profit_last_month = total_income_last_month - float(expenses_last_month)
-    jobs_completed_last_month = JobCard.objects.filter(status='completed', completed_at__gte=last_month, completed_at__lte=last_month_end).count()
-    new_clients_last_month = Client.objects.filter(created_at__gte=last_month, created_at__lte=last_month_end).count()
-    new_jobcards_last_month = JobCard.objects.filter(created_at__gte=last_month, created_at__lte=last_month_end).count()
+    jobs_completed_last_month = JobCard.objects.filter(status='completed', completed_at__gte=last_month_start, completed_at__lt=this_month_start).count()
+    new_clients_last_month = Client.objects.filter(created_at__gte=last_month_start, created_at__lt=this_month_start).count()
+    new_jobcards_last_month = JobCard.objects.filter(created_at__gte=last_month_start, created_at__lt=this_month_start).count()
 
     # Collection rate for last month (percentage)
     collection_rate_last_month = round((float(collected_last_month) / float(invoiced_last_month) * 100), 1) if invoiced_last_month else 0
@@ -305,13 +322,20 @@ def index(request):
         revenue = Invoice.objects.filter(
             job_card__assigned_to=u, date_issued__gte=this_month
         ).aggregate(s=Sum('grand_total'))['s'] or 0
+        assigned = JobCard.objects.filter(assigned_to=u).count()
+        completed = JobCard.objects.filter(assigned_to=u, status='completed', completed_at__gte=this_month_start).count()
+        overdue = JobCard.objects.filter(assigned_to=u, status__in=['open', 'in_progress'], due_date__lt=today).count()
+        completion_pct = round((completed / assigned * 100), 1) if assigned else 0
+        completion_color = '#22c55e' if completion_pct >= 80 else '#f59e0b' if completion_pct >= 50 else '#ef4444'
         staff_perf.append({
             'user': u,
-            'assigned':  JobCard.objects.filter(assigned_to=u).count(),
-            'completed': JobCard.objects.filter(assigned_to=u, status='completed', completed_at__gte=this_month).count(),
-            'overdue':   JobCard.objects.filter(assigned_to=u, status__in=['open', 'in_progress'], due_date__lt=today).count(),
-            'hours':     round(float(hours), 1),
-            'revenue':   float(revenue),
+            'assigned': assigned,
+            'completed': completed,
+            'overdue': overdue,
+            'hours': round(float(hours), 1),
+            'revenue': float(revenue),
+            'completion_pct': completion_pct,
+            'completion_color': completion_color,
         })
 
     # Sort staff performance by revenue (descending) to highlight top contributors

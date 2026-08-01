@@ -173,7 +173,7 @@ def export_to_pdf(filename, columns, data_rows, title=None, page_size=letter):
     )
     elements.append(Spacer(1, 0.3*inch))
     elements.append(Paragraph(
-        f"Exported on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Taxman256",
+        f"Exported on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Taxin",
         footer_style
     ))
     
@@ -214,3 +214,4 @@ def paginate_list(request, queryset, per_page=20):
     has_more_than_20 = queryset.count() > 20
     
     return page_obj, is_paginated, has_more_than_20
+
