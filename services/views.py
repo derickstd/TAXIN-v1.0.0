@@ -144,7 +144,7 @@ def _get_job_duplicate_state(job):
 
 def _get_job_task_counts(job):
     paid_statuses = ['handled_paid', 'paid_not_handled']
-    unpaid_statuses = ['handled_not_paid', 'not_handled']
+    unpaid_statuses = ['handled_not_paid', 'bad_debt', 'not_handled']
     paid_tasks = job.line_items.filter(status__in=paid_statuses).count()
     unpaid_tasks = job.line_items.filter(status__in=unpaid_statuses).count()
     return paid_tasks, unpaid_tasks
@@ -692,7 +692,7 @@ def update_line_status(request, pk):
             all_items = list(job.line_items.all())
             if all_items:
                 all_paid = all(li.status == 'handled_paid' for li in all_items)
-                any_in_progress = any(li.status in ('handled_paid', 'handled_not_paid', 'paid_not_handled') for li in all_items)
+                any_in_progress = any(li.status in ('handled_paid', 'handled_not_paid', 'bad_debt', 'paid_not_handled') for li in all_items)
                 any_pending = any(li.status == 'not_handled' for li in all_items)
                 
                 # Update job card status
@@ -716,7 +716,7 @@ def update_line_status(request, pk):
                             action='Job card moved to in progress'
                         )
             
-            handled_state = new_status in {'handled_paid', 'handled_not_paid'}
+            handled_state = new_status in {'handled_paid', 'handled_not_paid', 'bad_debt'}
             if handled_state and not hasattr(job, 'invoice'):
                 _auto_create_invoice(job, request.user)
 
@@ -725,7 +725,7 @@ def update_line_status(request, pk):
                 inv = job.invoice
                 all_items = list(job.line_items.all())
                 all_paid = all(li.status == 'handled_paid' for li in all_items)
-                any_handled = any(li.status in ('handled_paid','handled_not_paid','paid_not_handled') for li in all_items)
+                any_handled = any(li.status in ('handled_paid','handled_not_paid','bad_debt','paid_not_handled') for li in all_items)
                 if all_paid:
                     inv.amount_paid = inv.grand_total
                     inv.status = 'paid'

@@ -290,11 +290,13 @@ def client_create(request):
                 if request.POST.get('force_create') == '1':
                     pass
                 else:
-                        return render(request, 'clients/client_create.html', {
+                        return render(request, 'clients/client_form.html', {
                             'form': form,
                             'duplicates': dup_candidates,
                             'orig_post': request.POST,
                             'show_duplicate_modal': True,
+                            'title': 'New Client',
+                            'districts': UGANDA_DISTRICTS,
                         })
             from core.email_utils import send_welcome_email
             from credentials.models import ClientCredential

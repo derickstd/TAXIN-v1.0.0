@@ -7,6 +7,7 @@ app_name = 'core'
 urlpatterns = [
     # Admin Dashboard
     path('admin/dashboard/', admin_views.admin_dashboard, name='admin_dashboard'),
+    path('admin/control-center/', admin_views.admin_control_center, name='admin_control_center'),
     path('admin/users/', admin_views.admin_users, name='admin_users'),
     path('admin/users/<int:user_id>/send-password-reset/', admin_views.admin_send_password_reset, name='admin_send_password_reset'),
     path('admin/users/<int:user_id>/deactivate/', admin_views.admin_user_deactivate, name='admin_user_deactivate'),
@@ -33,6 +34,7 @@ urlpatterns = [
     path('users/new/',          views.user_create,     name='user_new'),
     path('users/<int:pk>/',     views.user_edit,       name='user_edit'),
     path('settings/',           views.user_settings,   name='settings'),
+    path('settings/theme/',     views.save_ui_theme,   name='save_theme'),
     path('change-password/',    views.change_password, name='change_password'),
     path('offline/',            views.offline,         name='offline'),
     path('automation/trigger/', views.trigger_automation, name='trigger_automation'),

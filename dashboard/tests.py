@@ -23,3 +23,20 @@ class DashboardViewTests(TestCase):
         first_row = response.context['staff_perf'][0]
         self.assertIn('completion_pct', first_row)
         self.assertIn('completion_color', first_row)
+
+    def test_dashboard_includes_running_capital_summary(self):
+        user = User.objects.create_user(
+            username='capital-user',
+            password='pass123',
+            is_staff=True,
+            is_active=True,
+            is_active_staff=True,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse('dashboard:index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('running_capital', response.context)
+        self.assertIn('summary_cards', response.context)
+        self.assertTrue(response.context['summary_cards'])

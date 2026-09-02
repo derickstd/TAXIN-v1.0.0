@@ -36,8 +36,16 @@ class Command(BaseCommand):
         
         # Task 6: Clean up old notifications
         self.cleanup_old_notifications()
+
+        # Task 7: Classify handled work unpaid for more than 12 months
+        self.mark_bad_debts()
         
         self.stdout.write(self.style.SUCCESS('✓ All automated tasks completed'))
+
+    def mark_bad_debts(self):
+        from services.models import mark_overdue_handled_tasks
+        updated = mark_overdue_handled_tasks()
+        self.stdout.write(f'  → {updated} handled task(s) marked as bad debt')
 
     def generate_monthly_compliance_deadlines(self):
         """Generate compliance deadlines for ALL clients (not just active) on 1st of month"""

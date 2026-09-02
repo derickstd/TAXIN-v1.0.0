@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.hashers import make_password
 from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 import logging
 from .models import User, Company, AuditLog, Branch
 from django import forms
@@ -551,6 +552,19 @@ def user_settings(request):
         'theme_guide': theme_guide,
         'company': company,
     })
+
+
+@login_required
+@require_POST
+def save_ui_theme(request):
+    theme = request.POST.get('ui_theme') or request.POST.get('theme')
+    valid = theme in dict(User.THEME_CHOICES)
+    if not valid:
+        return JsonResponse({'ok': False, 'error': 'Invalid theme selection.'}, status=400)
+
+    request.user.ui_theme = theme
+    request.user.save(update_fields=['ui_theme'])
+    return JsonResponse({'ok': True, 'theme': theme})
 
 
 @login_required

@@ -3,6 +3,16 @@ from django.utils import timezone
 from clients.models import Client
 from core.models import User
 
+
+def mark_overdue_handled_tasks(as_of=None):
+    """Persist bad-debt labels for handled line items unpaid for over 12 months."""
+    from django.utils import timezone
+    items = JobCardLineItem.objects.filter(status='handled_not_paid').select_related('job_card')
+    overdue_ids = [item.pk for item in items if item.is_bad_debt(as_of=as_of)]
+    if overdue_ids:
+        return JobCardLineItem.objects.filter(pk__in=overdue_ids).update(status='bad_debt')
+    return 0
+
 class ServiceType(models.Model):
     CATEGORY = [
         ('ura_filing','URA Filing'),('nssf','NSSF'),('ursb','URSB'),
@@ -103,6 +113,7 @@ class JobCardLineItem(models.Model):
     ITEM_STATUS = [
         ('handled_paid','Handled & Paid'),
         ('handled_not_paid','Handled — Awaiting Payment'),
+        ('bad_debt','Bad Debt — Over 12 Months'),
         ('paid_not_handled','Paid — Not Yet Handled'),
         ('not_handled','Not Yet Handled'),
     ]
@@ -121,6 +132,23 @@ class JobCardLineItem(models.Model):
 
     def line_total(self):
         return self.negotiated_price + self.vat_amount
+
+    def payment_due_date(self):
+        """Return the date used to determine whether handled work is bad debt."""
+        job = self.job_card
+        if job.completed_at:
+            return job.completed_at.date()
+        if job.period_year and job.period_month:
+            from datetime import date
+            return date(job.period_year, job.period_month, 1)
+        return job.created_at.date()
+
+    def is_bad_debt(self, as_of=None):
+        if self.status not in ('handled_not_paid', 'bad_debt'):
+            return False
+        from django.utils import timezone
+        from datetime import timedelta
+        return self.payment_due_date() <= (as_of or timezone.now().date()) - timedelta(days=365)
 
     def __str__(self):
         return f"{self.get_description()} — UGX {self.negotiated_price:,.0f}"

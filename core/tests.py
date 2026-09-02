@@ -11,7 +11,7 @@ import core
 from billing.models import Invoice
 from clients.models import Client
 from core.apps import CoreConfig
-from core.models import User, ModelVisibility, UserModelPermission
+from core.models import User, ModelVisibility, UserModelPermission, SystemModuleVisibility, Company
 from core.utils import is_model_visible, user_can_view_model, user_can_edit_model
 
 
@@ -99,6 +99,55 @@ class AdminUserAndClientManagementTests(TestCase):
         response = self.client.post(reverse('core:admin_user_delete', args=[self.staff.pk]))
         self.assertEqual(response.status_code, 302)
         self.assertFalse(User.objects.filter(pk=self.staff.pk).exists())
+
+
+class AdminControlCenterTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='adminuser',
+            password='pass123',
+            role='admin',
+            is_staff=True,
+        )
+        self.staff = User.objects.create_user(
+            username='staffuser',
+            password='pass123',
+            role='tax_officer',
+            is_staff=True,
+        )
+
+    def test_admin_can_open_control_center(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('core:admin_control_center'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_admin_can_toggle_module_visibility(self):
+        self.client.force_login(self.admin)
+        module = SystemModuleVisibility.objects.create(key='clients', label='Clients', enabled=True)
+
+        response = self.client.post(reverse('core:admin_control_center'), {'module_clients': 'off'})
+
+        self.assertEqual(response.status_code, 302)
+        module.refresh_from_db()
+        self.assertFalse(module.enabled)
+
+    def test_tenant_admin_controls_are_scoped_to_their_company(self):
+        self.client.force_login(self.admin)
+        company = Company.objects.create(name='Tenant One', slug='tenant-one')
+        self.admin.company = company
+        self.admin.save(update_fields=['company'])
+
+        other_company = Company.objects.create(name='Tenant Two', slug='tenant-two')
+        other_module = SystemModuleVisibility.objects.create(key='clients', company=other_company, label='Clients', enabled=True)
+        tenant_module = SystemModuleVisibility.objects.create(key='clients', company=company, label='Clients', enabled=True)
+
+        response = self.client.post(reverse('core:admin_control_center'), {'module_clients': 'off'})
+
+        self.assertEqual(response.status_code, 302)
+        tenant_module.refresh_from_db()
+        other_module.refresh_from_db()
+        self.assertFalse(tenant_module.enabled)
+        self.assertTrue(other_module.enabled)
 
 
 class TransactionEditPermissionTests(TestCase):

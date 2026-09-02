@@ -3,8 +3,103 @@
 {% block nav_dash %}active{% endblock %}
 {% block breadcrumbs %}<li class="active">Dashboard</li>{% endblock %}
 {% block content %}
-<!-- 2-Column Layout: Calendar on Left, Charts on Right (left column widened) -->
-<div class="dashboard-two-col">
+<div class="dashboard-shell">
+  <section class="dashboard-health-hero">
+    <div class="dashboard-health-hero__content">
+      <div class="hero-badge">Financial health</div>
+      <h2>Business liquidity is <span>{% if net_profit_month >= 0 %}healthy{% else %}watching{% endif %}</span></h2>
+      <p>Current operating cash, collections, and obligations are tracking toward a {% if collection_rate_month >= 75 %}strong{% elif collection_rate_month >= 50 %}stable{% else %}risk{% endif %} month.</p>
+      <div class="hero-metrics">
+        <div>
+          <span>Net profit</span>
+          <strong>UGX {{ net_profit_month|floatformat:0|intcomma }}</strong>
+        </div>
+        <div>
+          <span>Collection rate</span>
+          <strong>{{ collection_rate_month|floatformat:1 }}%</strong>
+        </div>
+        <div>
+          <span>Cash in</span>
+          <strong>UGX {{ total_income_month|floatformat:0|intcomma }}</strong>
+        </div>
+      </div>
+    </div>
+    <div class="dashboard-health-hero__panel">
+      <div class="hero-panel__label">Operating overview</div>
+      <div class="hero-panel__value">UGX {{ running_capital|floatformat:0|intcomma }}</div>
+      <div class="hero-panel__meta">
+        <span class="summary-delta summary-delta--{{ performance_comparison.3.state|default:'neutral' }}">{{ performance_comparison.3.subtitle|default:'Current position' }}</span>
+      </div>
+      <div class="hero-mini-bars">
+        <span style="height: 42%"></span>
+        <span style="height: 58%"></span>
+        <span style="height: 66%"></span>
+        <span style="height: 71%"></span>
+        <span style="height: 82%"></span>
+        <span style="height: 94%"></span>
+      </div>
+    </div>
+  </section>
+
+  <div class="dashboard-summary-grid">
+    {% for card in summary_cards %}
+      {% if card.has_popover %}
+      <div class="dashboard-summary-card dashboard-summary-card--{{ card.tone }} dashboard-summary-card--interactive">
+        <button type="button" class="dashboard-summary-trigger" data-panel-id="capital-panel-{{ forloop.counter }}" aria-label="View recent transactions for running capital">
+          <div class="summary-icon summary-icon--{{ card.tone }}">
+            <i class="{{ card.icon }}"></i>
+          </div>
+          <div class="summary-copy">
+            <div class="summary-label">{{ card.label }}</div>
+            <div class="summary-value">{{ card.value }}</div>
+            <div class="summary-meta">
+              <span class="summary-delta summary-delta--{{ card.delta_tone }}">{{ card.delta }}</span>
+              <span class="summary-subtitle">{{ card.subtitle }}</span>
+            </div>
+          </div>
+        </button>
+        <div class="dashboard-popover" id="capital-panel-{{ forloop.counter }}" role="menu" aria-label="Recent capital activity">
+          <div class="dashboard-popover__header">
+            <span>Recent activity</span>
+            <strong>Last 6</strong>
+          </div>
+          {% for transaction in recent_cash_transactions %}
+          <div class="dashboard-popover__item">
+            <div class="dashboard-popover__info">
+              <span class="dashboard-popover__type">{{ transaction.type }}</span>
+              <span class="dashboard-popover__title">{{ transaction.title }}</span>
+              <small>{{ transaction.date|date:"M d, Y" }}</small>
+            </div>
+            <span class="dashboard-popover__amount {% if transaction.direction == 'in' %}is-in{% else %}is-out{% endif %}">
+              {% if transaction.direction == 'in' %}+{% else %}-{% endif %}UGX {{ transaction.amount|floatformat:0|intcomma }}
+            </span>
+          </div>
+          {% empty %}
+          <div class="dashboard-popover__empty">No recent cash movement</div>
+          {% endfor %}
+          <a href="{% url 'documents:monthly_report' %}" class="dashboard-popover__more">View more</a>
+        </div>
+      </div>
+      {% else %}
+      <a href="{{ card.url }}" class="dashboard-summary-card dashboard-summary-card--{{ card.tone }}" aria-label="{{ card.label }} summary">
+        <div class="summary-icon summary-icon--{{ card.tone }}">
+          <i class="{{ card.icon }}"></i>
+        </div>
+        <div class="summary-copy">
+          <div class="summary-label">{{ card.label }}</div>
+          <div class="summary-value">{{ card.value }}</div>
+          <div class="summary-meta">
+            <span class="summary-delta summary-delta--{{ card.delta_tone }}">{{ card.delta }}</span>
+            <span class="summary-subtitle">{{ card.subtitle }}</span>
+          </div>
+        </div>
+      </a>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <!-- 2-Column Layout: Calendar on Left, Charts on Right (left column widened) -->
+  <div class="dashboard-two-col">
   <div class="dashboard-left-col">
     <!-- LEFT: Calendar Card -->
     <div class="card-box card-compact dashboard-calendar-card">
@@ -278,6 +373,33 @@ function openDayDetails(day){
 function closeDayDetails(){
   document.getElementById('dayDetailPopup').style.display = 'none';
 }
+
+const popoverButtons = document.querySelectorAll('.dashboard-summary-trigger');
+const popovers = document.querySelectorAll('.dashboard-popover');
+
+popoverButtons.forEach((button) => {
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const panelId = button.dataset.panelId;
+    const panel = document.getElementById(panelId);
+
+    popovers.forEach((popover) => {
+      if (popover !== panel) {
+        popover.classList.remove('is-open');
+      }
+    });
+
+    if (panel) {
+      panel.classList.toggle('is-open');
+    }
+  });
+});
+
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.dashboard-summary-card--interactive')) {
+    popovers.forEach((popover) => popover.classList.remove('is-open'));
+  }
+});
 
 // Revenue / Collections / Expenses chart
 new Chart(document.getElementById('revChart'), {

@@ -13,6 +13,7 @@ urlpatterns = [
     path('<int:pk>/whatsapp/',  views.send_invoice_whatsapp, name='whatsapp'),
     path('<int:pk>/convert/',   views.convert_to_invoice,    name='convert'),
     path('aging/',              views.aging_report,          name='aging'),
+    path('bad-debts/',          views.bad_debt_report,       name='bad_debts'),
     path('refresh-balances/',   views.refresh_outstanding_balances, name='refresh_balances'),
     path('refresh-balances-json/', views.refresh_outstanding_balances_json, name='refresh_balances_json'),
     # Other Income routes

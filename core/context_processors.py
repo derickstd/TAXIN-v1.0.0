@@ -1,9 +1,18 @@
 from django.utils import timezone
+import json
 import logging
+from .utils import get_module_visibility_map
 logger = logging.getLogger(__name__)
 
 def global_context(request):
     ctx = {'firm_name': 'Taxin', 'firm_phone': '+256785230670', 'firm_email': 'taxissues.go@gmail.com'}
+    company = getattr(request.user, 'company', None)
+    module_visibility = get_module_visibility_map(company=company)
+    ctx['module_visibility'] = {key: module.enabled for key, module in module_visibility.items()}
+    ctx['module_labels'] = {key: module.label for key, module in module_visibility.items()}
+    ctx['module_orders'] = {key: module.order for key, module in module_visibility.items()}
+    ctx['module_orders_json'] = json.dumps(ctx['module_orders'])
+    ctx['tenant_context'] = {'company': company}
     if not request.user.is_authenticated:
         return ctx
     try:

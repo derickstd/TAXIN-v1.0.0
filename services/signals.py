@@ -20,8 +20,8 @@ def auto_update_jobcard_on_line_item_change(sender, instance, **kwargs):
         return
 
     all_paid    = all(li.status == 'handled_paid'                           for li in all_items)
-    all_handled = all(li.status in ('handled_paid', 'handled_not_paid')      for li in all_items)
-    any_progress = any(li.status in ('handled_paid', 'handled_not_paid', 'paid_not_handled') for li in all_items)
+    all_handled = all(li.status in ('handled_paid', 'handled_not_paid', 'bad_debt') for li in all_items)
+    any_progress = any(li.status in ('handled_paid', 'handled_not_paid', 'bad_debt', 'paid_not_handled') for li in all_items)
 
     if all_paid and job.status != 'completed':
         JobCard.objects.filter(pk=job.pk).update(status='completed', completed_at=timezone.now())

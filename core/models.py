@@ -76,6 +76,7 @@ class User(AbstractUser):
         ('tax_officer',  'Tax Officer'),
         ('senior_officer','Senior Officer'),
         ('manager',      'Manager'),
+        ('ceo',          'CEO'),
         ('admin',        'Admin'),
     ]
     THEME_CHOICES = [
@@ -108,6 +109,25 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.get_full_name() or self.username} ({self.get_role_display()})"
+
+
+class SystemModuleVisibility(models.Model):
+    """Admin-controlled per-tenant toggles for major application modules."""
+    key = models.SlugField()
+    company = models.ForeignKey(Company, null=True, blank=True, on_delete=models.CASCADE, related_name='module_visibilities')
+    label = models.CharField(max_length=100)
+    description = models.CharField(max_length=255, blank=True)
+    enabled = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order', 'label']
+        unique_together = ('company', 'key')
+
+    def __str__(self):
+        return self.label
 
 
 class AuditLog(models.Model):

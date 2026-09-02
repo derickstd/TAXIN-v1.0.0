@@ -2,7 +2,56 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from functools import wraps
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied
-from .models import ModelVisibility, UserModelPermission
+from .models import ModelVisibility, UserModelPermission, SystemModuleVisibility
+
+SYSTEM_MODULE_DEFINITIONS = (
+    ('dashboard', 'Dashboard', 'Show the main dashboard area in the navigation.'),
+    ('clients', 'Clients', 'Display client management in the sidebar.'),
+    ('engagements', 'Engagements', 'Display engagements and job cards in the sidebar.'),
+    ('compliance', 'Compliance', 'Display compliance and tax calendar modules.'),
+    ('finance', 'Finance', 'Display invoices, payments, and expense screens.'),
+    ('insights', 'Insights', 'Display reports, documents, and notifications.'),
+    ('account', 'Account', 'Display the account section and personal settings.'),
+)
+
+
+def ensure_module_visibility_defaults(company=None):
+    """Create any missing module visibility entries with safe defaults for a tenant/company."""
+    for key, label, description in SYSTEM_MODULE_DEFINITIONS:
+        lookup = {'key': key}
+        if company is None:
+            lookup['company__isnull'] = True
+        else:
+            lookup['company'] = company
+        SystemModuleVisibility.objects.get_or_create(
+            **lookup,
+            defaults={'label': label, 'description': description, 'enabled': True},
+        )
+
+
+def get_module_visibility_map(company=None):
+    """Return a dictionary of module visibility entries keyed by module name for a tenant/company."""
+    ensure_module_visibility_defaults(company=company)
+    if company is None:
+        modules = list(SystemModuleVisibility.objects.filter(company__isnull=True, key__in=[k for k, _, _ in SYSTEM_MODULE_DEFINITIONS]).order_by('order', 'label'))
+    else:
+        modules = list(SystemModuleVisibility.objects.filter(company=company, key__in=[k for k, _, _ in SYSTEM_MODULE_DEFINITIONS]).order_by('order', 'label'))
+    module_map = {module.key: module for module in modules}
+    if company is not None:
+        fallback_modules = list(SystemModuleVisibility.objects.filter(company__isnull=True, key__in=[k for k, _, _ in SYSTEM_MODULE_DEFINITIONS]).order_by('order', 'label'))
+        for module in fallback_modules:
+            module_map.setdefault(module.key, module)
+    for key, label, description in SYSTEM_MODULE_DEFINITIONS:
+        if key not in module_map:
+            module = SystemModuleVisibility.objects.create(key=key, company=company, label=label, description=description, enabled=True)
+            module_map[key] = module
+    return module_map
+
+
+def is_module_enabled(key, company=None):
+    """Return True if the given system module is enabled for a tenant/company."""
+    module = get_module_visibility_map(company=company).get(key)
+    return True if module is None else bool(module.enabled)
 
 
 def paginate_queryset(request, queryset, per_page=25, page_param='page'):

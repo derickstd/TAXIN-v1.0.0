@@ -25,7 +25,7 @@ function initSelect2(){
     recalcTotal();
   });
   jQuery(document).on('input','.li-price',recalcTotal);
-  jQuery(document).on('change','.li-delete',recalcTotal);
+  jQuery(document).on('change','input[type=checkbox][name$="-DELETE"]',recalcTotal);
 }
 
 /* ── Flatpickr ── */
@@ -37,18 +37,27 @@ function initDates(){
 }
 
 /* ── Job card: fee summary ── */
+function syncFloatingSummary(label,total){
+  var fse=document.getElementById('floatSumCount'),fst=document.getElementById('floatSumTotal'),fsg=document.getElementById('floatSumGrand');
+  if(fse)fse.textContent=label;
+  if(fst)fst.textContent='UGX '+total.toLocaleString();
+  if(fsg)fsg.textContent='UGX '+total.toLocaleString();
+}
+
 function recalcTotal(){
   var total=0,count=0;
   document.querySelectorAll('.li-row').forEach(function(row){
-    var del=row.querySelector('.li-delete');
+    var del=row.querySelector('input[type=checkbox][name$="-DELETE"]');
     if(del&&del.checked)return;
     var v=parseFloat(row.querySelector('.li-price')?.value||0)||0;
     if(v>0){total+=v;count++;}
   });
+  var label = count === 1 ? ' service' : ' services';
   var se=document.getElementById('sumCount'),st=document.getElementById('sumTotal'),sg=document.getElementById('sumGrand');
-  if(se)se.textContent=count+(count===1?' service':' services');
+  if(se)se.textContent=label === ' service' ? '0 services' : count+label;
   if(st)st.textContent='UGX '+total.toLocaleString();
   if(sg)sg.textContent='UGX '+total.toLocaleString();
+  syncFloatingSummary(count+label,total);
 }
 window.recalcTotal=recalcTotal;
 

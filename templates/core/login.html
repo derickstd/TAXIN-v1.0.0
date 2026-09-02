@@ -30,8 +30,8 @@ body::before{content:'';position:absolute;inset:0;background:radial-gradient(cir
 .login-shell::before,.login-shell::after{content:'';position:absolute;border-radius:33px;z-index:0;transition:transform .3s ease}
 .login-shell::before{width:220px;height:220px;right:-80px;top:-80px;background:rgba(200,149,42,.16);box-shadow:0 40px 90px rgba(0,0,0,.14);transform:rotate(35deg)}
 .login-shell::after{width:180px;height:180px;left:-60px;bottom:-70px;background:rgba(56,118,255,.12);box-shadow:0 30px 85px rgba(0,0,0,.1);transform:rotate(-18deg)}
-.login-card{position:relative;z-index:1;background:linear-gradient(180deg,rgba(255,255,255,.98) 0%,#f8fbff 100%);border:1px solid rgba(255,255,255,.45);border-radius:28px;padding:2.6rem 2.4rem 2.2rem;box-shadow:0 36px 90px rgba(0,0,0,.28),0 0 0 1px rgba(255,255,255,.06);backdrop-filter:blur(10px);transform:translateZ(30px);overflow:hidden;transition:transform .3s ease,box-shadow .3s ease}
-.login-card:hover{transform:translateY(-10px) translateZ(30px);box-shadow:0 44px 106px rgba(0,0,0,.32)}
+.login-card{position:relative;z-index:1;background:linear-gradient(180deg,rgba(255,255,255,.98) 0%,#f8fbff 100%) padding-box,linear-gradient(135deg,rgba(255,255,255,.95) 0%,rgba(200,149,42,.95) 42%,rgba(72,133,232,.9) 100%) border-box;border:2px solid transparent;border-radius:28px;padding:2.6rem 2.4rem 2.2rem;box-shadow:0 36px 90px rgba(0,0,0,.28),0 0 0 5px rgba(255,255,255,.06),inset 0 1px 0 rgba(255,255,255,.95);backdrop-filter:blur(10px);transform:translateZ(30px);overflow:hidden;transition:transform .3s ease,box-shadow .3s ease}
+.login-card:hover{transform:translateY(-10px) translateZ(30px);box-shadow:0 44px 106px rgba(0,0,0,.32),0 0 0 5px rgba(200,149,42,.1),inset 0 1px 0 rgba(255,255,255,.95)}
 .login-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at top right, rgba(200,149,42,.12), transparent 22%),radial-gradient(circle at left bottom, rgba(34,86,255,.08), transparent 30%);pointer-events:none}
 .login-logo{text-align:center;margin-bottom:1.8rem;position:relative;z-index:2}
 .login-logo h2{color:var(--brand);font-weight:900;font-size:2rem;letter-spacing:1px;margin:.65rem 0 0}
@@ -44,8 +44,6 @@ body::before{content:'';position:absolute;inset:0;background:radial-gradient(cir
 .btn-login{background:linear-gradient(135deg,var(--brand),var(--brand-dark));color:#fff;border:none;border-radius:14px;padding:.85rem 1rem;width:100%;font-size:.96rem;font-weight:800;cursor:pointer;margin-top:.75rem;box-shadow:0 18px 30px rgba(26,46,96,.24);transition:transform .2s ease,box-shadow .2s ease}
 .btn-login:hover{transform:translateY(-2px);box-shadow:0 24px 38px rgba(26,46,96,.3);background:linear-gradient(135deg,#143a6c,#0f234f)}
 .error-box{background:#fff2f4;color:#861f2d;border-left:4px solid #df476f;padding:.75rem 1rem;border-radius:12px;margin-bottom:1rem;font-size:.9rem;box-shadow:0 10px 24px rgba(20,33,64,.08)}
-.slug-suggestion{margin-top:.55rem;font-size:.82rem;color:#60708f;display:flex;align-items:center;gap:.35rem}
-.slug-suggestion span{font-weight:700;color:#1e3a8a}
 .hint{position:relative;z-index:2;text-align:center;color:#6b7280;font-size:.78rem;margin-top:1.35rem;line-height:1.55}
 .hint a{color:#1A3C6E;text-decoration:none;font-weight:700}
 .hint a:hover{text-decoration:underline}
@@ -91,11 +89,6 @@ body::before{content:'';position:absolute;inset:0;background:radial-gradient(cir
           <input id="login-username" type="text" name="username" class="form-control" placeholder="Enter your username" autofocus autocomplete="username">
         </div>
         <div class="form-group">
-          <label class="form-label">Company Slug</label>
-          <input id="company-slug" type="text" name="company_slug" class="form-control" placeholder="Enter your company slug" value="{{ company_slug }}" autocomplete="organization">
-          <div class="slug-suggestion" id="slug-suggestion">Your company slug helps identify which tenant login to use.</div>
-        </div>
-        <div class="form-group">
           <label class="form-label">Password</label>
           <input type="password" name="password" class="form-control" placeholder="Enter your password" autocomplete="current-password">
         </div>
@@ -106,55 +99,12 @@ body::before{content:'';position:absolute;inset:0;background:radial-gradient(cir
       </form>
       <div class="hint">
         <a href="{% url 'signup' %}">Register a new company</a> &nbsp;|&nbsp; Default: admin / admin123<br>
-        Taxin Practice Management System v2.0
+        Taxin Practice Management System v2.1
       </div>
     </div>
   </div>
 </div>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-<script>
-  function buildSlug(value) {
-    return value
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9\-]/g, '')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
-  }
-
-  document.addEventListener('DOMContentLoaded', function() {
-    var usernameInput = document.getElementById('login-username');
-    var slugPreview = document.getElementById('slug-preview');
-    var form = usernameInput && usernameInput.closest('form');
-    if (!usernameInput || !slugPreview || !form) return;
-
-    function updateSlug() {
-      var stored = null;
-      try { stored = localStorage.getItem('last_company_slug'); } catch(e) {}
-      var slug = stored ? buildSlug(stored) : 'Taxin';
-      slugPreview.textContent = 'username@' + slug;
-      usernameInput.placeholder = stored ? 'username@' + slug : 'Enter your username';
-    }
-
-    function preserveSlugOnSubmit(event) {
-      var stored = null;
-      try { stored = localStorage.getItem('last_company_slug'); } catch(e) {}
-      if (!stored) return;
-      var usernameValue = usernameInput.value.trim();
-      if (!usernameValue) return;
-      if (usernameValue.includes('@')) return;
-      var slug = buildSlug(stored);
-      if (slug) {
-        usernameInput.value = usernameValue + '@' + slug;
-      }
-    }
-
-    usernameInput.addEventListener('input', updateSlug);
-    form.addEventListener('submit', preserveSlugOnSubmit);
-  });
-</script>
 </body>
 </html>
 

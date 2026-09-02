@@ -55,7 +55,7 @@ def _settle_job_card(invoice):
     if job is None:
         return
     # Mark any handled items as paid, but preserve unpaid or unhandled work.
-    job.line_items.filter(status='handled_not_paid').update(status='handled_paid')
+    job.line_items.filter(status__in=['handled_not_paid', 'bad_debt']).update(status='handled_paid')
     # Do not auto-complete if there is still unhandled work.
     if job.line_items.filter(status__in=['not_handled', 'paid_not_handled']).exists():
         return

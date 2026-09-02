@@ -352,6 +352,22 @@ def aging_report(request):
 
 
 @login_required
+def bad_debt_report(request):
+    from services.models import JobCardLineItem, mark_overdue_handled_tasks
+
+    mark_overdue_handled_tasks()
+    items = (JobCardLineItem.objects.filter(status='bad_debt')
+             .select_related('job_card__client', 'job_card__invoice', 'service_type')
+             .order_by('job_card__client__full_name', 'job_card__created_at'))
+    total = sum(item.line_total() for item in items)
+    return render(request, 'billing/bad_debt_report.html', {
+        'items': items,
+        'total': total,
+        'as_of': timezone.now().date(),
+    })
+
+
+@login_required
 def send_invoice_whatsapp(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
     from notifications.services import send_whatsapp_message, send_email_notification

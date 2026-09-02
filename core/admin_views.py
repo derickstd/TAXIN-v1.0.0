@@ -15,7 +15,8 @@ from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.db.models import Q, Count
-from .models import User, Company, Tenant, AuditLog, Branch
+from .models import User, Company, Tenant, AuditLog, Branch, SystemModuleVisibility
+from .utils import get_module_visibility_map, SYSTEM_MODULE_DEFINITIONS
 from clients.models import Client
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,8 @@ class BranchForm(forms.ModelForm):
 ROLE_PERMISSIONS = {
     'superuser': ['*'],  # Full access
     'admin': ['users', 'companies', 'tenants', 'audit', 'settings', 'support'],
+    'ceo': ['users', 'companies', 'audit', 'settings', 'support'],
+    'manager': ['users', 'companies', 'audit', 'settings', 'support'],
     'moderator': ['tenants', 'audit', 'support'],
     'auditor': ['audit'],
     'support': ['users.reset_password', 'audit.view'],
@@ -51,7 +54,7 @@ def _check_admin_role(request, required_permission='admin'):
         return True, 'superuser', ROLE_PERMISSIONS['superuser']
     
     # Check for admin staff role
-    if request.user.is_staff:
+    if request.user.is_staff or getattr(request.user, 'role', None) in ('manager', 'ceo'):
         role = getattr(request.user, 'role', 'support')
         if role in ROLE_PERMISSIONS:
             permissions = ROLE_PERMISSIONS.get(role, [])
@@ -117,6 +120,79 @@ def admin_dashboard(request):
     }
     
     return render(request, 'core/admin_dashboard.html', context)
+
+
+@login_required
+def admin_control_center(request):
+    """Central administration page for visibility toggles and management shortcuts."""
+    if not _require_admin_role(request, '*'):
+        messages.error(request, 'Admin access required.')
+        return redirect('dashboard:index')
+
+    company = getattr(request.user, 'company', None)
+    can_manage_roles = request.user.is_superuser or request.user.role in ('admin', 'ceo')
+    tenant_users = User.objects.filter(company=company).order_by('first_name', 'last_name', 'username') if company else User.objects.none()
+
+    if request.method == 'POST':
+        for key, label, description in SYSTEM_MODULE_DEFINITIONS:
+            field_name = f'module_{key}'
+            module, created = SystemModuleVisibility.objects.get_or_create(
+                key=key,
+                company=company,
+                defaults={'label': label, 'description': description, 'enabled': True},
+            )
+            raw_value = request.POST.get(field_name)
+            module.enabled = raw_value != 'off'
+            module.label = (request.POST.get(f'module_label_{key}') or label).strip()[:100]
+            try:
+                module.order = max(0, int(request.POST.get(f'module_order_{key}', module.order)))
+            except (TypeError, ValueError):
+                pass
+            module.save(update_fields=['enabled', 'label', 'order'])
+
+        if can_manage_roles:
+            role_user_id = request.POST.get('role_user')
+            role_user = tenant_users.filter(pk=role_user_id).first() if role_user_id else None
+            role = request.POST.get('role')
+            allowed_roles = dict(User.ROLE_CHOICES)
+            if role_user and role in allowed_roles and role not in ('superuser',):
+                role_user.role = role
+                role_user.is_staff = role in ('admin', 'ceo', 'manager')
+                role_user.save(update_fields=['role', 'is_staff'])
+
+        messages.success(request, 'System controls updated successfully.')
+        return redirect('core:admin_control_center')
+
+    module_rows = []
+    module_map = get_module_visibility_map(company=company)
+    for key, label, description in SYSTEM_MODULE_DEFINITIONS:
+        module = module_map.get(key)
+        if module:
+            module_rows.append({
+                'key': module.key,
+                'label': module.label,
+                'description': module.description or description,
+                'enabled': module.enabled,
+                'order': module.order,
+            })
+
+    quick_links = [
+        {'label': 'Client management', 'url': 'clients:list', 'icon': 'fas fa-users', 'description': 'Create, review, and manage the clients inside this tenant.'},
+        {'label': 'Engagements', 'url': 'services:list', 'icon': 'fas fa-briefcase', 'description': 'Open job cards and manage work for this tenant.'},
+        {'label': 'Invoices and receipts', 'url': 'billing:list', 'icon': 'fas fa-receipt', 'description': 'Track invoices, payments, and receipt-related activity for this tenant.'},
+        {'label': 'Expenses', 'url': 'expenses:list', 'icon': 'fas fa-wallet', 'description': 'Review and manage expense records for this tenant.'},
+        {'label': 'Compliance', 'url': 'compliance:list', 'icon': 'fas fa-balance-scale', 'description': 'Manage deadlines, reminders, and compliance items for this tenant.'},
+        {'label': 'Documents and reports', 'url': 'documents:monthly_report', 'icon': 'fas fa-file-alt', 'description': 'Open monthly reports and tenant documents from one place.'},
+    ]
+
+    return render(request, 'core/admin_control_center.html', {
+        'modules': module_rows,
+        'quick_links': quick_links,
+        'tenant_name': company.name if company else 'This tenant',
+        'tenant_users': tenant_users,
+        'role_choices': User.ROLE_CHOICES,
+        'can_manage_roles': can_manage_roles,
+    })
 
 
 @login_required

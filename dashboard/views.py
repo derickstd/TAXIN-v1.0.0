@@ -114,10 +114,42 @@ def index(request):
 
     # ── Net profit this month ──
     net_profit_month = total_income_month - float(total_expenses_month)
+    running_capital = total_income_month - float(total_expenses_month)
     collection_rate_month = round((float(collected_month) / float(invoiced_month) * 100), 1) if invoiced_month else 0
     new_clients_this_month = Client.objects.filter(created_at__gte=this_month_start).count()
     new_jobcards_this_month = JobCard.objects.filter(created_at__gte=this_month_start).count()
     notifications_this_month = NotificationLog.objects.filter(created_at__gte=this_month_start).count()
+
+    recent_cash_transactions = []
+    for payment in Payment.objects.select_related('invoice__client').order_by('-payment_date', '-created_at')[:6]:
+        recent_cash_transactions.append({
+            'type': 'Cash in',
+            'title': payment.invoice.client.get_display_name() if (
+                getattr(payment, 'invoice', None)
+                and getattr(payment.invoice, 'client', None)
+                and payment.invoice.client.get_display_name()
+            ) else 'Payment received',
+            'amount': float(payment.amount),
+            'date': payment.payment_date,
+            'direction': 'in',
+        })
+    for expense in Expense.objects.select_related('category').order_by('-expense_date', '-created_at')[:6]:
+        recent_cash_transactions.append({
+            'type': 'Cash out',
+            'title': expense.description or (expense.category.name if expense.category else 'Expense'),
+            'amount': float(expense.amount),
+            'date': expense.expense_date,
+            'direction': 'out',
+        })
+    for income in OtherIncome.objects.order_by('-income_date', '-created_at')[:6]:
+        recent_cash_transactions.append({
+            'type': 'Other income',
+            'title': income.source_name or 'Other income',
+            'amount': float(income.amount),
+            'date': income.income_date,
+            'direction': 'in',
+        })
+    recent_cash_transactions = sorted(recent_cash_transactions, key=lambda item: item['date'], reverse=True)[:6]
 
     company = getattr(request.user, 'company', None)
     company_stats = None
@@ -365,6 +397,60 @@ def index(request):
         {'label': 'Notifications Sent', 'value': notifications_this_month, 'subtitle': 'This month', 'icon': 'fas fa-bell', 'url': '/notifications/', 'color': 'blue'},
     ]
 
+    summary_cards = [
+        {
+            'label': 'Running Capital',
+            'value': f"UGX {running_capital:,.0f}",
+            'subtitle': 'Available operating cash',
+            'icon': 'fas fa-wallet',
+            'url': '#',
+            'tone': 'indigo',
+            'delta': profit_label,
+            'delta_tone': profit_state,
+            'has_popover': True,
+        },
+        {
+            'label': 'Cash Collected',
+            'value': f"UGX {collected_month:,.0f}",
+            'subtitle': 'Payments received',
+            'icon': 'fas fa-sack-dollar',
+            'url': '/billing/?status=paid',
+            'tone': 'emerald',
+            'delta': collected_label,
+            'delta_tone': collected_state,
+        },
+        {
+            'label': 'Outstanding',
+            'value': f"UGX {total_outstanding:,.0f}",
+            'subtitle': 'Unpaid receivables',
+            'icon': 'fas fa-file-invoice-dollar',
+            'url': '/billing/aging',
+            'tone': 'amber',
+            'delta': f"{top_overdue_count} open invoices",
+            'delta_tone': 'neutral',
+        },
+        {
+            'label': 'Collection Rate',
+            'value': f"{collection_rate_month:.1f}%",
+            'subtitle': 'Cash recovery health',
+            'icon': 'fas fa-percent',
+            'url': '/billing/aging',
+            'tone': 'cyan',
+            'delta': rate_label,
+            'delta_tone': rate_state,
+        },
+        {
+            'label': 'Jobs Completed',
+            'value': f"{jobs_completed}",
+            'subtitle': 'This month',
+            'icon': 'fas fa-check-circle',
+            'url': '/services/?status=completed',
+            'tone': 'rose',
+            'delta': jobs_label,
+            'delta_tone': jobs_state,
+        },
+    ]
+
     ctx = {
         'invoiced_month': invoiced_month, 'collected_month': collected_month,
         'other_income_month': other_income_month, 'total_income_month': total_income_month,
@@ -385,6 +471,9 @@ def index(request):
         'rev_net_profit': rev_net_profit, 'rev_collection_rate': rev_collection_rate,
         'performance_comparison': performance_comparison,
         'quick_stats': quick_stats,
+        'summary_cards': summary_cards,
+        'recent_cash_transactions': recent_cash_transactions,
+        'running_capital': running_capital,
         'month_label': this_month.strftime('%b %Y'),
         'selected_period': period,
         'period_options': period_options,

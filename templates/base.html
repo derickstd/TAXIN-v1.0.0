@@ -39,7 +39,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
-<link rel="stylesheet" href="{% static 'css/app.css' %}?v=5"><style>
+<link rel="stylesheet" href="{% static 'css/app.css' %}?v=6"><style>
 .floating-message-button {
   position:fixed;
   right:1rem;
@@ -105,18 +105,19 @@
   <!-- Scrollable nav -->
   <div class="sb-scroll">
 
-    <!-- Dashboard (direct link) -->
-    <a href="{% url 'dashboard:index' %}" class="sb-link {% block nav_dash %}{% endblock %}" title="Dashboard">
+    {% if module_visibility.dashboard %}
+    <a data-module-key="dashboard" href="{% url 'dashboard:index' %}" class="sb-link {% block nav_dash %}{% endblock %}" title="Dashboard">
       <i class="fas fa-tachometer-alt"></i>
-      <span class="sb-lbl">Dashboard</span>
+      <span class="sb-lbl">{{ module_labels.dashboard|default:'Dashboard' }}</span>
       {% if overdue_invoices_count %}<span class="sb-badge">{{ overdue_invoices_count }}</span>{% endif %}
     </a>
+    {% endif %}
 
-    <!-- Clients -->
-    <div class="sb-group" id="grp-clients">
+    {% if module_visibility.clients %}
+    <div class="sb-group" id="grp-clients" data-module-key="clients">
       <button type="button" class="sb-group-hd" data-grp="grp-clients" data-href="{% url 'clients:list' %}" title="Clients">
         <i class="fas fa-users"></i>
-        <span class="sb-lbl">Clients</span>
+        <span class="sb-lbl">{{ module_labels.clients|default:'Clients' }}</span>
         <i class="fas fa-chevron-down sb-arrow"></i>
       </button>
       <div class="sb-sub" id="sub-clients">
@@ -125,11 +126,13 @@
       </div>
     </div>
 
-    <!-- Engagements -->
-    <div class="sb-group" id="grp-work">
+    {% endif %}
+
+    {% if module_visibility.engagements %}
+    <div class="sb-group" id="grp-work" data-module-key="engagements">
       <button type="button" class="sb-group-hd" data-grp="grp-work" data-href="{% url 'services:list' %}" title="Engagements">
         <i class="fas fa-briefcase"></i>
-        <span class="sb-lbl">Engagements</span>
+        <span class="sb-lbl">{{ module_labels.engagements|default:'Engagements' }}</span>
         {% if pending_jobs_count %}<span class="sb-badge">{{ pending_jobs_count }}</span>{% endif %}
         <i class="fas fa-chevron-down sb-arrow"></i>
       </button>
@@ -143,11 +146,13 @@
       </div>
     </div>
 
-    <!-- Compliance -->
-    <div class="sb-group" id="grp-compliance">
+    {% endif %}
+
+    {% if module_visibility.compliance %}
+    <div class="sb-group" id="grp-compliance" data-module-key="compliance">
       <button type="button" class="sb-group-hd" data-grp="grp-compliance" data-href="{% url 'compliance:list' %}" title="Compliance">
         <i class="fas fa-balance-scale"></i>
-        <span class="sb-lbl">Compliance</span>
+        <span class="sb-lbl">{{ module_labels.compliance|default:'Compliance' }}</span>
         <i class="fas fa-chevron-down sb-arrow"></i>
       </button>
       <div class="sb-sub" id="sub-compliance">
@@ -161,11 +166,13 @@
       </div>
     </div>
 
-    <!-- Finance -->
-    <div class="sb-group" id="grp-finance">
+    {% endif %}
+
+    {% if module_visibility.finance %}
+    <div class="sb-group" id="grp-finance" data-module-key="finance">
       <button type="button" class="sb-group-hd" data-grp="grp-finance" data-href="{% url 'billing:list' %}" title="Finance">
         <i class="fas fa-file-invoice-dollar"></i>
-        <span class="sb-lbl">Finance</span>
+        <span class="sb-lbl">{{ module_labels.finance|default:'Finance' }}</span>
         {% if overdue_invoices_count %}<span class="sb-badge">{{ overdue_invoices_count }}</span>{% endif %}
         <i class="fas fa-chevron-down sb-arrow"></i>
       </button>
@@ -173,16 +180,19 @@
         <a href="{% url 'billing:list' %}"    class="sb-link {% block nav_inv %}{% endblock %}" title="Invoices"><i class="fas fa-file-invoice-dollar"></i><span class="sb-lbl">Invoices</span></a>
         <a href="{% url 'billing:create' %}"  class="sb-link" title="New Invoice"><i class="fas fa-file-medical"></i><span class="sb-lbl">New Invoice</span></a>
         <a href="{% url 'billing:aging' %}"   class="sb-link" title="Aging Report"><i class="fas fa-chart-bar"></i><span class="sb-lbl">Aging Report</span></a>
+        <a href="{% url 'billing:bad_debts' %}" class="sb-link" title="Bad Debts Report"><i class="fas fa-file-medical-alt"></i><span class="sb-lbl">Bad Debts Report</span></a>
         <a href="{% url 'expenses:list' %}"   class="sb-link {% block nav_exp %}{% endblock %}" title="Expenses"><i class="fas fa-receipt"></i><span class="sb-lbl">Expenses</span></a>
         <a href="{% url 'expenses:create' %}" class="sb-link" title="Log Expense"><i class="fas fa-plus"></i><span class="sb-lbl">Log Expense</span></a>
       </div>
     </div>
 
-    <!-- Insights -->
-    <div class="sb-group" id="grp-reports">
+    {% endif %}
+
+    {% if module_visibility.insights %}
+    <div class="sb-group" id="grp-reports" data-module-key="insights">
       <button type="button" class="sb-group-hd" data-grp="grp-reports" data-href="{% url 'documents:price_list' %}" title="Insights">
         <i class="fas fa-chart-line"></i>
-        <span class="sb-lbl">Insights</span>
+        <span class="sb-lbl">{{ module_labels.insights|default:'Insights' }}</span>
         <i class="fas fa-chevron-down sb-arrow"></i>
       </button>
       <div class="sb-sub" id="sub-reports">
@@ -195,24 +205,36 @@
       </div>
     </div>
 
-    <!-- Account -->
-    <div class="sb-group" id="grp-account">
+    {% endif %}
+
+    {% if module_visibility.account %}
+    <div class="sb-group" id="grp-account" data-module-key="account">
       <button type="button" class="sb-group-hd" data-grp="grp-account" data-href="{% url 'core:settings' %}" title="Account">
         <i class="fas fa-user-circle"></i>
-        <span class="sb-lbl">Account</span>
+        <span class="sb-lbl">{{ module_labels.account|default:'Account' }}</span>
         <i class="fas fa-chevron-down sb-arrow"></i>
       </button>
       <div class="sb-sub" id="sub-account">
         <a href="{% url 'core:settings' %}" class="sb-link {% block nav_settings %}{% endblock %}" title="My Settings"><i class="fas fa-palette"></i><span class="sb-lbl">My Settings</span></a>
-        {% if user.is_superuser or user.role == 'admin' or user.role == 'manager' or user.role == 'moderator' or user.role == 'auditor' %}
+        {% if user.is_superuser or user.role == 'admin' or user.role == 'manager' or user.role == 'ceo' or user.role == 'moderator' or user.role == 'auditor' %}
         <a href="{% url 'core:admin_audit_logs' %}" class="sb-link {% block nav_audit %}{% endblock %}" title="Audit Logs"><i class="fas fa-shield-alt"></i><span class="sb-lbl">Audit Logs</span></a>
         {% endif %}
-        {% if user.is_superuser or user.role == 'admin' or user.role == 'manager' %}
+        {% if user.is_superuser or user.role == 'admin' or user.role == 'manager' or user.role == 'ceo' %}
         <a href="{% url 'core:users' %}"    class="sb-link {% block nav_users %}{% endblock %}" title="Manage Users"><i class="fas fa-users-cog"></i><span class="sb-lbl">Manage Users</span></a>
         <a href="{% url 'core:user_new' %}" class="sb-link" title="Add User"><i class="fas fa-user-shield"></i><span class="sb-lbl">Add User</span></a>
         {% endif %}
+        {% if user.is_superuser or user.role == 'admin' or user.role == 'ceo' %}
+        <a href="{% url 'core:admin_control_center' %}" class="sb-link {% block nav_control_center %}{% endblock %}" title="System Control Center"><i class="fas fa-sliders-h"></i><span class="sb-lbl">System Controls</span></a>
+        {% endif %}
       </div>
     </div>
+    {% endif %}
+
+    {% if not module_visibility.account and user.is_superuser or not module_visibility.account and user.role == 'admin' or not module_visibility.account and user.role == 'manager' or not module_visibility.account and user.role == 'ceo' %}
+    <a href="{% url 'core:admin_control_center' %}" class="sb-link {% block nav_control_center_fallback %}{% endblock %}" title="System Control Center">
+      <i class="fas fa-sliders-h"></i><span class="sb-lbl">System Controls</span>
+    </a>
+    {% endif %}
 
   </div><!-- /sb-scroll -->
 
@@ -329,6 +351,16 @@
     document.querySelectorAll('#sidebar .sb-link').forEach(function(a){
       a.addEventListener('click', function(){ if(!isDesktop()) closeMobile(); });
     });
+
+    /* Apply tenant-configured module ordering without duplicating sidebar markup. */
+    var moduleOrders = {{ module_orders_json|default:'{}'|safe }};
+    var scroll = document.querySelector('#sidebar .sb-scroll');
+    if(scroll && moduleOrders){
+      Array.from(scroll.children).sort(function(a,b){
+        var aKey = a.getAttribute('data-module-key'), bKey = b.getAttribute('data-module-key');
+        return (moduleOrders[aKey] || 0) - (moduleOrders[bKey] || 0);
+      }).forEach(function(item){ scroll.appendChild(item); });
+    }
   }
 
   /* Wait for full DOM — sidebar script is mid-body so hamburger isn't parsed yet */
@@ -350,6 +382,10 @@
       </ol></nav>
     </div>
     <div class="topbar-r">
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark mode" title="Toggle light and dark mode">
+        <i class="fas fa-sun theme-toggle__icon"></i>
+        <span class="theme-toggle__label">Light</span>
+      </button>
       <a href="{% url 'services:create' %}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New Job</a>
       <a href="{% url 'clients:create' %}"  class="btn btn-outline btn-sm d-xs-none"><i class="fas fa-user-plus"></i> Client</a>
       <span class="kb-hint d-xs-none" onclick="window.txShowShortcuts&&window.txShowShortcuts()" title="Keyboard shortcuts">
@@ -379,6 +415,63 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="{% static 'js/app.js' %}?v=4"></script>
+<script>
+(function(){
+  var body = document.body;
+  var toggle = document.getElementById('themeToggle');
+  if (!toggle) return;
+
+  function getCsrfToken(){
+    var value = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+    return value ? decodeURIComponent(value[1]) : '';
+  }
+
+  function applyTheme(mode){
+    var nextMode = mode === 'dark' ? 'dark' : 'ocean';
+    body.setAttribute('data-theme', nextMode);
+    localStorage.setItem('tx_global_theme', nextMode);
+
+    var icon = toggle.querySelector('.theme-toggle__icon');
+    var label = toggle.querySelector('.theme-toggle__label');
+    if (nextMode === 'dark') {
+      if (icon) icon.className = 'fas fa-moon theme-toggle__icon';
+      if (label) label.textContent = 'Dark';
+      toggle.setAttribute('aria-label', 'Switch to light mode');
+      toggle.title = 'Switch to light mode';
+    } else {
+      if (icon) icon.className = 'fas fa-sun theme-toggle__icon';
+      if (label) label.textContent = 'Light';
+      toggle.setAttribute('aria-label', 'Switch to dark mode');
+      toggle.title = 'Switch to dark mode';
+    }
+  }
+
+  var savedTheme = localStorage.getItem('tx_global_theme');
+  var currentTheme = body.getAttribute('data-theme') || savedTheme || 'ocean';
+  applyTheme(currentTheme);
+
+  toggle.addEventListener('click', function(){
+    var current = body.getAttribute('data-theme') || 'ocean';
+    var next = current === 'dark' ? 'ocean' : 'dark';
+    applyTheme(next);
+
+    var formData = new URLSearchParams();
+    formData.append('ui_theme', next);
+    fetch('{% url "core:save_theme" %}', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+      },
+      body: formData.toString(),
+      credentials: 'same-origin'
+    }).catch(function(){
+      console.warn('Theme preference could not be saved.');
+    });
+  });
+})();
+</script>
 {% block extra_js %}{% endblock %}
 
 <a href="{% url 'notifications:message_new' %}" class="floating-message-button" title="New staff message"><i class="fas fa-comment-alt"></i></a>

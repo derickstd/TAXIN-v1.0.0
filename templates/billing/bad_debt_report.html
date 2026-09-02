@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Bad Debts Report{% endblock %}
+{% block nav_billing %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">Bad Debts Report</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h4 class="page-title"><i class="fas fa-file-medical-alt"></i>Bad Debts Report</h4>
+  <button onclick="window.print()" class="btn btn-outline btn-sm no-print"><i class="fas fa-print"></i> Print</button>
+</div>
+<div class="grid g3 mb-3">
+  <div class="kpi"><div class="kpi-label">Bad debt items</div><div class="kpi-value">{{ items|length }}</div><div class="kpi-sub">Handled tasks over 12 months</div></div>
+  <div class="kpi"><div class="kpi-label">Total bad debt</div><div class="kpi-value" style="font-size:1.1rem">UGX {{ total|floatformat:0|intcomma }}</div><div class="kpi-sub">Outstanding task value</div></div>
+  <div class="kpi"><div class="kpi-label">As of</div><div class="kpi-value" style="font-size:1.1rem">{{ as_of|date:"M d, Y" }}</div><div class="kpi-sub">Classification date</div></div>
+</div>
+<div class="card-box">
+  <div class="card-head"><span>Handled work awaiting payment beyond 12 months</span><span class="text-muted fs-sm">Bad debt classification</span></div>
+  {% if items %}
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Client</th><th>Task</th><th>Service</th><th>Reference date</th><th>Age</th><th style="text-align:right">Amount</th><th></th></tr></thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td><a href="{% url 'clients:detail' item.job_card.client.pk %}">{{ item.job_card.client.get_display_name }}</a></td>
+        <td><a href="{% url 'services:detail' item.job_card.pk %}">{{ item.job_card.job_number }}</a></td>
+        <td>{{ item.get_description }}</td>
+        <td>{{ item.payment_due_date|date:"M d, Y" }}</td>
+        <td><span class="badge badge-overdue">{{ item.payment_due_date|timesince }} old</span></td>
+        <td class="ugx ugx-red" style="text-align:right;font-weight:700">UGX {{ item.line_total|floatformat:0|intcomma }}</td>
+        <td><a href="{% url 'services:detail' item.job_card.pk %}" class="btn btn-outline btn-sm">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="card-body empty-state"><i class="fas fa-check-circle"></i><p>No bad debts found.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

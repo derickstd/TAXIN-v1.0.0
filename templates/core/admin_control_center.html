@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}System Control Center{% endblock %}
+{% block content %}
+<div style="padding:2rem;max-width:1400px;margin:0 auto;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem;">
+    <div>
+      <h1 style="margin:0;color:#1A3C6E;font-size:2rem;font-weight:800;">Tenant Control Center</h1>
+      <p style="margin:.4rem 0 0;color:#6b7280;">Manage visibility and shortcuts for {{ tenant_name }} only. Changes stay inside this tenant and do not affect other tenants.</p>
+    </div>
+    <a href="{% url 'core:admin_dashboard' %}" style="background:#6b7280;color:#fff;padding:.8rem 1.15rem;border-radius:8px;text-decoration:none;font-weight:700;">
+      <i class="fas fa-arrow-left" style="margin-right:.5rem;"></i>Back to admin dashboard
+    </a>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div style="background:#fff;border-radius:14px;padding:1.5rem;box-shadow:0 2px 10px rgba(0,0,0,.08);margin-bottom:1.5rem;">
+      <h2 style="margin:0 0 1rem;color:#1A3C6E;font-size:1.15rem;font-weight:800;">Module visibility switches</h2>
+      <p style="margin:0 0 1rem;color:#6b7280;">Turn sections on or off globally so they appear or disappear across the whole project.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;">
+        {% for module in modules %}
+        <label style="display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb;">
+          <span>
+            <strong style="display:block;color:#111827;">{{ module.label }}</strong>
+            <span style="display:block;color:#6b7280;font-size:.9rem;margin-top:.2rem;">{{ module.description }}</span>
+            <input type="text" name="module_label_{{ module.key }}" value="{{ module.label }}" maxlength="100" aria-label="{{ module.label }} sidebar label" style="width:100%;margin-top:.6rem;padding:.45rem;border:1px solid #d1d5db;border-radius:6px;">
+            <input type="number" name="module_order_{{ module.key }}" value="{{ module.order|default:0 }}" min="0" aria-label="{{ module.label }} sidebar order" style="width:6rem;margin-top:.4rem;padding:.45rem;border:1px solid #d1d5db;border-radius:6px;">
+          </span>
+          <input type="checkbox" name="module_{{ module.key }}" {% if module.enabled %}checked{% endif %} style="width:1.1rem;height:1.1rem;">
+        </label>
+        {% empty %}
+        <p style="margin:0;color:#6b7280;">No module settings are available yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% if can_manage_roles %}
+    <div style="background:#fff;border-radius:14px;padding:1.5rem;box-shadow:0 2px 10px rgba(0,0,0,.08);margin-bottom:1.5rem;">
+      <h2 style="margin:0 0 1rem;color:#1A3C6E;font-size:1.15rem;font-weight:800;">Tenant role control</h2>
+      <p style="margin:0 0 1rem;color:#6b7280;">Assign staff roles for {{ tenant_name }}. CEO and Admin roles can manage this control center.</p>
+      <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;">
+        <label style="display:flex;flex-direction:column;gap:.35rem;color:#374151;font-weight:700;">Staff member
+          <select name="role_user" style="min-width:240px;padding:.65rem;border:1px solid #d1d5db;border-radius:6px;">
+            <option value="">Select staff member</option>
+            {% for tenant_user in tenant_users %}<option value="{{ tenant_user.pk }}">{{ tenant_user.get_full_name|default:tenant_user.username }} ({{ tenant_user.get_role_display }})</option>{% endfor %}
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:.35rem;color:#374151;font-weight:700;">Role
+          <select name="role" style="min-width:180px;padding:.65rem;border:1px solid #d1d5db;border-radius:6px;">
+            {% for value, label in role_choices %}{% if value != 'superuser' %}<option value="{{ value }}">{{ label }}</option>{% endif %}{% endfor %}
+          </select>
+        </label>
+      </div>
+    </div>
+    {% endif %}
+
+    <div style="background:#fff;border-radius:14px;padding:1.5rem;box-shadow:0 2px 10px rgba(0,0,0,.08);margin-bottom:1.5rem;">
+      <h2 style="margin:0 0 1rem;color:#1A3C6E;font-size:1.15rem;font-weight:800;">Management shortcuts</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;">
+        {% for link in quick_links %}
+        <a href="{% url link.url %}" style="display:block;padding:1rem;border:1px solid #e5e7eb;border-radius:10px;text-decoration:none;color:#111827;background:#fff;">
+          <div style="display:flex;align-items:center;gap:.7rem;margin-bottom:.5rem;">
+            <i class="{{ link.icon }}" style="color:#1A3C6E;font-size:1.15rem;"></i>
+            <strong>{{ link.label }}</strong>
+          </div>
+          <span style="display:block;color:#6b7280;font-size:.9rem;">{{ link.description }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <button type="submit" style="background:#1A3C6E;color:#fff;padding:.9rem 1.35rem;border:none;border-radius:8px;font-weight:700;cursor:pointer;">
+      <i class="fas fa-save" style="margin-right:.5rem;"></i>Save module settings
+    </button>
+  </form>
+</div>
+{% endblock %}
