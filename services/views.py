@@ -11,7 +11,7 @@ from .forms import JobCardForm, LineItemFormSet, ServiceTypeForm
 import calendar as cal
 from core.utils import paginate_queryset
 from clients.models import Client
-from core.models import User
+from core.models import User, AuditLog
 
 
 def _auto_log_time(job, user, description, hours=Decimal('0.25')):
@@ -324,12 +324,14 @@ def jobcard_create(request):
                     obj.delete()
 
             job.update_total()
+            if request.POST.get('create_invoice') == 'yes':
+                _auto_create_invoice(job, request.user)
             StaffActivityLog.objects.create(job_card=job, staff=request.user, action='Job card created')
             _auto_log_time(job, request.user, 'Job card created', Decimal('0.25'))
             if intake_pk:
                 from clients.models import WalkInIntake
                 WalkInIntake.objects.filter(pk=intake_pk).update(outcome='job_created')
-            messages.success(request, f'Job card {job.job_number} created. No invoice is generated until a task is marked handled.')
+            messages.success(request, f'Job card {job.job_number} created. The invoice is ready for review.')
             return redirect('services:detail', pk=job.pk)
         else:
             messages.error(request, 'Please fix the errors below.')
@@ -428,7 +430,15 @@ def jobcard_quick_create(request):
     if similar and request.POST.get('force_create') != '1':
         messages.warning(request, 'A similar transaction already exists for this client and service period.')
         request.session['duplicate_matches'] = [
-            {'type': item.get('type'), 'description': item.get('description'), 'date': item.get('date') or item.get('due_date')}
+            {
+                'type': item.get('type'),
+                'description': item.get('description'),
+                'date': (
+                    item.get('date') or item.get('due_date') or item.get('created_at')
+                ).isoformat() if (
+                    item.get('date') or item.get('due_date') or item.get('created_at')
+                ) else None,
+            }
             for item in similar
         ]
         return redirect(request.META.get('HTTP_REFERER', reverse('clients:detail', args=[client.pk])))
@@ -603,11 +613,65 @@ def _auto_create_invoice(job, user):
     vat_total = sum((li.vat_amount or Decimal('0')) for li in job.line_items.all())
     due = job.due_date or (timezone.now().date() + timezone.timedelta(days=14))
     grand_total = subtotal + vat_total
-    return Invoice.objects.create(
+    invoice = Invoice.objects.create(
         client=job.client, job_card=job, due_date=due,
         subtotal=subtotal, vat_total=vat_total, grand_total=grand_total,
         status='sent' if subtotal > 0 else 'draft', created_by=user,
     )
+    _apply_client_credit(invoice, user)
+    return invoice
+
+
+def _apply_client_credit(invoice, user):
+    """Transfer existing invoice overpayments to a newly created invoice."""
+    from billing.models import Invoice, Payment
+
+    remaining = invoice.grand_total
+    if remaining <= 0:
+        return Decimal('0')
+
+    credit_payments = list(
+        Payment.objects.filter(
+            invoice__client=invoice.client,
+            invoice__amount_paid__gt=0,
+        ).exclude(invoice=invoice).select_related('invoice').order_by('created_at', 'pk')
+    )
+    applied = Decimal('0')
+    for credit_payment in credit_payments:
+        if remaining <= 0:
+            break
+        source_invoice = credit_payment.invoice
+        source_credit = source_invoice.amount_paid - source_invoice.grand_total
+        if source_credit <= 0:
+            continue
+        amount = min(source_credit, remaining, credit_payment.amount)
+        if amount <= 0:
+            continue
+
+        credit_payment.amount -= amount
+        credit_payment.save(update_fields=['amount'])
+        source_invoice.amount_paid = sum(
+            payment.amount for payment in source_invoice.payments.all()
+        )
+        source_invoice.update_status()
+        Invoice.objects.filter(pk=source_invoice.pk).update(
+            amount_paid=source_invoice.amount_paid,
+        )
+        Payment.objects.create(
+            invoice=invoice,
+            amount=amount,
+            method=credit_payment.method,
+            reference=f'Credit applied from {source_invoice.invoice_number}',
+            received_by=user,
+        )
+        applied += amount
+        remaining -= amount
+
+    if applied:
+        invoice.refresh_from_db(fields=['amount_paid', 'status'])
+        from billing.signals import recalc_client_outstanding
+        recalc_client_outstanding(invoice.client)
+    return applied
 
 
 @login_required
@@ -675,6 +739,8 @@ def update_line_status(request, pk):
     if request.method == 'POST':
         new_status = request.POST.get('status')
         if new_status in dict(JobCardLineItem.ITEM_STATUS):
+            old_status = item.status
+            was_all_paid = not item.job_card.line_items.exclude(status='handled_paid').exists()
             item.status = new_status
             item.save()
             StaffActivityLog.objects.create(
@@ -727,16 +793,33 @@ def update_line_status(request, pk):
                 all_paid = all(li.status == 'handled_paid' for li in all_items)
                 any_handled = any(li.status in ('handled_paid','handled_not_paid','bad_debt','paid_not_handled') for li in all_items)
                 if all_paid:
-                    inv.amount_paid = inv.grand_total
-                    inv.status = 'paid'
-                    inv.save()
-                    from django.db.models import Sum
-                    from billing.models import Invoice
-                    client = job.client
-                    out = Invoice.objects.filter(client=client).exclude(status='paid').aggregate(s=Sum('grand_total'))['s'] or 0
-                    paid_sum = Invoice.objects.filter(client=client).aggregate(s=Sum('amount_paid'))['s'] or 0
-                    client.total_outstanding = max(0, out - paid_sum)
-                    client.save(update_fields=['total_outstanding'])
+                    from billing.models import Payment
+                    recorded_paid = sum(payment.amount for payment in inv.payments.all())
+                    amount_to_record = max(Decimal('0'), inv.grand_total - recorded_paid)
+                    if amount_to_record > 0:
+                        Payment.objects.create(
+                            invoice=inv,
+                            amount=amount_to_record,
+                            method=inv.payment_method if inv.payment_method in dict(Payment.METHOD) else 'cash',
+                            reference=f'Auto-recorded when {job.job_number} was marked handled and paid',
+                            received_by=request.user,
+                        )
+
+                    if old_status != 'handled_paid' and not was_all_paid:
+                        AuditLog.objects.create(
+                            model_name='job_card',
+                            object_id=str(job.pk),
+                            action='UPDATE',
+                            changed_fields={
+                                'line_item_status': {
+                                    'from': old_status,
+                                    'to': 'handled_paid',
+                                },
+                                'payment_recorded': str(amount_to_record),
+                            },
+                            changed_by=request.user,
+                            notes=f'{job.job_number} marked handled and paid; payment recorded automatically.',
+                        )
                 elif any_handled and inv.status == 'draft':
                     inv.status = 'sent'
                     inv.save(update_fields=['status'])

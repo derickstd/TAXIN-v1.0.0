@@ -53,7 +53,22 @@
           <input type="hidden" name="client" value="{{ client.pk }}">
           <div class="mb-2">
             <label class="form-label">Amount (UGX)</label>
-            <input type="number" name="amount" class="form-ctrl" min="0" step="1000" value="{{ balance|floatformat:0 }}" placeholder="Enter lump sum">
+            <input type="number" name="amount" id="clientPaymentAmount" class="form-ctrl" min="0" step="1000" value="{{ balance|floatformat:0 }}" placeholder="Enter lump sum">
+          </div>
+          <div class="mb-2" style="border:1px solid var(--border);border-radius:6px;padding:.65rem">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+              <label class="form-label" style="margin:0">Pending invoices</label>
+              <button type="button" class="btn btn-outline btn-sm" id="selectPendingInvoices">Select all</button>
+            </div>
+            {% for inv in pending_invoices %}
+            <label style="display:flex;justify-content:space-between;gap:.5rem;align-items:center;font-size:.78rem;padding:.25rem 0">
+              <span><input type="checkbox" name="invoice_ids" value="{{ inv.pk }}" data-balance="{{ inv.balance_due }}" class="pending-invoice-check"> {{ inv.invoice_number }}</span>
+              <span class="ugx ugx-red">UGX {{ inv.balance_due|floatformat:0|intcomma }}</span>
+            </label>
+            {% empty %}
+            <div class="text-muted" style="font-size:.78rem">No pending invoices.</div>
+            {% endfor %}
+            <div class="text-muted" style="font-size:.72rem;margin-top:.35rem">Select invoices to collect. Leave all unchecked to include all pending invoices.</div>
           </div>
           <div class="mb-2">
             <label class="form-label">Method</label>
@@ -70,6 +85,26 @@
           <div class="text-muted" style="font-size:.72rem;margin-bottom:.7rem">This will be split across outstanding invoices from the earliest periods first.</div>
           <button class="btn btn-success btn-sm w-100"><i class="fas fa-check"></i> Apply Payment</button>
         </form>
+        <script>
+          (function () {
+            const checks = Array.from(document.querySelectorAll('.pending-invoice-check'));
+            const amount = document.getElementById('clientPaymentAmount');
+            const selectButton = document.getElementById('selectPendingInvoices');
+            function updateAmount() {
+              const selected = checks.filter((check) => check.checked);
+              if (selected.length) {
+                amount.value = selected.reduce((sum, check) => sum + Number(check.dataset.balance || 0), 0).toFixed(0);
+              }
+            }
+            checks.forEach((check) => check.addEventListener('change', updateAmount));
+            selectButton?.addEventListener('click', () => {
+              const selectAll = checks.some((check) => !check.checked);
+              checks.forEach((check) => { check.checked = selectAll; });
+              selectButton.textContent = selectAll ? 'Clear selection' : 'Select all';
+              updateAmount();
+            });
+          }());
+        </script>
       </div>
     </div>
 

@@ -145,29 +145,20 @@ def check_duplicate_transaction(client, service_type=None, job_card=None, period
     from billing.models import Invoice
     
     existing = []
-    now = timezone.now().date()
-    date_threshold = now - timedelta(days=within_days)
+    entered_after = timezone.now() - timedelta(days=within_days)
+    duplicate_rule = deadline_type or (service_type.deadline_type if service_type else None)
 
     if not _is_duplicate_candidate_service(service_type, deadline_type):
         return existing
     
-    # Check for similar compliance deadlines
+    # Duplicate checks use the deadline rule and entry time, not the business period.
     if service_type or deadline_type:
-        # ComplianceDeadline does not have a `created_at` field — use `due_date`
-        # to find recent or upcoming deadlines instead.
         deadlines = ComplianceDeadline.objects.filter(
             obligation__client=client,
-            due_date__gte=date_threshold
+            created_at__gte=entered_after,
         ).select_related('obligation__service_type')
         
-        if service_type:
-            deadlines = deadlines.filter(obligation__service_type=service_type)
-        
-        if period_year and period_month:
-            deadlines = deadlines.filter(
-                obligation__client=client,
-                period_label__icontains=f"{period_year}"
-            )
+        deadlines = deadlines.filter(obligation__service_type__deadline_type=duplicate_rule)
         
         for deadline in deadlines[:5]:
             existing.append({
@@ -178,18 +169,14 @@ def check_duplicate_transaction(client, service_type=None, job_card=None, period
                 'status': deadline.status
             })
     
-    # Check for similar job cards only when the same recurring service appears in the same period.
-    if job_card or (period_year and period_month):
+    # Job cards are compared by deadline rule and when they were entered.
+    if job_card or service_type or deadline_type:
         jobs = JobCard.objects.filter(client=client)
+        jobs = jobs.filter(created_at__gte=entered_after)
         
         if job_card:
             jobs = jobs.exclude(pk=job_card.pk)
         
-        if period_year and period_month:
-            jobs = jobs.filter(period_year=period_year, period_month=period_month)
-        else:
-            jobs = jobs.filter(created_at__gte=date_threshold)
-
         for job in jobs[:5]:
             if not job.line_items.exists():
                 continue
@@ -200,15 +187,8 @@ def check_duplicate_transaction(client, service_type=None, job_card=None, period
                     continue
                 if not _is_duplicate_candidate_service(line.service_type, deadline_type=None):
                     continue
-                if service_type and line.service_type_id != service_type.pk:
+                if line.service_type.deadline_type != duplicate_rule:
                     continue
-                if service_type:
-                    name_a = (service_type.name or '').strip().lower()
-                    name_b = (line.service_type.name or '').strip().lower()
-                    if not name_a or not name_b:
-                        continue
-                    if fuzz.token_set_ratio(name_a, name_b) < 70:
-                        continue
                 matching_items.append(line)
 
             if matching_items:
@@ -220,19 +200,16 @@ def check_duplicate_transaction(client, service_type=None, job_card=None, period
                     'status': job.status
                 })
     
-    # Check for similar invoices attached to job cards for the same period
-    if period_year:
+    # Invoices follow the same entry-time window and deadline-rule service match.
+    if service_type or deadline_type:
         invoices = Invoice.objects.filter(
             client=client,
             job_card__isnull=False,
-            created_at__gte=date_threshold,
+            created_at__gte=entered_after,
         )
-        if period_month:
-            invoices = invoices.filter(job_card__period_year=period_year, job_card__period_month=period_month)
-        else:
-            invoices = invoices.filter(job_card__period_year=period_year)
-        if service_type:
-            invoices = invoices.filter(job_card__line_items__service_type=service_type)
+        invoices = invoices.filter(
+            job_card__line_items__service_type__deadline_type=duplicate_rule,
+        )
 
         for invoice in invoices.distinct()[:3]:
             existing.append({

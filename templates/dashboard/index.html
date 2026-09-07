@@ -61,14 +61,14 @@
         <div class="dashboard-popover" id="capital-panel-{{ forloop.counter }}" role="menu" aria-label="Recent capital activity">
           <div class="dashboard-popover__header">
             <span>Recent activity</span>
-            <strong>Last 6</strong>
+            <strong>Last 5</strong>
           </div>
           {% for transaction in recent_cash_transactions %}
           <div class="dashboard-popover__item">
             <div class="dashboard-popover__info">
               <span class="dashboard-popover__type">{{ transaction.type }}</span>
               <span class="dashboard-popover__title">{{ transaction.title }}</span>
-              <small>{{ transaction.date|date:"M d, Y" }}</small>
+              <small>{{ transaction.date|date:"M d, Y" }} · Entered {{ transaction.entered_at|date:"M d, Y H:i" }}</small>
             </div>
             <span class="dashboard-popover__amount {% if transaction.direction == 'in' %}is-in{% else %}is-out{% endif %}">
               {% if transaction.direction == 'in' %}+{% else %}-{% endif %}UGX {{ transaction.amount|floatformat:0|intcomma }}

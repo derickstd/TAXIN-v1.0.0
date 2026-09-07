@@ -9,12 +9,38 @@ import calendar as _calendar
 from datetime import date
 from billing.models import Payment
 from expenses.models import Expense
+from types import SimpleNamespace
 
 
 @login_required
 def calendar_view(request):
     today = timezone.now().date()
-    events = TaxEvent.objects.select_related('assigned_to').all()
+    events = list(TaxEvent.objects.select_related('assigned_to').all())
+    from compliance.models import ComplianceDeadline
+
+    # Compliance deadlines are the system-generated tax records. Present them
+    # alongside manually added calendar events instead of hiding them in a separate section.
+    for deadline in ComplianceDeadline.objects.select_related(
+        'obligation__client', 'obligation__service_type', 'filed_by'
+    ).all():
+        if deadline.status in ('filed_and_paid',):
+            display_status = 'done'
+        elif deadline.status in ('overdue', 'penalty_issued'):
+            display_status = 'missed'
+        elif deadline.status == 'waived':
+            display_status = 'cancelled'
+        else:
+            display_status = 'upcoming'
+        events.append(SimpleNamespace(
+            title=f'{deadline.obligation.service_type.name} — {deadline.obligation.client.get_display_name()}',
+            event_type='ura_filing',
+            due_date=deadline.due_date,
+            description=deadline.period_label,
+            status=display_status,
+            assigned_to=deadline.filed_by,
+            created_by=None,
+            compliance_deadline=deadline,
+        ))
     status = request.GET.get('status', '')
     # Optional: filter by a specific day to show payments/expenses on calendar detail
     day_param = request.GET.get('day')
@@ -30,7 +56,7 @@ def calendar_view(request):
         except Exception:
             filter_day = None
     if status:
-        events = events.filter(status=status)
+        events = [event for event in events if event.status == status]
     # Auto-mark overdue upcoming events
     TaxEvent.objects.filter(status='upcoming', due_date__lt=today).update(status='missed')
     # Financial summary: money in (payments) and money out (approved expenses) for each day of current month
@@ -47,7 +73,10 @@ def calendar_view(request):
         daily_list.append((d, money_in, money_out))
     # Build calendar grid (weeks) for month view and attach events to each day
     month_calendar = _calendar.monthcalendar(year, month)
-    events_in_month = events.filter(due_date__year=year, due_date__month=month)
+    events_in_month = [
+        event for event in events
+        if event.due_date.year == year and event.due_date.month == month
+    ]
     events_by_date = {}
     for ev in events_in_month:
         events_by_date.setdefault(ev.due_date, []).append(ev)

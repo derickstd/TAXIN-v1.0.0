@@ -221,6 +221,9 @@ def client_detail(request, pk):
     client = get_object_or_404(Client, pk=pk)
     job_cards = client.job_cards.prefetch_related('line_items').order_by('-created_at')[:20]
     invoices = client.invoices.order_by('-date_issued')[:20]
+    pending_invoices = client.invoices.filter(
+        status__in=['sent', 'partially_paid', 'overdue'],
+    ).order_by('date_issued', 'pk')
     total_invoiced = client.invoices.aggregate(s=Sum('grand_total'))['s'] or 0
     total_paid = client.invoices.aggregate(s=Sum('amount_paid'))['s'] or 0
     client_payments = (
@@ -251,6 +254,7 @@ def client_detail(request, pk):
     ]
     return render(request, 'clients/client_detail.html', {
         'client': client, 'job_cards': job_cards, 'invoices': invoices,
+        'pending_invoices': pending_invoices,
         'total_invoiced': total_invoiced, 'total_paid': total_paid,
         'total_collected': total_collected, 'client_payments': client_payments,
         'balance': total_invoiced - total_paid,

@@ -138,6 +138,8 @@
         <form method="post" action="{% url 'billing:pay' invoice.pk %}">{% csrf_token %}
           <div class="mb-2"><label class="form-label">Amount (UGX)</label>
             <input type="number" name="amount" class="form-ctrl" value="{{ invoice.balance_due|floatformat:0 }}"></div>
+          <div class="mb-2"><label class="form-label">Payment date</label>
+            <input type="date" name="payment_date" class="form-ctrl" value="{% now 'Y-m-d' %}"></div>
           <div class="mb-2"><label class="form-label">Method</label>
             <select name="method" class="form-ctrl">
               <option value="cash">Cash</option>
@@ -160,7 +162,7 @@
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div>
               <div class="fw-6 ugx-g">UGX {{ pmt.amount|floatformat:0|intcomma }}</div>
-              <div class="fs-xs text-muted">{{ pmt.get_method_display }} &bull; {{ pmt.payment_date }}</div>
+              <div class="fs-xs text-muted">{{ pmt.get_method_display }} &bull; {{ pmt.created_at|date:"d M Y H:i" }}</div>
               {% if pmt.reference %}<div class="fs-xs text-muted">Ref: {{ pmt.reference }}</div>{% endif %}
             </div>
             <div class="text-r">

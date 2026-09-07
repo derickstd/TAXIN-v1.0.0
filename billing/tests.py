@@ -39,6 +39,8 @@ class ClientPaymentFlowTests(TestCase):
         self.assertContains(response, 'Record Lump-Sum Payment')
         self.assertContains(response, reverse('billing:client_pay'))
         self.assertContains(response, 'earliest periods first')
+        self.assertContains(response, 'Pending invoices')
+        self.assertContains(response, 'name="invoice_ids"')
 
 
 class InvoiceNumberingTests(TestCase):
@@ -87,6 +89,38 @@ class InvoiceNumberingTests(TestCase):
         self.assertEqual(newer.amount_paid, Decimal('500'))
         self.assertEqual(Payment.objects.filter(invoice=older).count(), 1)
         self.assertEqual(Payment.objects.filter(invoice=newer).count(), 1)
+
+    def test_client_payment_can_target_only_selected_pending_invoices(self):
+        selected = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.now().date(),
+            subtotal=Decimal('1000'),
+            grand_total=Decimal('1000'),
+            status='sent',
+            created_by=self.user,
+        )
+        unselected = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.now().date(),
+            subtotal=Decimal('2000'),
+            grand_total=Decimal('2000'),
+            status='sent',
+            created_by=self.user,
+        )
+
+        response = self.client.post(reverse('billing:client_pay'), {
+            'client': self.client_obj.pk,
+            'invoice_ids': [selected.pk],
+            'amount': '1000',
+            'method': 'cash',
+            'reference': 'selected-only',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        selected.refresh_from_db()
+        unselected.refresh_from_db()
+        self.assertEqual(selected.amount_paid, Decimal('1000'))
+        self.assertEqual(unselected.amount_paid, Decimal('0'))
 
     def test_client_overpayment_updates_negative_client_balance(self):
         invoice = Invoice.objects.create(

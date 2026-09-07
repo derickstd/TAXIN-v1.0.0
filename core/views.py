@@ -298,6 +298,7 @@ def signup(request):
                     # If tenant record exists, redirect user to progress page
                     tenant = getattr(company, 'tenant', None)
                     if tenant:
+                        request.session['tenant_progress_id'] = tenant.pk
                         return redirect('core:tenant_progress', pk=tenant.pk)
                 except Exception as e:
                     import logging
@@ -324,6 +325,11 @@ def tenant_progress(request, pk):
     from django.shortcuts import get_object_or_404
     from .models import Tenant
     tenant = get_object_or_404(Tenant, pk=pk)
+    session_tenant_id = request.session.get('tenant_progress_id')
+    if not request.user.is_authenticated and session_tenant_id != tenant.pk:
+        return redirect('login')
+    if request.user.is_authenticated and request.user != tenant.created_by and not request.user.is_superuser:
+        return redirect('dashboard:index')
     # We will render a template that polls the status API
     return render(request, 'core/tenant_progress.html', {'tenant': tenant})
 
@@ -568,7 +574,7 @@ def save_ui_theme(request):
 
 
 @login_required
-def run_daily_now(request):
+def _run_daily_now_unlocked(request):
     """Manually run all daily automation tasks immediately (Admin/Manager only)."""
     if not request.user.is_manager_or_admin():
         messages.error(request, 'Permission denied.')
@@ -604,6 +610,18 @@ def run_daily_now(request):
             results.append(f'job card error: {e}')
         messages.success(request, 'Automation run complete: ' + ' | '.join(results))
     return redirect('dashboard:index')
+
+
+@login_required
+def run_daily_now(request):
+    from core.automation_lock import automation_lock
+    if request.method == 'POST':
+        with automation_lock() as acquired:
+            if not acquired:
+                messages.warning(request, 'Another automation run is already in progress.')
+                return redirect('dashboard:index')
+            return _run_daily_now_unlocked(request)
+    return _run_daily_now_unlocked(request)
 
 
 @login_required

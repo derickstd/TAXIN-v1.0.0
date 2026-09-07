@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import F, Sum, Q, Count
 from django.http import JsonResponse
 from django.utils import timezone
@@ -201,13 +202,15 @@ def record_payment(request, pk):
             invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
             method = request.POST.get('method', 'cash')
             reference = request.POST.get('reference', '')
-            remaining = amount
-            created_payments = []
+            payment_date = request.POST.get('payment_date') or timezone.now().date()
+            with transaction.atomic():
+                remaining = amount
+                created_payments = []
 
             # Apply the payment to the current invoice first, then to earlier unpaid
             # invoices for the same client if the amount exceeds the current invoice balance.
-            earlier_invoices = list(
-                Invoice.objects.filter(client=invoice.client)
+                earlier_invoices = list(
+                    Invoice.objects.select_for_update().filter(client=invoice.client)
                 .exclude(pk=invoice.pk)
                 .exclude(status__in=['paid', 'written_off'])
                 .filter(
@@ -215,31 +218,33 @@ def record_payment(request, pk):
                     | Q(date_issued=invoice.date_issued, pk__lt=invoice.pk)
                 )
                 .order_by('date_issued', 'pk')
-            )
-            candidate_invoices = earlier_invoices + [invoice]
-            for inv in candidate_invoices:
-                if remaining <= 0:
-                    break
-                inv.refresh_from_db(fields=['grand_total', 'amount_paid'])
-                balance = inv.grand_total - inv.amount_paid
-                if balance <= 0 and inv != invoice:
-                    continue
-                to_apply = min(balance, remaining) if balance > 0 else remaining
-                if to_apply <= 0:
-                    continue
-                payment = Payment.objects.create(
-                    invoice=inv, amount=to_apply, method=method,
-                    reference=reference, received_by=request.user)
-                created_payments.append(payment)
-                remaining -= to_apply
+                )
+                candidate_invoices = earlier_invoices + [invoice]
+                for inv in candidate_invoices:
+                    if remaining <= 0:
+                        break
+                    inv.refresh_from_db(fields=['grand_total', 'amount_paid'])
+                    balance = inv.grand_total - inv.amount_paid
+                    if balance <= 0 and inv != invoice:
+                        continue
+                    to_apply = min(balance, remaining) if balance > 0 else remaining
+                    if to_apply <= 0:
+                        continue
+                    payment = Payment.objects.create(
+                        invoice=inv, amount=to_apply, method=method,
+                        payment_date=payment_date,
+                        reference=reference, received_by=request.user)
+                    created_payments.append(payment)
+                    remaining -= to_apply
 
-            if remaining > 0:
+                if remaining > 0:
                 # Any leftover amount becomes overpayment on the current invoice.
-                overpayment = Payment.objects.create(
-                    invoice=invoice, amount=remaining, method=method,
-                    reference=reference, received_by=request.user)
-                created_payments.append(overpayment)
-                remaining = Decimal('0')
+                    overpayment = Payment.objects.create(
+                        invoice=invoice, amount=remaining, method=method,
+                        payment_date=payment_date,
+                        reference=reference, received_by=request.user)
+                    created_payments.append(overpayment)
+                    remaining = Decimal('0')
 
             if not created_payments:
                 messages.info(request, 'No outstanding balance could be allocated.')
@@ -279,6 +284,7 @@ def record_client_payment(request):
     amount_raw = request.POST.get('amount', '0')
     method = request.POST.get('method', 'cash')
     reference = request.POST.get('reference', '')
+    selected_invoice_ids = request.POST.getlist('invoice_ids')
     try:
         amount = Decimal(str(amount_raw))
     except (InvalidOperation, TypeError):
@@ -286,50 +292,68 @@ def record_client_payment(request):
         return redirect('billing:list')
 
     client = get_object_or_404(Client, pk=client_id)
+    payment_date_raw = request.POST.get('payment_date')
+    try:
+        payment_date = timezone.datetime.fromisoformat(payment_date_raw).date() if payment_date_raw else timezone.now().date()
+    except ValueError:
+        messages.error(request, 'Invalid payment date.')
+        return redirect('clients:detail', pk=client.pk)
     if amount <= 0:
         messages.error(request, 'Payment amount must be greater than zero.')
         return redirect('billing:detail', pk=client.invoices.first().pk if client.invoices.exists() else 'billing:list')
 
     # Fetch unpaid invoices oldest-first and allocate the lump sum across all
     # outstanding invoices for the client so earlier periods are cleared first.
-    unpaid = (Invoice.objects.filter(client=client)
-                         .exclude(status__in=['paid', 'written_off'])
-                         .order_by('date_issued', 'pk'))
+    unpaid = Invoice.objects.filter(client=client).exclude(
+        status__in=['paid', 'written_off'],
+    )
+    if selected_invoice_ids:
+        unpaid = unpaid.filter(pk__in=selected_invoice_ids)
+    unpaid = unpaid.order_by('date_issued', 'pk')
 
-    remaining = amount
-    created_count = 0
-    for inv in unpaid:
-        if remaining <= 0:
-            break
-        inv.refresh_from_db(fields=['grand_total', 'amount_paid'])
-        balance = inv.grand_total - inv.amount_paid
-        if balance <= 0:
-            continue
-        to_apply = min(balance, remaining)
-        if to_apply <= 0:
-            continue
-        Payment.objects.create(
-            invoice=inv,
-            amount=to_apply,
-            method=method,
-            reference=reference,
-            received_by=request.user
-        )
-        remaining -= to_apply
-        created_count += 1
-
-    if remaining > 0:
-        latest_invoice = Invoice.objects.filter(client=client).order_by('-date_issued', '-pk').first()
-        if latest_invoice:
+    with transaction.atomic():
+        unpaid = unpaid.select_for_update()
+        remaining = amount
+        created_count = 0
+        for inv in unpaid:
+            if remaining <= 0:
+                break
+            inv.refresh_from_db(fields=['grand_total', 'amount_paid'])
+            balance = inv.grand_total - inv.amount_paid
+            if balance <= 0:
+                continue
+            to_apply = min(balance, remaining)
+            if to_apply <= 0:
+                continue
             Payment.objects.create(
-                invoice=latest_invoice,
-                amount=remaining,
+                invoice=inv,
+                amount=to_apply,
                 method=method,
+                payment_date=payment_date,
                 reference=reference,
                 received_by=request.user
             )
+            remaining -= to_apply
             created_count += 1
-            remaining = Decimal('0')
+
+        if remaining > 0:
+            latest_invoice = unpaid.order_by('-date_issued', '-pk').first()
+            if latest_invoice is None and not selected_invoice_ids:
+                latest_invoice = Invoice.objects.filter(client=client).order_by('-date_issued', '-pk').first()
+            if latest_invoice is None and selected_invoice_ids:
+                messages.error(request, 'The selected invoices have no outstanding balance.')
+                return redirect('clients:detail', pk=client.pk)
+            if latest_invoice:
+                Payment.objects.create(
+                    invoice=latest_invoice,
+                    amount=remaining,
+                    method=method,
+                    payment_date=payment_date,
+                    reference=reference,
+                    received_by=request.user
+                )
+                created_count += 1
+                remaining = Decimal('0')
 
     # Update client's last transaction date and outstanding via signals
     if created_count:

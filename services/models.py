@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import IntegrityError, models
 from django.utils import timezone
 from clients.models import Client
 from core.models import User
@@ -83,16 +83,22 @@ class JobCard(models.Model):
         if not self.job_number:
             from django.db.models import Max
             year = timezone.now().year
-            prefix = f'JC-{year}-'
-            agg = JobCard.objects.filter(job_number__startswith=prefix).aggregate(
-                m=Max('job_number'))
-            last_num = 0
-            if agg['m']:
+            for attempt in range(3):
+                prefix = f'JC-{year}-'
+                agg = JobCard.objects.filter(job_number__startswith=prefix).aggregate(m=Max('job_number'))
+                last_num = 0
+                if agg['m']:
+                    try:
+                        last_num = int(agg['m'].split('-')[-1])
+                    except (ValueError, IndexError):
+                        last_num = 0
+                self.job_number = f'{prefix}{last_num + 1:04d}'
                 try:
-                    last_num = int(agg['m'].split('-')[-1])
-                except (ValueError, IndexError):
-                    last_num = 0
-            self.job_number = f'{prefix}{last_num + 1:04d}'
+                    return super().save(*args, **kwargs)
+                except IntegrityError:
+                    if attempt == 2:
+                        raise
+            return
         super().save(*args, **kwargs)
 
     def get_period_label(self):

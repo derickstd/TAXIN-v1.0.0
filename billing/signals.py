@@ -81,8 +81,6 @@ def _settle_job_card(invoice):
 
 @receiver(post_save, sender=Payment)
 def on_payment_saved(sender, instance, created, **kwargs):
-    if not created:
-        return
     invoice = instance.invoice
     # Reload grand_total fresh — services signal may have updated it
     invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])

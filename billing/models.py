@@ -161,7 +161,7 @@ class Payment(models.Model):
     METHOD = [('cash','Cash'),('mobile_money','Mobile Money'),('bank_transfer','Bank Transfer')]
     invoice       = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments')
     amount        = models.DecimalField(max_digits=15, decimal_places=2)
-    payment_date  = models.DateField(auto_now_add=True)
+    payment_date  = models.DateField(default=timezone.now)
     method        = models.CharField(max_length=20, choices=METHOD, default='cash')
     reference     = models.CharField(max_length=100, blank=True)
     received_by   = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)

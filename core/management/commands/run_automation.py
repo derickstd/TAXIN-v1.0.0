@@ -17,6 +17,14 @@ class Command(BaseCommand):
     help = 'Run automated system maintenance tasks'
 
     def handle(self, *args, **options):
+        from core.automation_lock import automation_lock
+        with automation_lock() as acquired:
+            if not acquired:
+                self.stdout.write(self.style.WARNING('Another automation run is already in progress.'))
+                return
+            self._handle_locked(*args, **options)
+
+    def _handle_locked(self, *args, **options):
         self.stdout.write('Starting automated tasks...')
         
         # Task 1: Generate monthly compliance deadlines (1st of month)
@@ -259,6 +267,12 @@ class Command(BaseCommand):
 
     def generate_recurring_jobs(self):
         """Auto-generate job cards for recurring services 15 days before deadline"""
+        from core.jobs import generate_monthly_jobcards
+
+        generate_monthly_jobcards()
+        self.stdout.write('  → Recurring job generation completed')
+        return
+
         from services.models import ClientServiceSubscription, JobCard, JobCardLineItem
         from core.models import User
         import calendar

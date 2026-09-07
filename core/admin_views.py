@@ -468,7 +468,7 @@ def admin_tenant_reactivate(request, tenant_id):
 
 @login_required
 def admin_audit_logs(request):
-    """View audit logs."""
+    """View system, transaction, and job activity logs in one feed."""
     if not _require_admin_role(request, 'audit'):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
@@ -487,19 +487,58 @@ def admin_audit_logs(request):
     
     start_date = timezone.now() - timedelta(days=days)
     
-    logs = AuditLog.objects.select_related('changed_by').filter(changed_at__gte=start_date).order_by('-changed_at')
-    
+    from services.models import StaffActivityLog
+    from .models import TransactionEditLog
+
+    logs = []
+    for log in AuditLog.objects.select_related('changed_by').filter(changed_at__gte=start_date):
+        logs.append({
+            'changed_at': log.changed_at,
+            'model_name': log.model_name,
+            'object_id': log.object_id,
+            'action': log.action,
+            'changed_by': log.changed_by,
+            'notes': log.notes,
+        })
+
+    activity_logs = StaffActivityLog.objects.select_related('staff', 'job_card').filter(
+        created_at__gte=start_date,
+    )
+    for log in activity_logs:
+        logs.append({
+            'changed_at': log.created_at,
+            'model_name': 'job_card_activity',
+            'object_id': str(log.job_card_id),
+            'action': 'CREATE' if 'created' in log.action.lower() else 'UPDATE',
+            'changed_by': log.staff,
+            'notes': log.action or log.description,
+        })
+
+    edit_logs = TransactionEditLog.objects.select_related('edited_by').filter(edited_at__gte=start_date)
+    for log in edit_logs:
+        logs.append({
+            'changed_at': log.edited_at,
+            'model_name': f'{log.transaction_type}_edit',
+            'object_id': str(log.transaction_id),
+            'action': 'UPDATE',
+            'changed_by': log.edited_by,
+            'notes': log.reason or f'{log.get_transaction_type_display()} edited',
+        })
+
     if search_q:
-        logs = logs.filter(Q(model_name__icontains=search_q) | Q(object_id__icontains=search_q) | Q(notes__icontains=search_q))
-    
+        search_q_lower = search_q.lower()
+        logs = [log for log in logs if any(
+            search_q_lower in str(log[field]).lower()
+            for field in ('model_name', 'object_id', 'notes')
+        )]
     if model_filter:
-        logs = logs.filter(model_name=model_filter)
-    
+        logs = [log for log in logs if log['model_name'] == model_filter]
     if action_filter:
-        logs = logs.filter(action=action_filter)
+        logs = [log for log in logs if log['action'] == action_filter]
+    logs.sort(key=lambda log: log['changed_at'], reverse=True)
     
     context = {
-        'logs': logs[:1000],  # Limit to 1000 records
+        'logs': logs[:1000],
         'search_q': search_q,
         'model_filter': model_filter,
         'action_filter': action_filter,

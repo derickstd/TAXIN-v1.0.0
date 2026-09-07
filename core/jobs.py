@@ -50,8 +50,10 @@ def send_task_reminders():
 
 
 def generate_monthly_jobcards():
+    """Generate one recurring job per client and service period."""
     from services.models import ClientServiceSubscription, JobCard, JobCardLineItem
     from core.models import User
+    from django.db import transaction
     import calendar
     today = timezone.now().date()
     month, year = today.month, today.year
@@ -59,26 +61,37 @@ def generate_monthly_jobcards():
     admin = User.objects.filter(role='admin').first()
     created = 0
     for sub in ClientServiceSubscription.objects.filter(is_active=True, service_type__is_recurring=True).select_related('client','service_type','client__assigned_officer'):
-        exists = JobCard.objects.filter(client=sub.client, period_month=month, period_year=year,
-            line_items__service_type=sub.service_type).exists()
-        if exists:
-            continue
-        job, new = JobCard.objects.get_or_create(
-            client=sub.client, period_month=month, period_year=year, is_periodic=True,
-            defaults={'assigned_to': sub.client.assigned_officer, 'status': 'open', 'created_by': admin})
-        import datetime
-        due_m = month+1 if month<12 else 1
-        due_y = year if month<12 else year+1
-        if sub.service_type.deadline_type == 'monthly_15':
-            job.due_date = datetime.date(due_y, due_m, 15)
-        elif sub.service_type.deadline_type == 'annual_dec31':
-            job.due_date = datetime.date(year, 12, 31)
-        job.save(update_fields=['due_date'])
-        JobCardLineItem.objects.create(job_card=job, service_type=sub.service_type,
-            default_price=sub.service_type.default_price, negotiated_price=sub.negotiated_price,
-            status='not_handled', period_label=label)
-        job.update_total()
-        created += 1
+        with transaction.atomic():
+            client = sub.client.__class__.objects.select_for_update().get(pk=sub.client_id)
+            job = JobCard.objects.filter(
+                client=client,
+                period_month=month,
+                period_year=year,
+                line_items__service_type=sub.service_type,
+            ).order_by('pk').first()
+            if job is None:
+                job = JobCard.objects.filter(
+                    client=client, period_month=month, period_year=year, is_periodic=True,
+                ).order_by('pk').first()
+            if job is None:
+                job = JobCard.objects.create(
+                    client=client, period_month=month, period_year=year, is_periodic=True,
+                    assigned_to=client.assigned_officer, status='open', created_by=admin,
+                )
+                created += 1
+            if not job.line_items.filter(service_type=sub.service_type).exists():
+                import datetime
+                due_m = month+1 if month<12 else 1
+                due_y = year if month<12 else year+1
+                if sub.service_type.deadline_type == 'monthly_15':
+                    job.due_date = datetime.date(due_y, due_m, 15)
+                elif sub.service_type.deadline_type == 'annual_dec31':
+                    job.due_date = datetime.date(year, 12, 31)
+                job.save(update_fields=['due_date'])
+                JobCardLineItem.objects.create(job_card=job, service_type=sub.service_type,
+                    default_price=sub.service_type.default_price, negotiated_price=sub.negotiated_price,
+                    status='not_handled', period_label=label)
+                job.update_total()
     logger.info(f"Monthly job cards: {created} created for {label}")
 
 

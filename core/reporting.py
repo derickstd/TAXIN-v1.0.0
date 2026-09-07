@@ -97,28 +97,24 @@ def calculate_monthly_trends(company, year, month):
     
     # Operations metrics
     jobs_created = JobCard.objects.filter(
-        created_at__gte=first_day,
-        created_at__lte=last_day,
+        created_at__date__range=(first_day, last_day),
         client__company=company
     ).count()
     
     jobs_completed = JobCard.objects.filter(
-        completed_at__gte=first_day,
-        completed_at__lte=last_day,
+        completed_at__date__range=(first_day, last_day),
         client__company=company,
         status='completed'
     ).count()
     
     invoices_created = Invoice.objects.filter(
-        created_at__gte=first_day,
-        created_at__lte=last_day,
+        created_at__date__range=(first_day, last_day),
         client__company=company
     ).count()
     
     # Client metrics
     new_clients = Client.objects.filter(
-        created_at__gte=first_day,
-        created_at__lte=last_day,
+        created_at__date__range=(first_day, last_day),
         company=company
     ).count()
     

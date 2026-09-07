@@ -38,6 +38,7 @@ class ComplianceDeadline(models.Model):
     invoice = models.ForeignKey('billing.Invoice', on_delete=models.SET_NULL, null=True, blank=True)
     penalty_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['due_date']

@@ -76,13 +76,14 @@
   <div id="joblist">
     <div class="tbl-wrap">
       <table class="tbl">
-        <thead><tr><th>Job #</th><th>Client</th><th>Period</th><th>Assigned</th><th>Total</th><th>Status</th><th>Duplicate</th><th>Due</th><th></th></tr></thead>
+        <thead><tr><th>Job #</th><th>Client</th><th>Period</th><th>Recorded</th><th>Assigned</th><th>Total</th><th>Status</th><th>Duplicate</th><th>Due</th><th></th></tr></thead>
         <tbody>
           {% for job in jobs %}
           <tr class="journey-row{% if job.is_duplicate_transaction %} duplicate-row{% endif %}" data-duplicate="{% if job.is_duplicate_transaction %}1{% else %}0{% endif %}">
             <td><a href="{% url 'services:detail' job.pk %}" style="font-weight:700">{{ job.job_number }}</a></td>
             <td><a href="{% url 'clients:detail' job.client.pk %}">{{ job.client.get_display_name|truncatechars:18 }}</a></td>
             <td style="font-size:.8rem">{{ job.get_period_label }}</td>
+            <td style="font-size:.78rem;white-space:nowrap">{{ job.created_at|date:"d M Y H:i" }}</td>
             <td style="font-size:.78rem;color:#888">{{ job.assigned_to.get_full_name|default:"—" }}</td>
             <td class="ugx" style="font-size:.82rem">{{ job.total_fee|floatformat:0|intcomma }}</td>
             <td><span class="badge badge-{{ job.status }}">{{ job.get_status_display }}</span></td>
@@ -91,7 +92,7 @@
             <td><a href="{% url 'services:detail' job.pk %}" class="btn btn-outline btn-sm">View</a></td>
           </tr>
           {% empty %}
-          <tr><td colspan="8"><div class="empty-state"><i class="fas fa-briefcase"></i><p>No job cards. <a href="{% url 'services:create' %}">Create one</a></p></div></td></tr>
+          <tr><td colspan="10"><div class="empty-state"><i class="fas fa-briefcase"></i><p>No job cards. <a href="{% url 'services:create' %}">Create one</a></p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>

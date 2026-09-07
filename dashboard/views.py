@@ -88,8 +88,14 @@ def index(request):
 
     # ── Revenue KPIs ──
     invoiced_month  = Invoice.objects.filter(date_issued__gte=this_month).aggregate(s=Sum('grand_total'))['s'] or 0
-    collected_month = Payment.objects.filter(payment_date__gte=this_month).aggregate(s=Sum('amount'))['s'] or 0
-    other_income_month = OtherIncome.objects.filter(income_date__gte=this_month).aggregate(s=Sum('amount'))['s'] or 0
+    collected_month = Payment.objects.filter(
+        created_at__gte=this_month_start,
+        created_at__lte=timezone.now(),
+    ).aggregate(s=Sum('amount'))['s'] or 0
+    other_income_month = OtherIncome.objects.filter(
+        created_at__gte=this_month_start,
+        created_at__lte=timezone.now(),
+    ).aggregate(s=Sum('amount'))['s'] or 0
     total_income_month = float(collected_month) + float(other_income_month)
     unpaid_qs       = Invoice.objects.exclude(status__in=['paid', 'written_off'])
     total_outstanding = (unpaid_qs.aggregate(s=Sum('grand_total'))['s'] or 0) - \
@@ -97,7 +103,10 @@ def index(request):
     jobs_completed  = JobCard.objects.filter(status='completed', completed_at__gte=this_month_start).count()
 
     # ── Expenses this month ──
-    expenses_month     = Expense.objects.filter(expense_date__gte=this_month)
+    expenses_month = Expense.objects.filter(
+        created_at__gte=this_month_start,
+        created_at__lte=timezone.now(),
+    )
     total_expenses_month = expenses_month.aggregate(s=Sum('amount'))['s'] or 0
     expenses_by_cat    = (expenses_month.values('category__name')
                           .annotate(total=Sum('amount')).order_by('-total')[:6])
@@ -121,7 +130,7 @@ def index(request):
     notifications_this_month = NotificationLog.objects.filter(created_at__gte=this_month_start).count()
 
     recent_cash_transactions = []
-    for payment in Payment.objects.select_related('invoice__client').order_by('-payment_date', '-created_at')[:6]:
+    for payment in Payment.objects.select_related('invoice__client').order_by('-created_at', '-pk')[:5]:
         recent_cash_transactions.append({
             'type': 'Cash in',
             'title': payment.invoice.client.get_display_name() if (
@@ -131,25 +140,32 @@ def index(request):
             ) else 'Payment received',
             'amount': float(payment.amount),
             'date': payment.payment_date,
+            'entered_at': payment.created_at,
             'direction': 'in',
         })
-    for expense in Expense.objects.select_related('category').order_by('-expense_date', '-created_at')[:6]:
+    for expense in Expense.objects.select_related('category').order_by('-created_at', '-pk')[:5]:
         recent_cash_transactions.append({
             'type': 'Cash out',
             'title': expense.description or (expense.category.name if expense.category else 'Expense'),
             'amount': float(expense.amount),
             'date': expense.expense_date,
+            'entered_at': expense.created_at,
             'direction': 'out',
         })
-    for income in OtherIncome.objects.order_by('-income_date', '-created_at')[:6]:
+    for income in OtherIncome.objects.order_by('-created_at', '-pk')[:5]:
         recent_cash_transactions.append({
             'type': 'Other income',
             'title': income.source_name or 'Other income',
             'amount': float(income.amount),
             'date': income.income_date,
+            'entered_at': income.created_at,
             'direction': 'in',
         })
-    recent_cash_transactions = sorted(recent_cash_transactions, key=lambda item: item['date'], reverse=True)[:6]
+    recent_cash_transactions = sorted(
+        recent_cash_transactions,
+        key=lambda item: item['entered_at'],
+        reverse=True,
+    )[:5]
 
     company = getattr(request.user, 'company', None)
     company_stats = None

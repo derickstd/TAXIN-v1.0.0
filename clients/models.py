@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import IntegrityError, models
 from django.utils import timezone
 from core.models import User
 
@@ -36,7 +36,14 @@ class Client(models.Model):
             from django.db.models import Max
             max_id = Client.objects.aggregate(m=Max('id'))['m'] or 0
             self.client_id = f'TX-{max_id + 1:04d}'
-        super().save(*args, **kwargs)
+        for attempt in range(3):
+            try:
+                return super().save(*args, **kwargs)
+            except IntegrityError:
+                if self.pk or attempt == 2:
+                    raise
+                max_id = Client.objects.aggregate(m=Max('id'))['m'] or 0
+                self.client_id = f'TX-{max_id + 1:04d}'
 
     def get_display_name(self):
         return self.full_name

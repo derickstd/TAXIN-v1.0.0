@@ -163,7 +163,7 @@
         <div class="stat-row" style="font-size:.8rem"><span style="color:#888">Officer</span><span>{{ job.assigned_to.get_full_name|default:"—" }}</span></div>
         <div class="stat-row" style="font-size:.8rem"><span style="color:#888">Period</span><span>{{ job.get_period_label|default:"—" }}</span></div>
         <div class="stat-row" style="font-size:.8rem"><span style="color:#888">Due</span><span {% if job.due_date and job.due_date < today %}style="color:var(--red);font-weight:700"{% endif %}>{{ job.due_date|default:"Not set" }}</span></div>
-        <div class="stat-row" style="font-size:.8rem"><span style="color:#888">Created</span><span>{{ job.created_at|date:"d M Y" }}</span></div>
+        <div class="stat-row" style="font-size:.8rem"><span style="color:#888">Recorded</span><span>{{ job.created_at|date:"d M Y H:i" }}</span></div>
         <div class="stat-row" style="font-size:.8rem;border-top:1px solid var(--border);padding-top:.4rem;margin-top:.2rem">
           <span style="color:#888">Job Fee</span>
           <span class="ugx fw-8" style="color:var(--blue)">{{ job.total_fee|floatformat:0|intcomma }}</span>
