@@ -123,6 +123,7 @@
       <div class="sb-sub" id="sub-clients">
         <a href="{% url 'clients:list' %}"   class="sb-link {% block nav_clients %}{% endblock %}" title="All Clients"><i class="fas fa-users"></i><span class="sb-lbl">All Clients</span></a>
         <a href="{% url 'clients:create' %}" class="sb-link {% block nav_cnew %}{% endblock %}"   title="New Client"><i class="fas fa-user-plus"></i><span class="sb-lbl">New Client</span></a>
+        <a href="{% url 'credentials:list' %}" class="sb-link {% block nav_cred %}{% endblock %}" title="Client Credentials"><i class="fas fa-key"></i><span class="sb-lbl">Credentials</span></a>
       </div>
     </div>
 

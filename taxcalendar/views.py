@@ -7,7 +7,7 @@ from .forms import TaxEventForm
 from django.db.models import Sum
 import calendar as _calendar
 from datetime import date
-from billing.models import Payment
+from billing.models import OtherIncome, Payment
 from expenses.models import Expense
 from types import SimpleNamespace
 
@@ -51,8 +51,8 @@ def calendar_view(request):
         try:
             from datetime import datetime
             filter_day = datetime.strptime(day_param, '%Y-%m-%d').date()
-            day_payments = Payment.objects.filter(payment_date=filter_day).order_by('-payment_date')
-            day_expenses = Expense.objects.filter(expense_date=filter_day).order_by('-expense_date')
+            day_payments = Payment.objects.filter(created_at__date=filter_day).order_by('-created_at')
+            day_expenses = Expense.objects.filter(created_at__date=filter_day).order_by('-created_at')
         except Exception:
             filter_day = None
     if status:
@@ -67,9 +67,20 @@ def calendar_view(request):
     daily_summaries = {}
     daily_list = []
     for d in month_days:
-        money_in = Payment.objects.filter(payment_date=d).aggregate(total=Sum('amount'))['total'] or 0
-        money_out = Expense.objects.filter(expense_date=d, status='approved').aggregate(total=Sum('amount'))['total'] or 0
-        daily_summaries[d] = {'money_in': money_in, 'money_out': money_out}
+        payment_in = Payment.objects.filter(created_at__date=d).aggregate(total=Sum('amount'))['total'] or 0
+        other_income_in = OtherIncome.objects.filter(created_at__date=d).aggregate(total=Sum('amount'))['total'] or 0
+        money_in = payment_in + other_income_in
+        money_out = Expense.objects.filter(created_at__date=d).aggregate(total=Sum('amount'))['total'] or 0
+        transaction_count = (
+            Payment.objects.filter(created_at__date=d).count()
+            + OtherIncome.objects.filter(created_at__date=d).count()
+            + Expense.objects.filter(created_at__date=d).count()
+        )
+        daily_summaries[d] = {
+            'money_in': money_in,
+            'money_out': money_out,
+            'transaction_count': transaction_count,
+        }
         daily_list.append((d, money_in, money_out))
     # Build calendar grid (weeks) for month view and attach events to each day
     month_calendar = _calendar.monthcalendar(year, month)
@@ -89,7 +100,15 @@ def calendar_view(request):
                 week_days.append({'day': 0, 'date': None, 'events': []})
             else:
                 dobj = date(year, month, day)
-                week_days.append({'day': day, 'date': dobj, 'events': events_by_date.get(dobj, [])})
+                summary = daily_summaries[dobj]
+                week_days.append({
+                    'day': day,
+                    'date': dobj,
+                    'events': events_by_date.get(dobj, []),
+                    'money_in': summary['money_in'],
+                    'money_out': summary['money_out'],
+                    'transaction_count': summary['transaction_count'],
+                })
         month_weeks.append(week_days)
     return render(request, 'taxcalendar/calendar.html', {
         'events': events,

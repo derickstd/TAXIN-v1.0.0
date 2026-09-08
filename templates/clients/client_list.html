@@ -3,33 +3,19 @@
 {% block nav_clients %}active{% endblock %}
 {% block breadcrumbs %}<li class="active">Clients</li>{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h4 class="page-title"><i class="fas fa-users"></i>Clients</h4>
-  <div style="display:flex;gap:.5rem">
-    <form method="post" action="{% url 'billing:refresh_balances' %}" style="display:inline">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-outline btn-sm" title="Refresh outstanding balances">
-        <i class="fas fa-sync"></i> Refresh Balances
-      </button>
-    </form>
-    <a href="{% url 'clients:create' %}" class="btn btn-primary"><i class="fas fa-user-plus"></i>New Client</a>
+<div class="list-toolbar">
+  <div class="list-actions">
+    {% include "components/export_buttons.html" with excel_url="core:export_clients_excel" pdf_url="core:export_clients_pdf" show_condition=page_obj.paginator.count compact=True %}
   </div>
-</div>
-
-<!-- Filter bar -->
-<div class="card card-compact mb-2">
-  <div class="card-bd" style="padding:.6rem .9rem">
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+  <form id="clientFilterForm" method="get" action="{% url 'clients:list' %}">
       <!-- Instant search -->
-      <form id="clientFilterForm" method="get" action="{% url 'clients:list' %}"
-            style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
         <input type="text" id="clientSearch" name="q" value="{{ q }}"
-          class="form-ctrl" style="max-width:280px;font-size:.85rem"
+          class="form-control" style="font-size:.85rem"
           placeholder="Search name, TIN, phone, ID…"
           autocomplete="off">
 
         <!-- Status -->
-        <select id="filterStatus" name="status" class="form-ctrl" style="width:auto;font-size:.83rem">
+        <select id="filterStatus" name="status" class="form-select" style="font-size:.83rem">
           <option value="">All Statuses</option>
           {% for val,label in status_choices %}
           <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
@@ -37,7 +23,7 @@
         </select>
 
         <!-- Type -->
-        <select id="filterType" name="type" class="form-ctrl" style="width:auto;font-size:.83rem">
+        <select id="filterType" name="type" class="form-select" style="font-size:.83rem">
           <option value="">All Types</option>
           {% for val,label in type_choices %}
           <option value="{{ val }}" {% if ctype == val %}selected{% endif %}>{{ label }}</option>
@@ -45,7 +31,7 @@
         </select>
 
         <!-- Debt filter -->
-        <select id="filterDebt" name="debt" class="form-ctrl" style="width:auto;font-size:.83rem">
+        <select id="filterDebt" name="debt" class="form-select" style="font-size:.83rem">
           <option value="">All Clients</option>
           <option value="indebted" {% if debt_filter == 'indebted' %}selected{% endif %}>Indebted (Balance &gt; 0)</option>
           <option value="uncleared_invoices" {% if debt_filter == 'uncleared_invoices' %}selected{% endif %}>Uncleared Invoices</option>
@@ -54,9 +40,9 @@
 
         <button type="submit" class="btn btn-outline btn-sm"><i class="fas fa-search"></i> Search</button>
         <a href="?per_page={{ page_obj.paginator.per_page }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i> Clear</a>
-        <label style="display:flex;align-items:center;gap:.4rem;margin-left:.5rem;font-size:.85rem">
+        <label style="display:flex;align-items:center;gap:.4rem;font-size:.85rem">
           Show
-          <select name="per_page" class="form-ctrl" style="width:auto;min-width:96px">
+          <select name="per_page" class="form-select" style="min-width:96px">
             {% for opt in per_page_options %}
               <option value="{{ opt }}" {% if page_obj.paginator.per_page == opt %}selected{% endif %}>{{ opt }}</option>
             {% endfor %}
@@ -64,12 +50,11 @@
           per page
         </label>
         <span id="visibleCount" style="font-size:.78rem;color:#888;margin-left:.3rem"></span>
-      </form>
-    </div>
+  </form>
+  <div class="toolbar-meta">
+    <span class="badge badge-open">{{ page_obj.paginator.count }} clients</span>
   </div>
 </div>
-
-{% include "components/export_buttons.html" with excel_url="core:export_clients_excel" pdf_url="core:export_clients_pdf" show_condition=page_obj.paginator.count %}
 
 <!-- Status chips -->
 <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.7rem">

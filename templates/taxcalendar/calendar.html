@@ -75,6 +75,13 @@
                   <div style="color:#bbb;font-size:.78rem">—</div>
                 {% endif %}
               </div>
+              {% if day.transaction_count %}
+              <div style="border-top:1px solid #f0f2f5;margin-top:.3rem;padding-top:.25rem;font-size:.7rem">
+                <div style="color:var(--green)">In: UGX {{ day.money_in|floatformat:0 }}</div>
+                <div style="color:var(--red)">Out: UGX {{ day.money_out|floatformat:0 }}</div>
+                <div style="color:#888">{{ day.transaction_count }} entered transaction{{ day.transaction_count|pluralize }}</div>
+              </div>
+              {% endif %}
             </div>
           {% endif %}
         {% endfor %}
