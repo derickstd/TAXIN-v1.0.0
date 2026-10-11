@@ -51,7 +51,7 @@ def message_new(request):
 @login_required
 def message_thread_detail(request, thread_id):
     thread = get_object_or_404(MessageThread, pk=thread_id, participants=request.user)
-    thread_messages = thread.messages.select_related('sender').all()
+    thread_messages = thread.messages.select_related('sender').order_by('-created_at')
     unread_messages = thread_messages.exclude(read_by=request.user)
     for msg in unread_messages:
         msg.read_by.add(request.user)

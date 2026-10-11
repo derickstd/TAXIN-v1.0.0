@@ -55,7 +55,7 @@ class Message(models.Model):
     read_by = models.ManyToManyField(User, related_name='read_messages', blank=True)
 
     class Meta:
-        ordering = ['created_at']
+        ordering = ['-created_at']
 
     def __str__(self):
         return f"Message from {self.sender} in {self.thread}"

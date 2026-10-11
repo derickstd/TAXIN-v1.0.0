@@ -5,9 +5,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
 from core import views as core_views
+from core.api_views import receivables_summary
 from core.views import service_worker, signup
 
 urlpatterns = [
+    path('api/receivables-summary', receivables_summary, name='receivables_summary'),
     path('', lambda r: redirect('dashboard:index'), name='home'),
     path('admin/', admin.site.urls),
     path('login/',  core_views.custom_login, name='login'),
