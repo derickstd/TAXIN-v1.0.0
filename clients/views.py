@@ -201,7 +201,11 @@ def client_list(request):
             invoices__status__in=['sent', 'partially_paid', 'overdue']
         ).distinct()
 
-    page_obj = paginate_queryset(request, clients.order_by('full_name'), per_page=per_page)
+    page_obj = paginate_queryset(
+        request,
+        clients.order_by('-updated_at', '-pk'),
+        per_page=per_page,
+    )
 
     if request.headers.get('HX-Request'):
         return render(request, 'clients/partials/client_rows.html', {'clients': page_obj})

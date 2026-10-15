@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
 from django.test import TestCase
@@ -27,6 +28,33 @@ class ClientOnboardingTests(TestCase):
             full_name='Existing Client',
             phone_primary='+256700123123',
             created_by=self.user,
+        )
+
+    def test_client_list_is_sorted_by_most_recently_modified(self):
+        older_client = Client.objects.create(
+            full_name='Older Update',
+            phone_primary='+256700123124',
+            created_by=self.user,
+        )
+        newer_client = Client.objects.create(
+            full_name='Newer Update',
+            phone_primary='+256700123125',
+            created_by=self.user,
+        )
+        Client.objects.filter(pk=older_client.pk).update(
+            updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        Client.objects.filter(pk=newer_client.pk).update(
+            updated_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        )
+
+        response = self.client.get(reverse('clients:list'))
+
+        self.assertEqual(response.status_code, 200)
+        listed_clients = list(response.context['clients'].object_list)
+        self.assertEqual(
+            [client.pk for client in listed_clients[:2]],
+            [newer_client.pk, older_client.pk],
         )
 
     def test_create_route_uses_merged_onboarding_page(self):
