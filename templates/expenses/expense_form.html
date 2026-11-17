@@ -10,7 +10,10 @@
       <a href="{% url 'expenses:list' %}" class="modal-close">&times;</a>
     </div>
     <div class="card-box">
-      <div class="card-head"><i class="fas fa-receipt"></i>Expense Details</div>
+      <div class="card-head">
+        <span><i class="fas fa-receipt"></i>Expense Details</span>
+        <a class="btn btn-outline btn-sm" href="{% url 'documents:branch_account_transfer' %}{% if active_branch %}?branch={{ active_branch.pk }}{% endif %}"><i class="fas fa-building-columns"></i> Record bank deposit</a>
+      </div>
       <div class="card-body">
         <form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
       <div class="form-grid-2">

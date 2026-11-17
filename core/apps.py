@@ -11,7 +11,10 @@ class CoreConfig(AppConfig):
         import sys
 
         # Skip scheduler startup during manage.py checks and other non-server commands.
-        if 'check' in sys.argv or 'migrate' in sys.argv or 'makemigrations' in sys.argv:
+        if (
+            'check' in sys.argv or 'migrate' in sys.argv
+            or 'makemigrations' in sys.argv or 'test' in sys.argv
+        ):
             return
 
         # Prevent double-start in Django's auto-reloader (dev) and in manage.py commands

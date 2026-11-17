@@ -1,9 +1,11 @@
 from decimal import Decimal
 from django.db import models
 from django.db import IntegrityError
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.utils import timezone
 from clients.models import Client
-from services.models import JobCard
+from services.models import JobCard, ServiceType
 from core.models import User
 
 class Invoice(models.Model):
@@ -25,6 +27,11 @@ class Invoice(models.Model):
     document_type   = models.CharField(max_length=20, choices=DOC_TYPE, default='invoice')
     client          = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='invoices')
     branch          = models.ForeignKey('core.Branch', null=True, blank=True, on_delete=models.SET_NULL, related_name='invoices')
+    service_type    = models.ForeignKey(
+        ServiceType, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='invoices',
+    )
+    is_credit_sale  = models.BooleanField(default=False)
     job_card        = models.OneToOneField(JobCard, on_delete=models.CASCADE,
                                            related_name='invoice', null=True, blank=True)
     date_issued     = models.DateField(auto_now_add=True)
@@ -159,7 +166,12 @@ class Invoice(models.Model):
 
 class Payment(models.Model):
     METHOD = [('cash','Cash'),('mobile_money','Mobile Money'),('bank_transfer','Bank Transfer')]
-    invoice       = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments')
+    invoice       = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments', null=True, blank=True)
+    client        = models.ForeignKey(Client, on_delete=models.SET_NULL, related_name='payments', null=True, blank=True)
+    service_type  = models.ForeignKey(
+        ServiceType, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='payments',
+    )
     amount        = models.DecimalField(max_digits=15, decimal_places=2)
     payment_date  = models.DateField(default=timezone.now)
     method        = models.CharField(max_length=20, choices=METHOD, default='cash')
@@ -168,6 +180,11 @@ class Payment(models.Model):
     notes         = models.TextField(blank=True)
     created_at    = models.DateTimeField(auto_now_add=True)
     branch = models.ForeignKey('core.Branch', null=True, blank=True, on_delete=models.SET_NULL, related_name='payments')
+
+    def save(self, *args, **kwargs):
+        if self.invoice_id:
+            self.client_id = self.invoice.client_id
+        return super().save(*args, **kwargs)
 
     @property
     def receipt_number(self):
@@ -179,7 +196,10 @@ class Payment(models.Model):
         return dict(self.METHOD).get(self.method, self.method)
 
     def __str__(self):
-        return f"UGX {self.amount:,.0f} → {self.invoice.invoice_number}"
+        if self.invoice_id:
+            return f"UGX {self.amount:,.0f} → {self.invoice.invoice_number}"
+        customer = self.client.get_display_name() if self.client_id else 'Unassigned'
+        return f"UGX {self.amount:,.0f} → {customer}"
 
 
 class OtherIncome(models.Model):
@@ -193,6 +213,7 @@ class OtherIncome(models.Model):
         ('gift', 'Gift/Donation'),
         ('grant', 'Grant'),
         ('rental', 'Rental Income'),
+        ('capital_injection', 'Capital Injection'),
         ('other', 'Other'),
     ]
     METHOD = [
@@ -209,6 +230,9 @@ class OtherIncome(models.Model):
     reference = models.CharField(max_length=100, blank=True, help_text='e.g., transaction ID, check number')
     description = models.TextField(blank=True, help_text='Additional details about the income')
     recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    branch = models.ForeignKey(
+        'core.Branch', null=True, blank=True, on_delete=models.SET_NULL, related_name='other_income',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -221,3 +245,132 @@ class OtherIncome(models.Model):
     
     def __str__(self):
         return f"{self.source_name} — UGX {self.amount:,.0f} ({self.income_date})"
+
+
+class BranchDailySummary(models.Model):
+    branch = models.ForeignKey(
+        'core.Branch', on_delete=models.CASCADE, related_name='daily_summaries',
+    )
+    business_date = models.DateField()
+    opening_balance = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    cash_inflow = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    cash_outflow = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    closing_balance = models.DecimalField(max_digits=15, decimal_places=2)
+    notes = models.TextField(blank=True)
+    submitted_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='branch_daily_summaries',
+    )
+    updated_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='updated_branch_daily_summaries',
+    )
+    reviewed_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='reviewed_branch_daily_summaries',
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-business_date', 'branch__name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['branch', 'business_date'],
+                name='unique_branch_daily_summary_date',
+            ),
+        ]
+
+    @property
+    def expected_closing_balance(self):
+        return self.opening_balance + self.cash_inflow - self.cash_outflow
+
+    @property
+    def reconciliation_difference(self):
+        return self.closing_balance - self.expected_closing_balance
+
+    def __str__(self):
+        return f'{self.branch.name} — {self.business_date}'
+
+
+class BranchDailyTransaction(models.Model):
+    DIRECTION = [
+        ('inflow', 'Money in'),
+        ('outflow', 'Money out'),
+    ]
+    CATEGORY = [
+        ('service_receipt', 'Service / customer receipt'),
+        ('retail_sale', 'Printing / stationery sale'),
+        ('loan_principal_repayment', 'Loan principal repayment'),
+        ('interest_income', 'Interest income'),
+        ('other_income', 'Other income'),
+        ('operating_expense', 'Operating expense'),
+        ('drawing', 'Owner drawing'),
+        ('capital_injection', 'Capital injection'),
+        ('loan_disbursement', 'Loan disbursement'),
+        ('transfer', 'Transfer'),
+        ('other', 'Other'),
+    ]
+    ACCOUNT = [
+        ('cash', 'Cash'),
+        ('petty_cash', 'Petty cash'),
+        ('mobile_money', 'Mobile money'),
+        ('bank_transfer', 'Bank'),
+        ('other', 'Other'),
+    ]
+    CATEGORY_DIRECTIONS = {
+        'service_receipt': 'inflow',
+        'retail_sale': 'inflow',
+        'loan_principal_repayment': 'inflow',
+        'interest_income': 'inflow',
+        'other_income': 'inflow',
+        'operating_expense': 'outflow',
+        'drawing': 'outflow',
+        'capital_injection': 'inflow',
+        'loan_disbursement': 'outflow',
+    }
+
+    branch = models.ForeignKey(
+        'core.Branch', on_delete=models.PROTECT, related_name='daily_transactions',
+    )
+    business_date = models.DateField()
+    direction = models.CharField(max_length=10, choices=DIRECTION)
+    category = models.CharField(max_length=32, choices=CATEGORY)
+    description = models.CharField(max_length=255)
+    account = models.CharField(max_length=20, choices=ACCOUNT, default='cash')
+    amount = models.DecimalField(
+        max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))],
+    )
+    reference = models.CharField(max_length=100, blank=True)
+    entered_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='branch_daily_transactions',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-business_date', '-created_at']
+        indexes = [
+            models.Index(fields=['branch', 'business_date']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['branch', 'business_date', 'reference'],
+                condition=~models.Q(reference=''),
+                name='unique_branch_daily_transaction_reference',
+            ),
+        ]
+
+    def clean(self):
+        errors = {}
+        if self.branch_id and not self.branch.external_reporting:
+            errors['branch'] = 'Manual ledger entries are only for externally managed branches.'
+        expected_direction = self.CATEGORY_DIRECTIONS.get(self.category)
+        if expected_direction and self.direction != expected_direction:
+            errors['direction'] = 'The selected category does not match the transaction direction.'
+        if self.business_date and self.business_date > timezone.localdate():
+            errors['business_date'] = 'A transaction cannot be dated in the future.'
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return f'{self.branch.name} — {self.business_date} — {self.get_category_display()}'

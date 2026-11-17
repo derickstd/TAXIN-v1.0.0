@@ -202,7 +202,7 @@
             {% for cat, total, count in other_income_by_category %}
             <div style="border:1px solid #e5e7eb;padding:.4rem;border-radius:.3rem;background:#fff">
               <div style="font-size:.75rem;color:#64748b;margin-bottom:.15rem">{{ cat|title }}</div>
-              <div style="font-weight:700;color:#059669;font-size:.9rem">UGX {{ total|floatformat:0|intcomma }}</div>
+              <div class="cash-flow-chip cash-flow-chip--in" style="font-size:.9rem">UGX {{ total|floatformat:0|intcomma }}</div>
               <div style="font-size:.7rem;color:#aaa">{{ count }} transaction{{ count|pluralize }}</div>
             </div>
             {% endfor %}
@@ -213,7 +213,7 @@
             {% for income in other_income_sources|slice:":3" %}
             <div style="display:flex;justify-content:space-between;align-items:center;padding:.3rem 0;border-bottom:1px solid #f3f4f6">
               <span>{{ income.source_name }}</span>
-              <span style="font-weight:700;color:#059669">UGX {{ income.amount|floatformat:0|intcomma }}</span>
+              <span class="cash-flow-chip cash-flow-chip--in">UGX {{ income.amount|floatformat:0|intcomma }}</span>
             </div>
             {% endfor %}
             {% if other_income_sources|length > 3 %}

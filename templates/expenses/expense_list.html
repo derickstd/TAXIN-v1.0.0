@@ -7,7 +7,11 @@
   <h4 class="page-title"><i class="fas fa-receipt"></i>Expenses</h4>
   <div style="display:flex;gap:.6rem">
     <a href="{% url 'expenses:category_list' %}" class="btn btn-outline"><i class="fas fa-tags"></i>Manage Categories</a>
+    {% if active_branch.external_reporting %}
+    <a href="{% url 'documents:branch_daily_expense' %}?branch={{ active_branch.pk }}&amp;open=transaction" class="btn btn-primary"><i class="fas fa-plus"></i>Branch Daily Entries</a>
+    {% else %}
     <a href="{% url 'expenses:create' %}" class="btn btn-primary"><i class="fas fa-plus"></i>Log Expense</a>
+    {% endif %}
   </div>
 </div>
 
@@ -43,7 +47,7 @@
               <td style="font-size:.78rem;white-space:nowrap">{{ exp.expense_date }}</td>
               <td style="font-size:.78rem">{{ exp.category.name|truncatechars:18 }}</td>
               <td style="font-size:.82rem">{{ exp.description|truncatechars:28 }}</td>
-              <td class="ugx ugx-red" style="font-size:.82rem;white-space:nowrap">{{ exp.amount|floatformat:0|intcomma }}</td>
+              <td style="font-size:.82rem;white-space:nowrap"><span class="ugx cash-flow-chip cash-flow-chip--out">{{ exp.amount|floatformat:0|intcomma }}</span></td>
               <td style="font-size:.75rem;color:#888">{{ exp.get_payment_method_display }}</td>
               <td style="font-size:.75rem;color:#888">{{ exp.paid_by.get_full_name|default:"—"|truncatechars:12 }}</td>
               <td>

@@ -1,7 +1,11 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 from django.db.models import Sum, Count, Q, Avg
 from django.utils import timezone
 from billing.models import Invoice, Payment, OtherIncome
@@ -13,12 +17,108 @@ from notifications.models import NotificationLog
 from credentials.models import ClientCredential
 from core.automation import get_automation_status, get_automation_recommendations
 from core.reporting import calculate_monthly_trends
+from core.branch_reporting import branch_comparison_for_user, company_branches_for_user
+from core.branch_access import scope_queryset
+from core.models import Branch
 from datetime import date, datetime, time
 import calendar as _calendar
 
 
 @login_required
+@require_POST
+def switch_branch(request):
+    user = request.user
+    if not (
+        user.is_superuser
+        or (user.role in ('admin', 'ceo') and user.company_id)
+    ):
+        messages.error(request, 'Only company leadership can switch branch workspaces.')
+        return redirect('dashboard:index')
+
+    branch_id = request.POST.get('branch', '').strip()
+    if not branch_id:
+        request.session.pop('active_branch_id', None)
+        messages.success(request, 'Company-wide workspace selected.')
+    else:
+        branches = Branch.objects.filter(is_active=True)
+        if not user.is_superuser:
+            branches = branches.filter(company_id=user.company_id)
+        branch = get_object_or_404(branches, pk=branch_id)
+        request.session['active_branch_id'] = branch.pk
+        messages.success(request, f'{branch.name} workspace selected.')
+
+    next_url = request.POST.get('next', '')
+    if not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse('dashboard:index')
+    return redirect(next_url)
+
+
+@login_required
 def index(request):
+    if request.user.company_id:
+        today = timezone.localdate()
+        week_start = today - timezone.timedelta(days=today.weekday())
+        month_start = today.replace(day=1)
+        period_options = [
+            ('this_week', 'This week'),
+            ('this_month', 'This month'),
+        ]
+        period = request.GET.get('period', 'this_month')
+        if period not in {value for value, label in period_options}:
+            period = 'this_month'
+        period_start = week_start if period == 'this_week' else month_start
+        branches = company_branches_for_user(request.user).order_by('name')
+        branch_comparison = branch_comparison_for_user(
+            request.user, period_start, today,
+        )
+        active_branch = getattr(request, 'active_branch', None)
+        workspace_summary = next(
+            (
+                row for row in branch_comparison
+                if active_branch and row['branch'].pk == active_branch.pk
+            ),
+            None,
+        )
+        branch_chart_data = {
+            'labels': [row['name'] for row in branch_comparison],
+            'sales': [float(row['operating_inflow']) for row in branch_comparison],
+            'expenses': [float(row['outflow']) for row in branch_comparison],
+            'profit': [float(row['operating_profit']) for row in branch_comparison],
+        }
+        if active_branch:
+            pie_slices = [
+                ('Cash in', float(workspace_summary['inflow'])),
+                ('Cash out', float(workspace_summary['outflow'])),
+            ] if workspace_summary else []
+        else:
+            pie_slices = [
+                (row['name'], float(row['inflow']))
+                for row in branch_comparison
+            ]
+        pie_slices = [
+            (label, amount) for label, amount in pie_slices if amount > 0
+        ]
+        return render(request, 'dashboard/branch_overview.html', {
+            'branches': branches,
+            'branch_comparison': branch_comparison,
+            'workspace_summary': workspace_summary,
+            'branch_chart_data': branch_chart_data,
+            'pie_chart_data': {
+                'labels': [label for label, amount in pie_slices],
+                'values': [amount for label, amount in pie_slices],
+            },
+            'pie_chart_has_data': bool(pie_slices),
+            'period': period,
+            'period_options': period_options,
+            'period_label': dict(period_options)[period],
+            'period_start': period_start,
+            'today': today,
+        })
+
     today = timezone.now().date()
     this_month = today.replace(day=1)
     last_month = (this_month - timezone.timedelta(days=1)).replace(day=1)
@@ -130,14 +230,14 @@ def index(request):
     notifications_this_month = NotificationLog.objects.filter(created_at__gte=this_month_start).count()
 
     recent_cash_transactions = []
-    for payment in Payment.objects.select_related('invoice__client').order_by('-created_at', '-pk')[:5]:
+    for payment in Payment.objects.select_related('client', 'invoice__client').order_by('-created_at', '-pk')[:5]:
         recent_cash_transactions.append({
             'type': 'Cash in',
-            'title': payment.invoice.client.get_display_name() if (
-                getattr(payment, 'invoice', None)
-                and getattr(payment.invoice, 'client', None)
-                and payment.invoice.client.get_display_name()
-            ) else 'Payment received',
+            'title': (
+                payment.client.get_display_name() if payment.client_id
+                else payment.invoice.client.get_display_name() if payment.invoice_id
+                else 'Payment received'
+            ),
             'amount': float(payment.amount),
             'date': payment.payment_date,
             'entered_at': payment.created_at,
@@ -571,14 +671,15 @@ def day_transactions(request):
     except ValueError:
         return JsonResponse({'error': 'Invalid day format'}, status=400)
 
-    payments = (Payment.objects.filter(payment_date=day)
-                .select_related('invoice')
-                .order_by('-created_at'))
-    expenses = (Expense.objects.filter(expense_date=day)
-                .select_related('category')
-                .order_by('-created_at'))
-    other_income = (OtherIncome.objects.filter(income_date=day)
-                    .order_by('-created_at'))
+    payments = scope_queryset(
+        request.user, Payment.objects.filter(payment_date=day),
+    ).select_related('invoice').order_by('-created_at')
+    expenses = scope_queryset(
+        request.user, Expense.objects.filter(expense_date=day),
+    ).select_related('category').order_by('-created_at')
+    other_income = scope_queryset(
+        request.user, OtherIncome.objects.filter(income_date=day),
+    ).order_by('-created_at')
 
     total_payments = payments.aggregate(s=Sum('amount'))['s'] or 0
     total_expenses = expenses.aggregate(s=Sum('amount'))['s'] or 0

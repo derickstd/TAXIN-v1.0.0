@@ -1,11 +1,29 @@
 from django import forms
 from django.utils import timezone
 from django.db.models import Count, Q
-from .models import JobCard, JobCardLineItem, ServiceType
+from .models import JobCard, JobCardLineItem, ServiceCategory, ServiceType
 from clients.models import Client
 from core.models import User
+from core.branch_access import accessible_branches, scope_queryset
 from django.forms import inlineformset_factory
 import calendar
+
+
+def service_category_choices():
+    choices = list(ServiceType.CATEGORY)
+    existing = {
+        value.casefold()
+        for value, label in choices
+    } | {
+        label.casefold()
+        for value, label in choices
+    }
+    choices.extend(
+        (category.name, category.name)
+        for category in ServiceCategory.objects.order_by('name')
+        if category.name.casefold() not in existing
+    )
+    return choices
 
 
 class OptionalModelChoiceField(forms.ModelChoiceField):
@@ -26,7 +44,7 @@ class JobCardForm(forms.ModelForm):
             'notes': forms.Textarea(attrs={'rows': 3}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['client'].queryset = Client.objects.order_by('full_name').annotate(
             prev_jobs=Count('job_cards'),
@@ -35,6 +53,12 @@ class JobCardForm(forms.ModelForm):
         )
         self.fields['assigned_to'].queryset = User.objects.filter(
             is_active_staff=True, is_active=True).order_by('first_name')
+        if user and user.company_id and not user.is_superuser:
+            if user.role in ('admin', 'ceo'):
+                self.fields['assigned_to'].queryset = self.fields['assigned_to'].queryset.filter(company_id=user.company_id)
+            else:
+                self.fields['assigned_to'].queryset = self.fields['assigned_to'].queryset.filter(branch_id=user.branch_id)
+            self.fields['client'].queryset = scope_queryset(user, self.fields['client'].queryset)
         self.fields['assigned_to'].required = False
         self.fields['notes'].required = False
 
@@ -56,7 +80,7 @@ class JobCardLineItemForm(forms.ModelForm):
             'negotiated_price', 'status', 'period_label', 'notes',
         ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         this_year = timezone.now().year
         month_choices = [('', 'Month')] + [(i, calendar.month_name[i]) for i in range(1, 13)]
@@ -67,8 +91,10 @@ class JobCardLineItemForm(forms.ModelForm):
         self.fields['period_year'].choices = year_choices
         self.fields['period_month'].widget.attrs.update({'class': 'form-ctrl li-period-month'})
         self.fields['period_year'].widget.attrs.update({'class': 'form-ctrl li-period-year'})
-        self.fields['service_type'].queryset = ServiceType.objects.filter(
-            is_active=True).order_by('category', 'name')
+        services = ServiceType.objects.filter(is_active=True)
+        if user:
+            services = scope_queryset(user, services, branch_path='branches').distinct()
+        self.fields['service_type'].queryset = services.order_by('category', 'name')
         self.fields['custom_description'].required = False
         self.fields['default_price'].required = False
         self.fields['negotiated_price'].required = False
@@ -143,19 +169,37 @@ class JobCardLineItemForm(forms.ModelForm):
 
 
 class ServiceTypeForm(forms.ModelForm):
+    category = forms.ChoiceField(choices=())
+    branches = forms.ModelMultipleChoiceField(
+        queryset=None,
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'form-ctrl', 'size': 3}),
+    )
+
     class Meta:
         model = ServiceType
         fields = [
             'name', 'category', 'default_price', 'deadline_type',
-            'is_recurring', 'vat_applicable', 'description',
+            'is_recurring', 'vat_applicable', 'description', 'branches',
         ]
         widgets = {
             'default_price': forms.NumberInput(attrs={'min': 0, 'step': 1000}),
             'description': forms.Textarea(attrs={'rows': 3}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.user = user
+        choices = service_category_choices()
+        if self.instance.pk and self.instance.category not in dict(choices):
+            choices.append((self.instance.category, self.instance.category))
+        self.fields['category'].choices = choices
+        if user:
+            self.fields['branches'].queryset = accessible_branches(user)
+            if user.branch_id and user.role not in ('admin', 'ceo') and not user.is_superuser:
+                self.fields['branches'].initial = [user.branch_id]
+        else:
+            self.fields['branches'].queryset = self.instance.branches.all() if self.instance.pk else self.fields['branches'].queryset.none()
         self.fields['description'].required = False
         self.fields['default_price'].required = False
 
@@ -166,6 +210,13 @@ class ServiceTypeForm(forms.ModelForm):
         if price < 0:
             raise forms.ValidationError('Price cannot be negative.')
         return price
+
+    def clean(self):
+        cleaned_data = super().clean()
+        user = getattr(self, 'user', None)
+        if user and user.company_id and not cleaned_data.get('branches'):
+            self.add_error('branches', 'Choose at least one branch for this service.')
+        return cleaned_data
 
 
 LineItemFormSet = inlineformset_factory(

@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Q
 from .models import Client, WalkInIntake
 from core.models import User
+from core.branch_access import scope_queryset
 
 
 class OptionalModelChoiceField(forms.ModelChoiceField):
@@ -33,11 +34,18 @@ class ClientForm(forms.ModelForm):
             'referred_by', 'assigned_officer', 'notes',
         ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['referred_by'].queryset = Client.objects.order_by('full_name')
+        self.fields['referred_by'].queryset = scope_queryset(
+            user, Client.objects.order_by('full_name'),
+        ) if user else Client.objects.order_by('full_name')
         self.fields['assigned_officer'].queryset = User.objects.filter(
             is_active_staff=True, is_active=True).order_by('first_name')
+        if user and user.company_id and not user.is_superuser:
+            if user.role in ('admin', 'ceo'):
+                self.fields['assigned_officer'].queryset = self.fields['assigned_officer'].queryset.filter(company_id=user.company_id)
+            else:
+                self.fields['assigned_officer'].queryset = self.fields['assigned_officer'].queryset.filter(branch_id=user.branch_id)
         self.fields['tin'].required = False
         self.fields['phone_whatsapp'].required = False
         self.fields['email'].required = False
@@ -95,18 +103,28 @@ class WalkInIntakeForm(forms.ModelForm):
         model = WalkInIntake
         fields = ['client', 'service_type', 'purpose', 'assigned_staff', 'notes', 'outcome']
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         from services.models import ServiceType
         
-        self.fields['client'].queryset = Client.objects.order_by('full_name')
+        self.fields['client'].queryset = scope_queryset(
+            user, Client.objects.order_by('full_name'),
+        ) if user else Client.objects.order_by('full_name')
         self.fields['client'].required = True
-        self.fields['service_type'].queryset = ServiceType.objects.filter(is_active=True).order_by('category', 'name')
+        service_types = ServiceType.objects.filter(is_active=True)
+        if user:
+            service_types = scope_queryset(user, service_types, branch_path='branches').distinct()
+        self.fields['service_type'].queryset = service_types.order_by('category', 'name')
         self.fields['service_type'].label = 'Purpose of Visit'
         self.fields['purpose'].required = False
         self.fields['purpose'].widget = forms.HiddenInput()
-        self.fields['assigned_staff'].queryset = User.objects.filter(
+        assigned_staff = User.objects.filter(
             is_active_staff=True, is_active=True).order_by('first_name')
+        if user and user.company_id and not user.is_superuser:
+            assigned_staff = assigned_staff.filter(
+                company_id=user.company_id if user.role in ('admin', 'ceo') else None
+            ) if user.role in ('admin', 'ceo') else assigned_staff.filter(branch_id=user.branch_id)
+        self.fields['assigned_staff'].queryset = assigned_staff
         self.fields['notes'].required = False
         self.fields['outcome'].required = False
 

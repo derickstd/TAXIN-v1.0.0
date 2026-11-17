@@ -25,6 +25,12 @@ def recalc_client_outstanding(client):
 update_client_outstanding = recalc_client_outstanding
 
 
+@receiver(post_save, sender=Invoice)
+def on_invoice_saved(sender, instance, **kwargs):
+    if instance.client_id:
+        recalc_client_outstanding(instance.client)
+
+
 def _sync_invoice_after_payment(invoice):
     """
     Recalculate amount_paid from actual Payment records (source of truth),
@@ -81,24 +87,28 @@ def _settle_job_card(invoice):
 
 @receiver(post_save, sender=Payment)
 def on_payment_saved(sender, instance, created, **kwargs):
-    invoice = instance.invoice
-    # Reload grand_total fresh — services signal may have updated it
-    invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
-    _sync_invoice_after_payment(invoice)
-    if invoice.client:
+    invoice = instance.invoice if instance.invoice_id else None
+    client = instance.client or (invoice.client if invoice else None)
+    if invoice:
+        # Reload grand_total fresh — services signal may have updated it
+        invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
+        _sync_invoice_after_payment(invoice)
+    if client:
         from django.utils import timezone
-        invoice.client.last_transaction_date = timezone.now().date()
-        invoice.client.save(update_fields=['last_transaction_date'])
-        recalc_client_outstanding(invoice.client)
+        client.last_transaction_date = timezone.now().date()
+        client.save(update_fields=['last_transaction_date'])
+        recalc_client_outstanding(client)
 
 
 @receiver(post_delete, sender=Payment)
 def on_payment_deleted(sender, instance, **kwargs):
-    invoice = instance.invoice
-    invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
-    _sync_invoice_after_payment(invoice)
-    if invoice.client:
-        recalc_client_outstanding(invoice.client)
+    invoice = instance.invoice if instance.invoice_id else None
+    client = instance.client or (invoice.client if invoice else None)
+    if invoice:
+        invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
+        _sync_invoice_after_payment(invoice)
+    if client:
+        recalc_client_outstanding(client)
 
 
 @receiver(post_delete, sender=Invoice)

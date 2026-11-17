@@ -9,6 +9,7 @@ from clients.models import Client
 from django import forms
 from django.conf import settings
 from django.db import transaction
+from core.branch_access import scope_queryset
 
 class CredentialForm(forms.ModelForm):
     username_plain = forms.CharField(label='Username / TIN', required=False,
@@ -23,16 +24,18 @@ class CredentialForm(forms.ModelForm):
         fields = ['client', 'credential_type', 'label', 'status', 'expiry_date']
         widgets = {'expiry_date': forms.DateInput(attrs={'type': 'date'})}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['client'].queryset = Client.objects.order_by('full_name')
+        self.fields['client'].queryset = scope_queryset(
+            user, Client.objects.order_by('full_name'),
+        ) if user else Client.objects.order_by('full_name')
         self.fields['expiry_date'].required = False
 
 
 @login_required
 def credential_list(request):
     if request.method == 'POST':
-        form = CredentialForm(request.POST)
+        form = CredentialForm(request.POST, user=request.user)
         if form.is_valid():
             cred = form.save(commit=False)
             cred.created_by = request.user
@@ -48,7 +51,11 @@ def credential_list(request):
     q = request.GET.get('q', '')
     type_filter = request.GET.get('type', '')
     client_filter = request.GET.get('client', '')
-    creds = ClientCredential.objects.select_related('client', 'last_accessed_by').order_by('client__full_name')
+    creds = scope_queryset(
+        request.user,
+        ClientCredential.objects.select_related('client', 'last_accessed_by'),
+        branch_path='client__branch',
+    ).order_by('client__full_name')
     if q:
         creds = creds.filter(Q(client__full_name__icontains=q) | Q(label__icontains=q))
     if type_filter:
@@ -59,7 +66,9 @@ def credential_list(request):
     expiring_soon = creds.filter(expiry_date__lte=today + timezone.timedelta(days=14), expiry_date__gte=today)
     filtered_client = None
     if client_filter:
-        filtered_client = Client.objects.filter(pk=client_filter).first()
+        filtered_client = scope_queryset(
+            request.user, Client.objects.filter(pk=client_filter),
+        ).first()
     from core.utils import paginate_queryset
     page_obj = paginate_queryset(request, creds.order_by('client__full_name'), per_page=25)
     search_records = [
@@ -77,7 +86,7 @@ def credential_list(request):
         'creds': page_obj, 'page_obj': page_obj, 'expiring_soon': expiring_soon,
         'today': today, 'q': q, 'type_filter': type_filter,
         'cred_types': ClientCredential.CRED_TYPE,
-        'add_form': CredentialForm(),
+        'add_form': CredentialForm(user=request.user),
         'filtered_client': filtered_client,
         'google_sheet_edit_url': settings.GOOGLE_SHEET_EDIT_URL,
         'search_records': search_records,
@@ -90,7 +99,10 @@ def google_sheet_sync(request):
 
     try:
         if request.method == 'POST' and request.POST.get('direction') == 'to_sheet':
-            credentials = ClientCredential.objects.select_related('client').order_by('pk')
+            credentials = scope_queryset(
+                request.user, ClientCredential.objects.select_related('client'),
+                branch_path='client__branch',
+            ).order_by('pk')
             write_rows(credential_rows(credentials))
             messages.success(request, 'System credentials were written to Google Sheets.')
         elif request.method == 'POST' and request.POST.get('direction') == 'from_sheet':
@@ -108,7 +120,10 @@ def google_sheet_sync(request):
             with transaction.atomic():
                 for row in rows:
                     try:
-                        credential = ClientCredential.objects.select_related('client').get(pk=int(row.get('System ID', '')))
+                        credential = scope_queryset(
+                            request.user, ClientCredential.objects.select_related('client'),
+                            branch_path='client__branch',
+                        ).get(pk=int(row.get('System ID', '')))
                         username = row.get('Username', '')
                         password = row.get('Password', '')
                         notes = row.get('Notes', '')
@@ -136,9 +151,12 @@ def google_sheet_sync(request):
 
 @login_required
 def credential_edit(request, pk):
-    cred = get_object_or_404(ClientCredential, pk=pk)
+    cred = get_object_or_404(
+        scope_queryset(request.user, ClientCredential.objects.all(), branch_path='client__branch'),
+        pk=pk,
+    )
     if request.method == 'POST':
-        form = CredentialForm(request.POST, instance=cred)
+        form = CredentialForm(request.POST, instance=cred, user=request.user)
         if form.is_valid():
             c = form.save(commit=False)
             pw = form.cleaned_data.get('password_plain', '')
@@ -151,13 +169,16 @@ def credential_edit(request, pk):
             messages.success(request, 'Credential updated successfully.')
             return redirect('credentials:list')
     else:
-        form = CredentialForm(instance=cred)
+        form = CredentialForm(instance=cred, user=request.user)
     return render(request, 'credentials/credential_form.html', {'form': form, 'edit': True, 'cred': cred})
 
 
 @login_required
 def reveal_password(request, pk):
-    cred = get_object_or_404(ClientCredential, pk=pk)
+    cred = get_object_or_404(
+        scope_queryset(request.user, ClientCredential.objects.all(), branch_path='client__branch'),
+        pk=pk,
+    )
     CredentialAccessLog.objects.create(credential=cred, accessed_by=request.user)
     cred.last_accessed_by = request.user
     cred.last_accessed_at = timezone.now()

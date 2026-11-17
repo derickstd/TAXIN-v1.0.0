@@ -1,4 +1,4 @@
-"""Admin dashboard views for managing users, tenants, and system functions."""
+"""Admin dashboard views for the company, branches, users, and system functions."""
 import logging
 import csv
 import json
@@ -7,7 +7,6 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.tokens import default_token_generator
-from django import forms
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.core.mail import send_mail
@@ -15,27 +14,28 @@ from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.db.models import Q, Count
-from .models import User, Company, Tenant, AuditLog, Branch, SystemModuleVisibility
+from .models import User, Company, AuditLog, Branch, SystemModuleVisibility
 from .utils import get_module_visibility_map, SYSTEM_MODULE_DEFINITIONS
 from clients.models import Client
+from .branch_access import scope_queryset
 
 logger = logging.getLogger(__name__)
 
-class BranchForm(forms.ModelForm):
-    class Meta:
-        model = Branch
-        fields = ['name', 'slug', 'address', 'phone', 'is_active']
-        widgets = {
-            'address': forms.Textarea(attrs={'rows': 2}),
-        }
+
+def _managed_users(request):
+    users = scope_queryset(request.user, User.objects.select_related('company', 'branch'))
+    if request.user.role == 'manager' and not request.user.is_superuser:
+        users = users.exclude(role__in=('admin', 'ceo'))
+    return users
+
 
 # Role hierarchy: superuser > admin > moderator > auditor > support
 ROLE_PERMISSIONS = {
     'superuser': ['*'],  # Full access
-    'admin': ['users', 'companies', 'tenants', 'audit', 'settings', 'support'],
+    'admin': ['users', 'companies', 'audit', 'settings', 'support'],
     'ceo': ['users', 'companies', 'audit', 'settings', 'support'],
-    'manager': ['users', 'companies', 'audit', 'settings', 'support'],
-    'moderator': ['tenants', 'audit', 'support'],
+    'manager': ['users', 'audit'],
+    'moderator': ['audit', 'support'],
     'auditor': ['audit'],
     'support': ['users.reset_password', 'audit.view'],
 }
@@ -53,18 +53,15 @@ def _check_admin_role(request, required_permission='admin'):
     if request.user.is_superuser:
         return True, 'superuser', ROLE_PERMISSIONS['superuser']
     
-    # Check for admin staff role
-    if request.user.is_staff or getattr(request.user, 'role', None) in ('manager', 'ceo'):
-        role = getattr(request.user, 'role', 'support')
-        if role in ROLE_PERMISSIONS:
-            permissions = ROLE_PERMISSIONS.get(role, [])
-            
-            # Check if user has required permission
-            if required_permission == '*' or '*' in permissions:
-                return True, role, permissions
-            if required_permission in permissions:
-                return True, role, permissions
-    
+    role = getattr(request.user, 'role', 'support')
+    if role not in ROLE_PERMISSIONS:
+        return False, None, []
+
+    permissions = ROLE_PERMISSIONS[role]
+    if required_permission == '*':
+        return role in ('admin', 'ceo'), role, permissions
+    if '*' in permissions or required_permission in permissions:
+        return True, role, permissions
     return False, None, []
 
 
@@ -87,30 +84,32 @@ def admin_dashboard(request):
     has_access, role, perms = _check_admin_role(request, '*')
     
     companies = Company.objects.all()
-    tenants = Tenant.objects.all()
+    branches = Branch.objects.all()
     users = User.objects.all()
+    audit_logs = AuditLog.objects.all()
+    if not request.user.is_superuser:
+        companies = companies.filter(pk=request.user.company_id)
+        branches = branches.filter(company_id=request.user.company_id)
+        users = users.filter(company_id=request.user.company_id)
+        audit_logs = audit_logs.filter(changed_by__company_id=request.user.company_id)
     
     # Advanced statistics
     stats = {
         'total_companies': companies.count(),
         'active_companies': companies.filter(active=True).count(),
         'inactive_companies': companies.filter(active=False).count(),
+        'total_branches': branches.count(),
+        'active_branches': branches.filter(is_active=True).count(),
         'total_users': users.count(),
         'active_users': users.filter(is_active=True).count(),
         'inactive_users': users.filter(is_active=False).count(),
         'admin_users': users.filter(is_staff=True).count(),
-        'total_tenants': tenants.count(),
-        'ready_tenants': tenants.filter(status='ready').count(),
-        'pending_tenants': tenants.filter(status='pending').count(),
-        'running_tenants': tenants.filter(status='running').count(),
-        'suspended_tenants': tenants.filter(status='suspended').count(),
-        'failed_tenants': tenants.filter(status='failed').count(),
         'recent_signups': users.filter(date_joined__gte=timezone.now() - timedelta(days=7)).count(),
-        'total_logs': AuditLog.objects.count(),
+        'total_logs': audit_logs.count(),
     }
     
     # Recent activity
-    recent_activity = AuditLog.objects.select_related('changed_by').order_by('-changed_at')[:10]
+    recent_activity = audit_logs.select_related('changed_by').order_by('-changed_at')[:10]
     
     context = {
         'stats': stats,
@@ -131,7 +130,7 @@ def admin_control_center(request):
 
     company = getattr(request.user, 'company', None)
     can_manage_roles = request.user.is_superuser or request.user.role in ('admin', 'ceo')
-    tenant_users = User.objects.filter(company=company).order_by('first_name', 'last_name', 'username') if company else User.objects.none()
+    company_users = User.objects.filter(company=company).order_by('first_name', 'last_name', 'username') if company else User.objects.none()
 
     if request.method == 'POST':
         for key, label, description in SYSTEM_MODULE_DEFINITIONS:
@@ -152,7 +151,7 @@ def admin_control_center(request):
 
         if can_manage_roles:
             role_user_id = request.POST.get('role_user')
-            role_user = tenant_users.filter(pk=role_user_id).first() if role_user_id else None
+            role_user = company_users.filter(pk=role_user_id).first() if role_user_id else None
             role = request.POST.get('role')
             allowed_roles = dict(User.ROLE_CHOICES)
             if role_user and role in allowed_roles and role not in ('superuser',):
@@ -177,19 +176,19 @@ def admin_control_center(request):
             })
 
     quick_links = [
-        {'label': 'Client management', 'url': 'clients:list', 'icon': 'fas fa-users', 'description': 'Create, review, and manage the clients inside this tenant.'},
-        {'label': 'Engagements', 'url': 'services:list', 'icon': 'fas fa-briefcase', 'description': 'Open job cards and manage work for this tenant.'},
-        {'label': 'Invoices and receipts', 'url': 'billing:list', 'icon': 'fas fa-receipt', 'description': 'Track invoices, payments, and receipt-related activity for this tenant.'},
-        {'label': 'Expenses', 'url': 'expenses:list', 'icon': 'fas fa-wallet', 'description': 'Review and manage expense records for this tenant.'},
-        {'label': 'Compliance', 'url': 'compliance:list', 'icon': 'fas fa-balance-scale', 'description': 'Manage deadlines, reminders, and compliance items for this tenant.'},
-        {'label': 'Documents and reports', 'url': 'documents:monthly_report', 'icon': 'fas fa-file-alt', 'description': 'Open monthly reports and tenant documents from one place.'},
+        {'label': 'Client management', 'url': 'clients:list', 'icon': 'fas fa-users', 'description': 'Create, review, and manage company clients.'},
+        {'label': 'Engagements', 'url': 'services:list', 'icon': 'fas fa-briefcase', 'description': 'Open job cards and manage company work.'},
+        {'label': 'Invoices and receipts', 'url': 'billing:list', 'icon': 'fas fa-receipt', 'description': 'Track company invoices, payments, and receipts.'},
+        {'label': 'Expenses', 'url': 'expenses:list', 'icon': 'fas fa-wallet', 'description': 'Review and manage company expenses.'},
+        {'label': 'Compliance', 'url': 'compliance:list', 'icon': 'fas fa-balance-scale', 'description': 'Manage company deadlines, reminders, and filings.'},
+        {'label': 'Documents and reports', 'url': 'documents:monthly_report', 'icon': 'fas fa-file-alt', 'description': 'Open company reports and documents.'},
     ]
 
     return render(request, 'core/admin_control_center.html', {
         'modules': module_rows,
         'quick_links': quick_links,
-        'tenant_name': company.name if company else 'This tenant',
-        'tenant_users': tenant_users,
+        'company_name': company.name if company else 'the company',
+        'company_users': company_users,
         'role_choices': User.ROLE_CHOICES,
         'can_manage_roles': can_manage_roles,
     })
@@ -202,7 +201,7 @@ def admin_send_password_reset(request, user_id):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
     
-    user = get_object_or_404(User, pk=user_id)
+    user = get_object_or_404(_managed_users(request), pk=user_id)
     
     if request.method == 'POST':
         try:
@@ -265,7 +264,7 @@ def admin_users(request):
     search_q = request.GET.get('search', '')
     status_filter = request.GET.get('status', '')
     
-    users = User.objects.select_related('company').all().order_by('-date_joined')
+    users = _managed_users(request).order_by('-date_joined')
     
     if search_q:
         users = users.filter(Q(username__icontains=search_q) | Q(email__icontains=search_q) | Q(first_name__icontains=search_q))
@@ -298,6 +297,8 @@ def admin_companies(request):
     status_filter = request.GET.get('status', '')
     
     companies = Company.objects.select_related('owner').all().order_by('-created_at')
+    if not request.user.is_superuser:
+        companies = companies.filter(pk=request.user.company_id)
     
     if search_q:
         companies = companies.filter(Q(name__icontains=search_q) | Q(slug__icontains=search_q) | Q(email__icontains=search_q))
@@ -321,149 +322,58 @@ def admin_company_branches(request, company_id):
     if not _require_admin_role(request, 'companies'):
         return redirect('dashboard:index')
 
-    company = get_object_or_404(Company, pk=company_id)
+    if not request.user.is_superuser and request.user.role not in ('admin', 'ceo'):
+        messages.error(request, 'Only company leadership can manage branches.')
+        return redirect('dashboard:index')
+    companies = Company.objects.all() if request.user.is_superuser else Company.objects.filter(pk=request.user.company_id)
+    company = get_object_or_404(companies, pk=company_id)
     branches = company.branches.order_by('name')
     if request.method == 'POST':
-        form = BranchForm(request.POST)
-        if form.is_valid():
-            branch = form.save(commit=False)
-            branch.company = company
-            branch.save()
-            messages.success(request, 'Branch created successfully.')
+        if request.POST.get('action') != 'setup_business_branches':
+            messages.error(request, 'Only TAXMAN, PRIME FOCUS, and ABA UGANDA are supported branches.')
             return redirect('core:admin_company_branches', company_id=company.pk)
-    else:
-        form = BranchForm()
+
+        from services.models import ServiceType
+
+        taxman = company.branches.filter(name__iexact='TAXMAN').first()
+        main_branch = company.branches.filter(name__iexact='Main').first()
+        if not taxman and main_branch:
+            main_branch.name = 'TAXMAN'
+            main_branch.slug = f'{company.slug}-taxman'
+            main_branch.external_reporting = False
+            main_branch.save(update_fields=['name', 'slug', 'external_reporting'])
+            taxman = main_branch
+        if not taxman:
+            taxman = Branch.objects.create(
+                company=company, name='TAXMAN',
+                slug=f'{company.slug}-taxman', external_reporting=False,
+            )
+        prime_focus, _ = Branch.objects.get_or_create(
+            company=company, name='PRIME FOCUS',
+            defaults={'slug': f'{company.slug}-prime-focus', 'external_reporting': True},
+        )
+        aba_uganda, _ = Branch.objects.get_or_create(
+            company=company, name='ABA UGANDA',
+            defaults={'slug': f'{company.slug}-aba-uganda', 'external_reporting': True},
+        )
+        for branch in (prime_focus, aba_uganda):
+            if not branch.external_reporting:
+                branch.external_reporting = True
+                branch.save(update_fields=['external_reporting'])
+        if not company.default_branch_id or company.default_branch_id == getattr(main_branch, 'pk', None):
+            company.default_branch = taxman
+            company.save(update_fields=['default_branch'])
+        for service in ServiceType.objects.filter(branches__isnull=True).distinct():
+            service.branches.add(taxman, prime_focus)
+        for service in ServiceType.objects.filter(branches=taxman).distinct():
+            service.branches.add(prime_focus)
+        messages.success(request, 'TAXMAN, PRIME FOCUS, and ABA UGANDA are ready.')
+        return redirect('core:admin_company_branches', company_id=company.pk)
 
     return render(request, 'core/admin_company_branches.html', {
         'company': company,
         'branches': branches,
-        'form': form,
     })
-
-
-@login_required
-def admin_tenants(request):
-    """List and manage tenants."""
-    if not _require_admin_role(request, 'tenants'):
-        messages.error(request, 'Admin access required.')
-        return redirect('dashboard:index')
-    
-    # Search and filter
-    search_q = request.GET.get('search', '')
-    status_filter = request.GET.get('status', '')
-    
-    tenants = Tenant.objects.select_related('company', 'created_by').all().order_by('-created_at')
-    
-    if search_q:
-        tenants = tenants.filter(Q(company__name__icontains=search_q) | Q(company__slug__icontains=search_q))
-    
-    if status_filter and status_filter != 'all':
-        tenants = tenants.filter(status=status_filter)
-    
-    context = {
-        'tenants': tenants,
-        'search_q': search_q,
-        'status_filter': status_filter,
-    }
-    
-    return render(request, 'core/admin_tenants.html', context)
-
-
-@login_required
-def admin_tenant_approve(request, tenant_id):
-    """Approve a pending tenant."""
-    if not _require_admin_role(request, 'tenants'):
-        return JsonResponse({'error': 'Admin access required'}, status=403)
-    
-    tenant = get_object_or_404(Tenant, pk=tenant_id)
-    
-    if tenant.status != 'pending':
-        return JsonResponse({'error': 'Only pending tenants can be approved'}, status=400)
-    
-    try:
-        tenant.status = 'ready'
-        tenant.save()
-        
-        AuditLog.objects.create(
-            model_name='tenant',
-            object_id=str(tenant.pk),
-            action='UPDATE',
-            changed_fields={'status': 'pending → ready'},
-            changed_by=request.user,
-            notes=f'Tenant {tenant.company.slug} approved by {request.user.username}'
-        )
-        
-        messages.success(request, f'Tenant {tenant.company.slug} approved')
-    except Exception as e:
-        logger.exception('Failed to approve tenant %s: %s', tenant.pk, e)
-        messages.error(request, f'Failed to approve tenant: {str(e)}')
-    
-    return redirect('core:admin_tenants')
-
-
-@login_required
-def admin_tenant_suspend(request, tenant_id):
-    """Suspend an active tenant."""
-    if not _require_admin_role(request, 'tenants'):
-        return JsonResponse({'error': 'Admin access required'}, status=403)
-    
-    tenant = get_object_or_404(Tenant, pk=tenant_id)
-    
-    if tenant.status == 'suspended':
-        return JsonResponse({'error': 'Tenant is already suspended'}, status=400)
-    
-    try:
-        old_status = tenant.status
-        tenant.status = 'suspended'
-        tenant.save()
-        
-        AuditLog.objects.create(
-            model_name='tenant',
-            object_id=str(tenant.pk),
-            action='UPDATE',
-            changed_fields={'status': f'{old_status} → suspended'},
-            changed_by=request.user,
-            notes=f'Tenant {tenant.company.slug} suspended by {request.user.username}'
-        )
-        
-        messages.success(request, f'Tenant {tenant.company.slug} suspended')
-    except Exception as e:
-        logger.exception('Failed to suspend tenant %s: %s', tenant.pk, e)
-        messages.error(request, f'Failed to suspend tenant: {str(e)}')
-    
-    return redirect('core:admin_tenants')
-
-
-@login_required
-def admin_tenant_reactivate(request, tenant_id):
-    """Reactivate a suspended tenant."""
-    if not _require_admin_role(request, 'tenants'):
-        return JsonResponse({'error': 'Admin access required'}, status=403)
-    
-    tenant = get_object_or_404(Tenant, pk=tenant_id)
-    
-    if tenant.status != 'suspended':
-        return JsonResponse({'error': 'Only suspended tenants can be reactivated'}, status=400)
-    
-    try:
-        tenant.status = 'ready'
-        tenant.save()
-        
-        AuditLog.objects.create(
-            model_name='tenant',
-            object_id=str(tenant.pk),
-            action='UPDATE',
-            changed_fields={'status': 'suspended → ready'},
-            changed_by=request.user,
-            notes=f'Tenant {tenant.company.slug} reactivated by {request.user.username}'
-        )
-        
-        messages.success(request, f'Tenant {tenant.company.slug} reactivated')
-    except Exception as e:
-        logger.exception('Failed to reactivate tenant %s: %s', tenant.pk, e)
-        messages.error(request, f'Failed to reactivate tenant: {str(e)}')
-    
-    return redirect('core:admin_tenants')
 
 
 @login_required
@@ -491,7 +401,12 @@ def admin_audit_logs(request):
     from .models import TransactionEditLog
 
     logs = []
-    for log in AuditLog.objects.select_related('changed_by').filter(changed_at__gte=start_date):
+    audit_logs = scope_queryset(
+        request.user,
+        AuditLog.objects.select_related('changed_by').filter(changed_at__gte=start_date),
+        branch_path='changed_by__branch',
+    )
+    for log in audit_logs:
         logs.append({
             'changed_at': log.changed_at,
             'model_name': log.model_name,
@@ -501,8 +416,12 @@ def admin_audit_logs(request):
             'notes': log.notes,
         })
 
-    activity_logs = StaffActivityLog.objects.select_related('staff', 'job_card').filter(
-        created_at__gte=start_date,
+    activity_logs = scope_queryset(
+        request.user,
+        StaffActivityLog.objects.select_related('staff', 'job_card').filter(
+            created_at__gte=start_date,
+        ),
+        branch_path='job_card__branch',
     )
     for log in activity_logs:
         logs.append({
@@ -514,7 +433,11 @@ def admin_audit_logs(request):
             'notes': log.action or log.description,
         })
 
-    edit_logs = TransactionEditLog.objects.select_related('edited_by').filter(edited_at__gte=start_date)
+    edit_logs = scope_queryset(
+        request.user,
+        TransactionEditLog.objects.select_related('edited_by').filter(edited_at__gte=start_date),
+        branch_path='edited_by__branch',
+    )
     for log in edit_logs:
         logs.append({
             'changed_at': log.edited_at,
@@ -557,7 +480,7 @@ def admin_user_deactivate(request, user_id):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
     
-    user = get_object_or_404(User, pk=user_id)
+    user = get_object_or_404(_managed_users(request), pk=user_id)
     
     if not user.is_active:
         messages.warning(request, f'User {user.username} is already inactive.')
@@ -591,7 +514,7 @@ def admin_user_reactivate(request, user_id):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
     
-    user = get_object_or_404(User, pk=user_id)
+    user = get_object_or_404(_managed_users(request), pk=user_id)
     
     if user.is_active:
         messages.warning(request, f'User {user.username} is already active.')
@@ -625,7 +548,7 @@ def admin_client_suspend(request, client_id):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
 
-    client = get_object_or_404(Client, pk=client_id)
+    client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=client_id)
 
     if client.status == 'suspended':
         messages.warning(request, f'Client {client.get_display_name()} is already suspended.')
@@ -660,7 +583,7 @@ def admin_client_reactivate(request, client_id):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
 
-    client = get_object_or_404(Client, pk=client_id)
+    client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=client_id)
 
     if client.status != 'suspended':
         messages.warning(request, f'Client {client.get_display_name()} is not suspended.')
@@ -694,7 +617,7 @@ def admin_user_delete(request, user_id):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
 
-    user = get_object_or_404(User, pk=user_id)
+    user = get_object_or_404(_managed_users(request), pk=user_id)
 
     if user == request.user:
         messages.error(request, 'You cannot delete your own account.')
@@ -730,7 +653,10 @@ def admin_company_suspend(request, company_id):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
     
-    company = get_object_or_404(Company, pk=company_id)
+    companies = Company.objects.all() if request.user.is_superuser else Company.objects.filter(
+        pk=request.user.company_id,
+    )
+    company = get_object_or_404(companies, pk=company_id)
     
     if not company.active:
         messages.warning(request, f'Company {company.name} is already suspended.')
@@ -739,12 +665,6 @@ def admin_company_suspend(request, company_id):
     try:
         company.active = False
         company.save()
-        
-        # Also suspend associated tenant
-        tenant = Tenant.objects.filter(company=company).first()
-        if tenant:
-            tenant.status = 'suspended'
-            tenant.save()
         
         AuditLog.objects.create(
             model_name='company',
@@ -770,7 +690,10 @@ def admin_company_reactivate(request, company_id):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
     
-    company = get_object_or_404(Company, pk=company_id)
+    companies = Company.objects.all() if request.user.is_superuser else Company.objects.filter(
+        pk=request.user.company_id,
+    )
+    company = get_object_or_404(companies, pk=company_id)
     
     if company.active:
         messages.warning(request, f'Company {company.name} is already active.')
@@ -779,12 +702,6 @@ def admin_company_reactivate(request, company_id):
     try:
         company.active = True
         company.save()
-        
-        # Also reactivate associated tenant
-        tenant = Tenant.objects.filter(company=company).first()
-        if tenant and tenant.status == 'suspended':
-            tenant.status = 'ready'
-            tenant.save()
         
         AuditLog.objects.create(
             model_name='company',
@@ -806,6 +723,9 @@ def admin_company_reactivate(request, company_id):
 @login_required
 def admin_system_analytics(request):
     """View system-wide analytics and statistics."""
+    if not request.user.is_superuser:
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied()
     if not _require_admin_role(request, 'audit'):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
@@ -813,7 +733,7 @@ def admin_system_analytics(request):
     # Advanced statistics
     companies = Company.objects.all()
     users = User.objects.all()
-    tenants = Tenant.objects.all()
+    branches = Branch.objects.all()
     
     # Time-based statistics
     now = timezone.now()
@@ -824,22 +744,17 @@ def admin_system_analytics(request):
         # Company stats
         'total_companies': companies.count(),
         'active_companies': companies.filter(active=True).count(),
-        'companies_last_7days': companies.filter(created_at__gte=week_ago).count(),
-        'companies_last_30days': companies.filter(created_at__gte=month_ago).count(),
         
+        # Branch stats
+        'total_branches': branches.count(),
+        'active_branches': branches.filter(is_active=True).count(),
+
         # User stats
         'total_users': users.count(),
         'active_users': users.filter(is_active=True).count(),
         'admin_users': users.filter(is_staff=True).count(),
         'users_last_7days': users.filter(date_joined__gte=week_ago).count(),
         'users_last_30days': users.filter(date_joined__gte=month_ago).count(),
-        
-        # Tenant stats
-        'total_tenants': tenants.count(),
-        'ready_tenants': tenants.filter(status='ready').count(),
-        'pending_tenants': tenants.filter(status='pending').count(),
-        'suspended_tenants': tenants.filter(status='suspended').count(),
-        'failed_tenants': tenants.filter(status='failed').count(),
         
         # Audit stats
         'total_audit_logs': AuditLog.objects.count(),
@@ -866,7 +781,10 @@ def admin_export_audit_logs(request):
     model_filter = request.GET.get('model', '')
     
     start_date = timezone.now() - timedelta(days=days)
-    logs = AuditLog.objects.filter(changed_at__gte=start_date).order_by('-changed_at')
+    logs = scope_queryset(
+        request.user, AuditLog.objects.filter(changed_at__gte=start_date),
+        branch_path='changed_by__branch',
+    ).order_by('-changed_at')
     
     if model_filter:
         logs = logs.filter(model_name=model_filter)
@@ -904,6 +822,9 @@ def admin_export_audit_logs(request):
 @login_required
 def admin_system_health(request):
     """View system health and diagnostics."""
+    if not request.user.is_superuser:
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied()
     if not _require_admin_role(request, 'audit'):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
@@ -916,11 +837,9 @@ def admin_system_health(request):
         'debug_mode': settings.DEBUG,
         'allowed_hosts': len(settings.ALLOWED_HOSTS),
         'total_companies': Company.objects.count(),
+        'total_branches': Branch.objects.count(),
         'total_users': User.objects.count(),
-        'total_tenants': Tenant.objects.count(),
         'audit_logs_count': AuditLog.objects.count(),
-        'pending_tenants': Tenant.objects.filter(status='pending').count(),
-        'failed_tenants': Tenant.objects.filter(status='failed').count(),
     }
     
     return render(request, 'core/admin_health.html', {'health': health_status})
@@ -945,7 +864,7 @@ def admin_bulk_password_reset(request):
         
         for user_id in user_ids:
             try:
-                user = User.objects.get(pk=user_id)
+                user = _managed_users(request).get(pk=user_id)
                 token = default_token_generator.make_token(user)
                 uid = urlsafe_base64_encode(force_bytes(user.pk))
                 reset_url = f"{request.build_absolute_uri('/password-reset-confirm/')}{uid}/{token}/"
@@ -978,6 +897,6 @@ def admin_bulk_password_reset(request):
         
         return redirect('core:admin_users')
     
-    users = User.objects.filter(is_active=True).order_by('username')
+    users = _managed_users(request).filter(is_active=True).order_by('username')
     return render(request, 'core/admin_bulk_password_reset.html', {'users': users})
 

@@ -5,9 +5,12 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;gap:1rem;flex-wrap:wrap;">
     <div>
       <h1 style="margin:0;font-size:1.9rem;color:#1a3c6e;">Branches for {{ company.name }}</h1>
-      <p style="margin:.5rem 0 0;color:#6b7280;">Manage branches for this company and choose the branch used by default in company settings.</p>
+      <p style="margin:.5rem 0 0;color:#6b7280;">This company uses the TAXMAN, PRIME FOCUS, and ABA UGANDA branches.</p>
     </div>
-    <a href="{% url 'core:admin_companies' %}" style="background:#6b7280;color:#fff;padding:.9rem 1.4rem;border-radius:8px;text-decoration:none;font-weight:700;">← Back to companies</a>
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="setup_business_branches"><button class="btn btn-primary" type="submit">Set up TAXMAN, PRIME FOCUS &amp; ABA UGANDA</button></form>
+      <a href="{% url 'core:admin_companies' %}" class="btn btn-outline">Back to companies</a>
+    </div>
   </div>
 
   <div style="display:grid;gap:1.5rem;">
@@ -22,6 +25,7 @@
               <th style="padding:.9rem 1rem;text-align:left;color:#475569;font-size:.85rem;font-weight:700;">Phone</th>
               <th style="padding:.9rem 1rem;text-align:left;color:#475569;font-size:.85rem;font-weight:700;">Created</th>
               <th style="padding:.9rem 1rem;text-align:center;color:#475569;font-size:.85rem;font-weight:700;">Active</th>
+              <th style="padding:.9rem 1rem;text-align:center;color:#475569;font-size:.85rem;font-weight:700;">Reporting</th>
             </tr>
           </thead>
           <tbody>
@@ -32,10 +36,11 @@
               <td style="padding:1rem 1rem;color:#111827;">{{ branch.phone|default:'—' }}</td>
               <td style="padding:1rem 1rem;color:#475569;">{{ branch.created_at|date:'M d, Y' }}</td>
               <td style="padding:1rem 1rem;text-align:center;color:#111827;">{% if branch.is_active %}<span style="color:#059669;font-weight:700;">Yes</span>{% else %}<span style="color:#ef4444;font-weight:700;">No</span>{% endif %}</td>
+              <td style="padding:1rem 1rem;text-align:center;color:#111827;">{% if branch.external_reporting %}Daily summaries{% else %}System transactions{% endif %}</td>
             </tr>
             {% empty %}
             <tr>
-              <td colspan="5" style="padding:2rem;text-align:center;color:#6b7280;">No branches defined for this company yet.</td>
+              <td colspan="6" style="padding:2rem;text-align:center;color:#6b7280;">No branches defined for this company yet.</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -43,34 +48,6 @@
       </div>
     </div>
 
-    <div style="background:#fff;border-radius:16px;box-shadow:0 2px 16px rgba(15,23,42,.06);padding:1.5rem;">
-      <h2 style="font-size:1.1rem;font-weight:700;color:#111827;margin-bottom:1rem;">Create New Branch</h2>
-      <form method="post" style="display:grid;gap:1rem;">
-        {% csrf_token %}
-        {% if form.errors %}
-        <div style="background:#fee2e2;border:1px solid #fecaca;color:#991b1b;padding:1rem;border-radius:.75rem;">
-          <strong>Fix the errors below:</strong>
-          <ul style="margin:.5rem 0 0;padding-left:1.25rem;">
-            {% for field, errors in form.errors.items %}
-              {% for error in errors %}
-                <li>{{ field|capfirst }}: {{ error }}</li>
-              {% endfor %}
-            {% endfor %}
-          </ul>
-        </div>
-        {% endif %}
-        <label class="form-label">Branch Name</label>
-        {{ form.name }}
-        <label class="form-label">Slug</label>
-        {{ form.slug }}
-        <label class="form-label">Phone</label>
-        {{ form.phone }}
-        <label class="form-label">Address</label>
-        {{ form.address }}
-        <label class="form-label"><input type="checkbox" name="is_active" value="on" {% if form.is_active.value %}checked{% endif %}> Active</label>
-        <button type="submit" class="btn btn-primary">Create Branch</button>
-      </form>
-    </div>
   </div>
 </div>
 {% endblock %}

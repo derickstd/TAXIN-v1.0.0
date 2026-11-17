@@ -1,21 +1,30 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F, Sum, Q, Count
 from django.http import JsonResponse
 from django.utils import timezone
+from django.views.decorators.http import require_http_methods
 from decimal import Decimal, InvalidOperation
-from .models import Invoice, Payment, OtherIncome
+from datetime import date, timedelta
+from .models import (
+    BranchDailySummary, BranchDailyTransaction, Invoice, OtherIncome, Payment,
+)
 from .forms import InvoiceForm
 from clients.models import Client
+from services.models import ServiceType
+from services.forms import service_category_choices
 from core.utils import paginate_queryset
 from core.duplicate_detection import check_duplicate_transaction
+from core.branch_access import accessible_branches, get_entry_branch, scope_queryset
 
 
 @login_required
 def invoice_list(request):
-    invoices = Invoice.objects.select_related('client', 'job_card').all()
+    invoices = scope_queryset(
+        request.user, Invoice.objects.select_related('client', 'job_card'),
+    )
     status = request.GET.get('status', '')
     q = request.GET.get('q', '')
     if status:
@@ -39,7 +48,7 @@ def invoice_list(request):
 
 @login_required
 def invoice_detail(request, pk):
-    invoice = get_object_or_404(Invoice, pk=pk)
+    invoice = get_object_or_404(scope_queryset(request.user, Invoice.objects.all()), pk=pk)
     payments = invoice.payments.order_by('payment_date', 'pk')
     # Build running balance per payment (allow negative balance when overpaid)
     running = invoice.grand_total
@@ -64,9 +73,13 @@ def invoice_detail(request, pk):
 @login_required
 def invoice_create(request):
     """Unified view to create Tax Invoice, Pro Forma Invoice, or Quotation."""
+    branch = get_entry_branch(request.user)
+    if branch and branch.external_reporting:
+        messages.info(request, 'Use Branch Daily Entries for this branch; it reports from an external accounting system.')
+        return redirect('documents:branch_daily_summaries')
     if request.method == 'POST':
         client_id = request.POST.get('client')
-        client = get_object_or_404(Client, pk=client_id)
+        client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=client_id)
         document_type = request.POST.get('document_type', 'invoice')
         amount_str = request.POST.get('amount', '0')
         try:
@@ -108,11 +121,11 @@ def invoice_create(request):
             status = 'draft'
         
         # Check for similar invoices recently created for same client/amount
-        similar_invoices = Invoice.objects.filter(
+        similar_invoices = scope_queryset(request.user, Invoice.objects.filter(
             client=client,
             document_type=document_type,
-            created_at__gte=timezone.now().date() - timezone.timedelta(days=14),
-        ).order_by('-created_at')
+            created_at__gte=timezone.now() - timezone.timedelta(days=14),
+        )).order_by('-created_at')
         allow_create = True
         for s in similar_invoices:
             # compare amounts within small tolerance
@@ -125,7 +138,10 @@ def invoice_create(request):
 
         if not allow_create and request.POST.get('force_create') != '1':
             return render(request, 'billing/invoice_create.html', {
-                'clients': Client.objects.filter(status__in=['active', 'dormant', 'suspended']).order_by('full_name'),
+                'clients': scope_queryset(
+                    request.user,
+                    Client.objects.filter(status__in=['active', 'dormant', 'suspended']),
+                ).order_by('full_name'),
                 'client': client,
                 'document_type': document_type,
                 'amount': amount,
@@ -139,6 +155,7 @@ def invoice_create(request):
 
         inv = Invoice.objects.create(
             client=client, document_type=document_type,
+            branch=client.branch or get_entry_branch(request.user),
             due_date=due_date, valid_until=valid_until,
             subtotal=amount, vat_total=0, grand_total=amount,
             status=status, notes=desc, created_by=request.user)
@@ -147,15 +164,21 @@ def invoice_create(request):
         messages.success(request, f'{doc_label} {inv.invoice_number} created.')
         return redirect('billing:detail', pk=inv.pk)
     
-    clients = Client.objects.filter(status__in=['active', 'dormant', 'suspended']).order_by('full_name')
+    clients = scope_queryset(
+        request.user,
+        Client.objects.filter(status__in=['active', 'dormant', 'suspended']),
+    ).order_by('full_name')
     return render(request, 'billing/invoice_create.html', {'clients': clients})
 
 
 @login_required
 def invoice_edit(request, pk):
-    invoice = get_object_or_404(Invoice, pk=pk)
+    invoice = get_object_or_404(scope_queryset(request.user, Invoice.objects.all()), pk=pk)
+    if invoice.branch_id and invoice.branch.external_reporting:
+        messages.info(request, 'External-system branch transactions are reported through daily summaries.')
+        return redirect('documents:branch_daily_summaries')
     if request.method == 'POST':
-        form = InvoiceForm(request.POST, instance=invoice)
+        form = InvoiceForm(request.POST, instance=invoice, user=request.user)
         if form.is_valid():
             inv = form.save(commit=False)
             if invoice.document_type != 'invoice' and inv.document_type == 'invoice':
@@ -165,7 +188,7 @@ def invoice_edit(request, pk):
             messages.success(request, f'Invoice {inv.invoice_number} updated.')
             return redirect('billing:detail', pk=inv.pk)
     else:
-        form = InvoiceForm(instance=invoice)
+        form = InvoiceForm(instance=invoice, user=request.user)
     return render(request, 'billing/invoice_form.html', {
         'form': form, 'invoice': invoice, 'title': f'Edit {invoice.invoice_number}'
     })
@@ -173,7 +196,10 @@ def invoice_edit(request, pk):
 
 @login_required
 def invoice_delete(request, pk):
-    invoice = get_object_or_404(Invoice, pk=pk)
+    invoice = get_object_or_404(scope_queryset(request.user, Invoice.objects.all()), pk=pk)
+    if invoice.branch_id and invoice.branch.external_reporting:
+        messages.info(request, 'External-system branch transactions are reported through daily summaries.')
+        return redirect('documents:branch_daily_summaries')
     if invoice.payments.exists():
         messages.error(request, 'Cannot delete an invoice with recorded payments.')
         return redirect('billing:detail', pk=pk)
@@ -187,8 +213,14 @@ def invoice_delete(request, pk):
 
 @login_required
 def record_payment(request, pk):
-    invoice = get_object_or_404(Invoice, pk=pk)
+    invoice = get_object_or_404(scope_queryset(request.user, Invoice.objects.all()), pk=pk)
     if request.method == 'POST':
+        payment_branch = (
+            invoice.branch or invoice.client.branch or get_entry_branch(request.user)
+        )
+        if payment_branch and payment_branch.external_reporting:
+            messages.error(request, 'Use the branch daily summary instead of individual payments for this branch.')
+            return redirect('documents:branch_daily_summaries')
         try:
             from decimal import Decimal, InvalidOperation
             from core.email_utils import send_payment_receipt
@@ -202,15 +234,23 @@ def record_payment(request, pk):
             invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
             method = request.POST.get('method', 'cash')
             reference = request.POST.get('reference', '')
-            payment_date = request.POST.get('payment_date') or timezone.now().date()
+            payment_date_raw = request.POST.get('payment_date', '').strip()
+            try:
+                payment_date = date.fromisoformat(payment_date_raw) if payment_date_raw else timezone.localdate()
+            except ValueError:
+                messages.error(request, 'Enter a valid payment date.')
+                return redirect('billing:detail', pk=pk)
             with transaction.atomic():
                 remaining = amount
+                unapplied_amount = Decimal('0')
                 created_payments = []
 
             # Apply the payment to the current invoice first, then to earlier unpaid
             # invoices for the same client if the amount exceeds the current invoice balance.
                 earlier_invoices = list(
-                    Invoice.objects.select_for_update().filter(client=invoice.client)
+                scope_queryset(
+                    request.user, Invoice.objects.all(),
+                ).select_for_update().filter(client=invoice.client)
                 .exclude(pk=invoice.pk)
                 .exclude(status__in=['paid', 'written_off'])
                 .filter(
@@ -225,25 +265,27 @@ def record_payment(request, pk):
                         break
                     inv.refresh_from_db(fields=['grand_total', 'amount_paid'])
                     balance = inv.grand_total - inv.amount_paid
-                    if balance <= 0 and inv != invoice:
+                    if balance <= 0:
                         continue
-                    to_apply = min(balance, remaining) if balance > 0 else remaining
+                    to_apply = min(balance, remaining)
                     if to_apply <= 0:
                         continue
                     payment = Payment.objects.create(
-                        invoice=inv, amount=to_apply, method=method,
+                        invoice=inv, branch=inv.branch or payment_branch,
+                        amount=to_apply, method=method,
                         payment_date=payment_date,
                         reference=reference, received_by=request.user)
                     created_payments.append(payment)
                     remaining -= to_apply
 
                 if remaining > 0:
-                # Any leftover amount becomes overpayment on the current invoice.
-                    overpayment = Payment.objects.create(
-                        invoice=invoice, amount=remaining, method=method,
+                    unapplied_amount = remaining
+                    credit = Payment.objects.create(
+                        client=invoice.client, branch=invoice.branch or payment_branch,
+                        amount=remaining, method=method,
                         payment_date=payment_date,
                         reference=reference, received_by=request.user)
-                    created_payments.append(overpayment)
+                    created_payments.append(credit)
                     remaining = Decimal('0')
 
             if not created_payments:
@@ -258,7 +300,13 @@ def record_payment(request, pk):
                 send_payment_receipt(created_payments[0])
 
             current_balance = invoice.grand_total - invoice.amount_paid
-            if current_balance <= 0:
+            if unapplied_amount:
+                messages.success(
+                    request,
+                    f'Payment of UGX {amount:,.0f} recorded. '
+                    f'Excess UGX {unapplied_amount:,.0f} is unapplied client credit.',
+                )
+            elif current_balance <= 0:
                 if len(created_payments) > 1:
                     messages.success(request, f'Payment of UGX {amount:,.0f} recorded and applied to this invoice and earlier outstanding invoices.')
                 else:
@@ -274,11 +322,15 @@ def record_payment(request, pk):
 def record_client_payment(request):
     """Accept a lump-sum payment for a client and allocate it to their oldest
     unpaid invoices (using the invoice amounts as the recorded agreed prices).
-    Creates `Payment` records per invoice until the amount is exhausted.
+    Records any amount beyond outstanding invoices as unapplied client credit.
     """
     if request.method != 'POST':
         messages.error(request, 'Invalid request method.')
         return redirect('billing:list')
+    branch = get_entry_branch(request.user)
+    if branch and branch.external_reporting:
+        messages.error(request, 'Use the branch daily summary instead of individual payments for this branch.')
+        return redirect('documents:branch_daily_summaries')
 
     client_id = request.POST.get('client')
     amount_raw = request.POST.get('amount', '0')
@@ -291,20 +343,25 @@ def record_client_payment(request):
         messages.error(request, 'Invalid payment amount.')
         return redirect('billing:list')
 
-    client = get_object_or_404(Client, pk=client_id)
+    client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=client_id)
+    if client.branch_id and client.branch.external_reporting:
+        messages.error(request, 'Use the Daily Transaction Ledger for this external-system branch.')
+        return redirect('clients:detail', pk=client.pk)
+    payment_branch = client.branch or get_entry_branch(request.user)
     payment_date_raw = request.POST.get('payment_date')
     try:
         payment_date = timezone.datetime.fromisoformat(payment_date_raw).date() if payment_date_raw else timezone.now().date()
     except ValueError:
         messages.error(request, 'Invalid payment date.')
         return redirect('clients:detail', pk=client.pk)
+
     if amount <= 0:
         messages.error(request, 'Payment amount must be greater than zero.')
         return redirect('billing:detail', pk=client.invoices.first().pk if client.invoices.exists() else 'billing:list')
 
     # Fetch unpaid invoices oldest-first and allocate the lump sum across all
     # outstanding invoices for the client so earlier periods are cleared first.
-    unpaid = Invoice.objects.filter(client=client).exclude(
+    unpaid = scope_queryset(request.user, Invoice.objects.filter(client=client)).exclude(
         status__in=['paid', 'written_off'],
     )
     if selected_invoice_ids:
@@ -314,7 +371,7 @@ def record_client_payment(request):
     with transaction.atomic():
         unpaid = unpaid.select_for_update()
         remaining = amount
-        created_count = 0
+        allocated_count = 0
         for inv in unpaid:
             if remaining <= 0:
                 break
@@ -327,6 +384,7 @@ def record_client_payment(request):
                 continue
             Payment.objects.create(
                 invoice=inv,
+                branch=inv.branch or payment_branch,
                 amount=to_apply,
                 method=method,
                 payment_date=payment_date,
@@ -334,30 +392,35 @@ def record_client_payment(request):
                 received_by=request.user
             )
             remaining -= to_apply
-            created_count += 1
+            allocated_count += 1
 
         if remaining > 0:
-            latest_invoice = unpaid.order_by('-date_issued', '-pk').first()
-            if latest_invoice is None and not selected_invoice_ids:
-                latest_invoice = Invoice.objects.filter(client=client).order_by('-date_issued', '-pk').first()
-            if latest_invoice is None and selected_invoice_ids:
+            if selected_invoice_ids and allocated_count == 0:
                 messages.error(request, 'The selected invoices have no outstanding balance.')
                 return redirect('clients:detail', pk=client.pk)
-            if latest_invoice:
-                Payment.objects.create(
-                    invoice=latest_invoice,
-                    amount=remaining,
-                    method=method,
-                    payment_date=payment_date,
-                    reference=reference,
-                    received_by=request.user
-                )
-                created_count += 1
-                remaining = Decimal('0')
+            Payment.objects.create(
+                client=client,
+                branch=payment_branch,
+                amount=remaining,
+                method=method,
+                payment_date=payment_date,
+                reference=reference,
+                received_by=request.user,
+            )
 
-    # Update client's last transaction date and outstanding via signals
-    if created_count:
-        messages.success(request, f'Allocated payment to {created_count} invoice(s). Remaining: UGX {remaining:,.0f}.')
+    if allocated_count and remaining:
+        messages.success(
+            request,
+            f'Allocated payment to {allocated_count} invoice(s). '
+            f'Excess UGX {remaining:,.0f} is unapplied client credit.',
+        )
+    elif allocated_count:
+        messages.success(request, f'Allocated payment to {allocated_count} invoice(s).')
+    elif remaining:
+        messages.success(
+            request,
+            f'Payment of UGX {remaining:,.0f} recorded as unapplied client credit.',
+        )
     else:
         messages.info(request, 'No unpaid invoices found for this client.')
 
@@ -365,9 +428,345 @@ def record_client_payment(request):
     return redirect('clients:detail', pk=client.pk)
 
 
+def _is_walkin_client_name(name):
+    normalized = ''.join(character for character in name.casefold() if character.isalnum())
+    return normalized.startswith(('anon', 'walkin'))
+
+
+def _get_walkin_customer(user):
+    branch = get_entry_branch(user)
+    client, _ = Client.objects.get_or_create(
+        full_name__iexact='Walk-in Customers',
+        branch=branch,
+        defaults={
+            'full_name': 'Walk-in Customers',
+            'phone_primary': 'N/A',
+            'district': 'Kampala',
+            'created_by': user,
+            'branch': branch,
+            'notes': 'Shared account for anonymous walk-in customer payments.',
+        },
+    )
+    return client
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def quick_payment(request):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+    def payment_error(message):
+        if is_ajax:
+            return JsonResponse({'error': message}, status=400)
+        messages.error(request, message)
+        return redirect('billing:quick_payment')
+
+    if request.method == 'POST':
+        amount_raw = request.POST.get('amount', '').strip()
+        try:
+            amount = Decimal(amount_raw)
+        except (InvalidOperation, TypeError):
+            return payment_error('Enter a valid payment amount.')
+        if amount <= 0:
+            return payment_error('Payment amount must be greater than zero.')
+        if amount > Decimal('9999999999999.99'):
+            return payment_error('Payment amount exceeds the supported limit.')
+        try:
+            rounded_amount = amount.quantize(Decimal('0.01'))
+        except InvalidOperation:
+            return payment_error('Enter a valid payment amount.')
+        if amount != rounded_amount:
+            return payment_error('Payment amount can have at most two decimal places.')
+        amount = rounded_amount
+
+        method = request.POST.get('method', 'cash')
+        quick_payment_methods = Payment.METHOD + [('credit', 'Credit')]
+        if method not in dict(quick_payment_methods):
+            return payment_error('Select a valid payment method.')
+
+        payment_date_raw = request.POST.get('payment_date', '').strip()
+        try:
+            payment_date = date.fromisoformat(payment_date_raw) if payment_date_raw else timezone.localdate()
+        except ValueError:
+            return payment_error('Enter a valid payment date.')
+
+        reference = request.POST.get('reference', '').strip()
+        if len(reference) > 100:
+            return payment_error('Payment reference must be 100 characters or fewer.')
+
+        client_id = request.POST.get('client', '').strip()
+        is_registered_client = False
+        try:
+            if client_id:
+                client = scope_queryset(request.user, Client.objects.all()).get(pk=client_id)
+                if _is_walkin_client_name(client.full_name):
+                    client = _get_walkin_customer(request.user)
+                else:
+                    is_registered_client = True
+            else:
+                client = _get_walkin_customer(request.user)
+        except (Client.DoesNotExist, ValueError, TypeError):
+            return payment_error('Select a valid customer.')
+
+        payment_branch = client.branch or get_entry_branch(request.user)
+        is_external_branch = bool(
+            payment_branch and payment_branch.external_reporting
+        )
+        if is_external_branch and payment_date > timezone.localdate():
+            return payment_error('An external-branch payment cannot be dated in the future.')
+
+        service_type = None
+        service_id = request.POST.get('service_type', '').strip()
+        is_capital_injection = service_id == 'capital_injection'
+        if service_id and not is_capital_injection:
+            service_type = scope_queryset(
+                request.user,
+                ServiceType.objects.filter(is_active=True),
+                branch_path='branches',
+            ).distinct().filter(pk=service_id).first()
+            if not service_type:
+                return payment_error('Select a valid service for this workspace.')
+
+        if (
+            service_type and payment_branch
+            and not service_type.branches.filter(pk=payment_branch.pk).exists()
+        ):
+            return payment_error('The selected service is not available to this client’s branch.')
+
+        notes = request.POST.get('notes', '').strip()
+        if method == 'credit':
+            if is_capital_injection:
+                return payment_error('Capital injections must use a cash or bank payment method.')
+            if not is_registered_client:
+                return payment_error('Credit sales require a registered customer.')
+            if not service_type:
+                return payment_error('Select a service to create a customer credit.')
+            if payment_date > timezone.localdate():
+                return payment_error('A credit sale cannot be dated in the future.')
+
+            invoice_notes = f'Credit sale: {service_type.name}'
+            if reference:
+                invoice_notes += f'\nReference: {reference}'
+            if notes:
+                invoice_notes += f'\n{notes}'
+            with transaction.atomic():
+                credit_invoice = Invoice.objects.create(
+                    client=client,
+                    branch=payment_branch,
+                    service_type=service_type,
+                    is_credit_sale=True,
+                    due_date=payment_date + timedelta(days=14),
+                    subtotal=amount,
+                    grand_total=amount,
+                    status='sent',
+                    notes=invoice_notes,
+                    created_by=request.user,
+                )
+                Invoice.objects.filter(pk=credit_invoice.pk).update(
+                    date_issued=payment_date,
+                )
+            confirmation = (
+                f'UGX {amount:,.0f} recorded as credit for '
+                f'{client.get_display_name()} on invoice {credit_invoice.invoice_number}. '
+                f'Due {credit_invoice.due_date:%d %b %Y}. No cash payment was recorded.'
+            )
+            messages.success(request, confirmation)
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': confirmation})
+            return redirect('clients:detail', pk=client.pk)
+
+        if is_capital_injection:
+            if payment_date > timezone.localdate():
+                return payment_error('A capital injection cannot be dated in the future.')
+            description_parts = ['Capital injection']
+            if is_registered_client:
+                description_parts.append(f'Contributor: {client.get_display_name()}')
+            if notes:
+                description_parts.append(notes)
+            description = ' — '.join(description_parts)[:255]
+            try:
+                with transaction.atomic():
+                    if is_external_branch:
+                        summary = BranchDailySummary.objects.select_for_update().filter(
+                            branch=payment_branch,
+                            business_date=payment_date,
+                        ).first()
+                        if summary and summary.reviewed_at:
+                            return payment_error(
+                                'This branch day has been reviewed and locked. '
+                                'Record the capital injection on an open business date.'
+                            )
+                        account_for_method = {
+                            'cash': 'cash',
+                            'mobile_money': 'mobile_money',
+                            'bank_transfer': 'bank_transfer',
+                        }
+                        BranchDailyTransaction.objects.create(
+                            branch=payment_branch,
+                            business_date=payment_date,
+                            direction='inflow',
+                            category='capital_injection',
+                            description=description,
+                            account=account_for_method[method],
+                            amount=amount,
+                            reference=reference,
+                            entered_by=request.user,
+                        )
+                    else:
+                        OtherIncome.objects.create(
+                            source_name='Capital injection',
+                            category='capital_injection',
+                            amount=amount,
+                            income_date=payment_date,
+                            collection_method=method,
+                            reference=reference,
+                            description=description,
+                            recorded_by=request.user,
+                            branch=payment_branch,
+                        )
+            except IntegrityError:
+                return payment_error(
+                    'This reference has already been recorded for the branch and date.'
+                )
+            confirmation = (
+                f'UGX {amount:,.0f} capital injection recorded for '
+                f'{payment_branch.name if payment_branch else "the company"}.'
+            )
+            if is_external_branch:
+                confirmation += ' Added to Branch Daily Entries.'
+            messages.success(request, confirmation)
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': confirmation})
+            return redirect('billing:quick_payment')
+
+        allocated_count = 0
+        remaining = amount
+        unpaid_invoices = scope_queryset(
+            request.user, Invoice.objects.filter(client=client),
+        ).exclude(status__in=['paid', 'written_off']).order_by('date_issued', 'pk')
+        if is_external_branch:
+            unpaid_invoices = unpaid_invoices.filter(branch=payment_branch)
+        try:
+            with transaction.atomic():
+                if is_external_branch:
+                    summary = BranchDailySummary.objects.select_for_update().filter(
+                        branch=payment_branch,
+                        business_date=payment_date,
+                    ).first()
+                    if summary and summary.reviewed_at:
+                        return payment_error(
+                            'This branch day has been reviewed and locked. '
+                            'Record the payment on an open business date.'
+                        )
+
+                for invoice in unpaid_invoices.select_for_update():
+                    if remaining <= 0:
+                        break
+                    invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
+                    balance = invoice.grand_total - invoice.amount_paid
+                    if balance <= 0:
+                        continue
+                    applied_amount = min(balance, remaining)
+                    Payment.objects.create(
+                        invoice=invoice,
+                        client=client,
+                        service_type=service_type,
+                        amount=applied_amount,
+                        payment_date=payment_date,
+                        method=method,
+                        reference=reference,
+                        notes=notes,
+                        received_by=request.user,
+                        branch=invoice.branch or payment_branch,
+                    )
+                    remaining -= applied_amount
+                    allocated_count += 1
+
+                if remaining > 0:
+                    Payment.objects.create(
+                        client=client,
+                        service_type=service_type,
+                        amount=remaining,
+                        payment_date=payment_date,
+                        method=method,
+                        reference=reference,
+                        notes=notes,
+                        received_by=request.user,
+                        branch=payment_branch,
+                    )
+
+                if is_external_branch:
+                    account_for_method = {
+                        'cash': 'cash',
+                        'mobile_money': 'mobile_money',
+                        'bank_transfer': 'bank_transfer',
+                    }
+                    description = f'Customer payment — {client.get_display_name()}'
+                    if service_type:
+                        description += f' — {service_type.name}'
+                    BranchDailyTransaction.objects.create(
+                        branch=payment_branch,
+                        business_date=payment_date,
+                        direction='inflow',
+                        category='service_receipt',
+                        description=description[:255],
+                        account=account_for_method[method],
+                        amount=amount,
+                        reference=reference,
+                        entered_by=request.user,
+                    )
+        except IntegrityError:
+            return payment_error(
+                'This reference has already been recorded for the branch and date.'
+            )
+
+        if allocated_count:
+            confirmation = (
+                f'UGX {amount:,.0f} recorded for {client.get_display_name()} and '
+                f'allocated to {allocated_count} oldest outstanding invoice(s).'
+            )
+            if remaining:
+                confirmation += f' Excess UGX {remaining:,.0f} is recorded as unapplied client credit.'
+        else:
+            confirmation = (
+                f'UGX {amount:,.0f} recorded for {client.get_display_name()} as an '
+                'unapplied payment on account.'
+            )
+        if is_external_branch:
+            confirmation += ' Added to Branch Daily Entries.'
+        messages.success(request, confirmation)
+        if is_ajax:
+            return JsonResponse({'success': True, 'message': confirmation})
+        return redirect('clients:detail', pk=client.pk)
+
+    clients = scope_queryset(
+        request.user, Client.objects.only('pk', 'client_id', 'full_name'),
+    ).order_by('full_name')
+    services = scope_queryset(
+        request.user,
+        ServiceType.objects.filter(is_active=True).prefetch_related('branches'),
+        branch_path='branches',
+    ).distinct().order_by('name')
+    context = {
+        'clients': clients,
+        'services': services,
+        'payment_methods': Payment.METHOD + [('credit', 'Credit')],
+        'client_types': Client.CLIENT_TYPE,
+        'service_categories': service_category_choices(),
+        'service_branches': accessible_branches(request.user),
+        'can_manage_services': request.user.is_superuser or request.user.is_manager_or_admin(),
+    }
+    if request.GET.get('popover') == '1':
+        return render(request, 'billing/partials/quick_payment_popover.html', context)
+    return render(request, 'billing/quick_payment.html', context)
+
+
 @login_required
 def aging_report(request):
-    invoices = Invoice.objects.exclude(status__in=['paid', 'written_off']).select_related('client')
+    invoices = scope_queryset(
+        request.user,
+        Invoice.objects.exclude(status__in=['paid', 'written_off']).select_related('client'),
+    )
     buckets = {'Current': [], '1–30 days': [], '31–60 days': [], '61–90 days': [], '90+ days': []}
     for inv in invoices:
         buckets[inv.aging_bucket()].append(inv)
@@ -380,7 +779,10 @@ def bad_debt_report(request):
     from services.models import JobCardLineItem, mark_overdue_handled_tasks
 
     mark_overdue_handled_tasks()
-    items = (JobCardLineItem.objects.filter(status='bad_debt')
+    items = (scope_queryset(
+             request.user, JobCardLineItem.objects.filter(status='bad_debt'),
+             branch_path='job_card__branch',
+             )
              .select_related('job_card__client', 'job_card__invoice', 'service_type')
              .order_by('job_card__client__full_name', 'job_card__created_at'))
     total = sum(item.line_total() for item in items)
@@ -393,7 +795,7 @@ def bad_debt_report(request):
 
 @login_required
 def send_invoice_whatsapp(request, pk):
-    invoice = get_object_or_404(Invoice, pk=pk)
+    invoice = get_object_or_404(scope_queryset(request.user, Invoice.objects.all()), pk=pk)
     from notifications.services import send_whatsapp_message, send_email_notification
     from core.email_utils import send_invoice_email
     
@@ -440,7 +842,7 @@ def send_invoice_whatsapp(request, pk):
 @login_required
 def convert_to_invoice(request, pk):
     """Convert a quotation/proforma to a tax invoice."""
-    inv = get_object_or_404(Invoice, pk=pk)
+    inv = get_object_or_404(scope_queryset(request.user, Invoice.objects.all()), pk=pk)
     if request.method == 'POST':
         if inv.document_type != 'invoice':
             inv.document_type = 'invoice'
@@ -459,7 +861,7 @@ def refresh_outstanding_balances(request):
     if request.method == 'POST':
         from billing.signals import update_client_outstanding
         
-        clients = Client.objects.all()
+        clients = scope_queryset(request.user, Client.objects.all())
         updated = 0
         
         for client in clients:
@@ -479,7 +881,7 @@ def refresh_outstanding_balances_json(request):
     """Refresh client outstanding balances and return them to the browser."""
     from billing.signals import update_client_outstanding
 
-    clients = Client.objects.all()
+    clients = scope_queryset(request.user, Client.objects.all())
     result = {}
     for client in clients:
         update_client_outstanding(client)
@@ -491,7 +893,9 @@ def refresh_outstanding_balances_json(request):
 @login_required
 def other_income_list(request):
     """List all other income entries with filtering by category and date."""
-    incomes = OtherIncome.objects.all().select_related('recorded_by')
+    incomes = scope_queryset(
+        request.user, OtherIncome.objects.select_related('recorded_by'),
+    )
     category = request.GET.get('category', '')
     q = request.GET.get('q', '')
     
@@ -528,6 +932,10 @@ def other_income_list(request):
 @login_required
 def other_income_create(request):
     """Create a new other income entry."""
+    branch = get_entry_branch(request.user)
+    if branch and branch.external_reporting:
+        messages.error(request, 'Record external-branch totals in Branch Daily Entries instead of individual income transactions.')
+        return redirect('documents:branch_daily_summaries')
     if request.method == 'POST':
         try:
             source_name = request.POST.get('source_name', '').strip()
@@ -555,6 +963,7 @@ def other_income_create(request):
                 reference=reference,
                 description=description,
                 recorded_by=request.user,
+                branch=branch,
             )
             
             messages.success(request, f'✓ Other income "{source_name}" recorded successfully.')
@@ -573,14 +982,14 @@ def other_income_create(request):
 @login_required
 def other_income_detail(request, pk):
     """View details of a single other income entry."""
-    income = get_object_or_404(OtherIncome, pk=pk)
+    income = get_object_or_404(scope_queryset(request.user, OtherIncome.objects.all()), pk=pk)
     return render(request, 'billing/otherincome_detail.html', {'income': income})
 
 
 @login_required
 def other_income_delete(request, pk):
     """Delete an other income entry."""
-    income = get_object_or_404(OtherIncome, pk=pk)
+    income = get_object_or_404(scope_queryset(request.user, OtherIncome.objects.all()), pk=pk)
     if request.method == 'POST':
         source_name = income.source_name
         income.delete()

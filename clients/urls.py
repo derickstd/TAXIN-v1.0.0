@@ -5,6 +5,7 @@ app_name = 'clients'
 urlpatterns = [
     path('',            views.client_list,        name='list'),
     path('new/',        views.client_create,      name='create'),
+    path('quick-add/',  views.quick_client_create, name='quick_create'),
     path('import/',     views.client_import,      name='import'),
     path('search/',     views.client_search_api,  name='search'),
     path('check-duplicates/', views.check_duplicates, name='check_duplicates'),

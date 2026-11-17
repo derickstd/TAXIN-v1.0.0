@@ -41,6 +41,9 @@ class ClientOnboardingTests(TestCase):
             phone_primary='+256700123125',
             created_by=self.user,
         )
+        Client.objects.filter(pk=self.existing_client.pk).update(
+            updated_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
         Client.objects.filter(pk=older_client.pk).update(
             updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
@@ -57,19 +60,44 @@ class ClientOnboardingTests(TestCase):
             [newer_client.pk, older_client.pk],
         )
 
-    def test_create_route_uses_merged_onboarding_page(self):
+    def test_create_route_uses_add_customer_page(self):
         request = self.factory.get(reverse('clients:create'))
         request.user = self.user
         response = views.client_create(request)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'Client Onboarding', response.content)
+        self.assertIn(b'Add Customer', response.content)
 
-    def test_walkin_route_uses_merged_onboarding_page(self):
+    def test_quick_client_create_adds_customer_for_payment_popover(self):
+        response = self.client.post(reverse('clients:quick_create'), {
+            'client_type': 'individual',
+            'full_name': 'Popover Payment Client',
+            'phone_primary': '+256700123129',
+            'district': 'Kampala',
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200)
+        client = Client.objects.get(full_name='Popover Payment Client')
+        self.assertEqual(client.created_by, self.user)
+        self.assertEqual(response.json()['id'], client.pk)
+
+    def test_quick_client_create_returns_form_errors_without_creating_client(self):
+        response = self.client.post(reverse('clients:quick_create'), {
+            'client_type': 'individual',
+            'full_name': 'Duplicate Phone Client',
+            'phone_primary': self.existing_client.phone_primary,
+            'district': 'Kampala',
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('phone_primary', response.json()['errors'])
+        self.assertFalse(Client.objects.filter(full_name='Duplicate Phone Client').exists())
+
+    def test_walkin_route_uses_add_customer_page(self):
         request = self.factory.get(reverse('clients:walkin'))
         request.user = self.user
         response = views.walkin_create(request)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'Client Onboarding', response.content)
+        self.assertIn(b'Add Customer', response.content)
 
     def test_onboarding_page_does_not_render_walkin_intake_section(self):
         request = self.factory.get(reverse('clients:create'))
@@ -78,12 +106,12 @@ class ClientOnboardingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b'Walk-in Intake', response.content)
 
-    def test_import_route_uses_merged_onboarding_page(self):
+    def test_import_route_uses_add_customer_page(self):
         request = self.factory.get(reverse('clients:import'))
         request.user = self.user
         response = views.client_import(request)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'Client Onboarding', response.content)
+        self.assertIn(b'Add Customer', response.content)
 
     def test_new_client_post_still_creates_client(self):
         response = self.client.post(reverse('clients:create'), {

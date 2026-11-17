@@ -1,6 +1,7 @@
 from django import forms
 from .models import TaxEvent
 from core.models import User
+from core.branch_access import accessible_branches
 
 
 class OptionalModelChoiceField(forms.ModelChoiceField):
@@ -26,7 +27,12 @@ class TaxEventForm(forms.ModelForm):
             'description': forms.Textarea(attrs={'rows': 3}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['assigned_to'].queryset = User.objects.filter(is_active_staff=True, is_active=True).order_by('first_name')
+        assigned_users = User.objects.filter(is_active_staff=True, is_active=True)
+        if user and not (user.is_superuser or user.role in ('admin', 'ceo')):
+            assigned_users = assigned_users.filter(branch__in=accessible_branches(user))
+        elif user and not user.is_superuser and user.company_id:
+            assigned_users = assigned_users.filter(company_id=user.company_id)
+        self.fields['assigned_to'].queryset = assigned_users.order_by('first_name')
         self.fields['description'].required = False

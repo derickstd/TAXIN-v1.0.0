@@ -1,12 +1,15 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.http import JsonResponse
 from django.db.models import Q, Sum
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 from .models import Client, WalkInIntake, CommunicationLog
 from core.utils import paginate_queryset
 from .forms import ClientForm, WalkInIntakeForm
 from billing.models import Invoice, Payment
+from core.branch_access import get_entry_branch, scope_queryset
 
 UGANDA_DISTRICTS = [
     'Kampala','Wakiso','Mukono','Jinja','Gulu','Mbarara','Masaka','Mbale',
@@ -89,12 +92,16 @@ def _client_onboarding_context(
     import_errors=None,
     import_created=0,
     import_section_active=None,
+    user=None,
 ):
     from services.models import ServiceType
     import json
     
     # Get active service types for the service dropdown
-    service_types = ServiceType.objects.filter(is_active=True).order_by('category', 'name')
+    service_types = ServiceType.objects.filter(is_active=True)
+    if user:
+        service_types = scope_queryset(user, service_types, branch_path='branches').distinct()
+    service_types = service_types.order_by('category', 'name')
     def service_type_frequency(st):
         if st.deadline_type.startswith('annual'):
             return 'annual'
@@ -114,8 +121,8 @@ def _client_onboarding_context(
     ])
     
     return {
-        'client_form': client_form or ClientForm(),
-        'walkin_form': walkin_form or WalkInIntakeForm(),
+        'client_form': client_form or ClientForm(user=user),
+        'walkin_form': walkin_form or WalkInIntakeForm(user=user),
         'districts': UGANDA_DISTRICTS,
         'import_errors': import_errors or [],
         'import_created': import_created,
@@ -125,6 +132,7 @@ def _client_onboarding_context(
 
 
 def _render_client_onboarding(request, **kwargs):
+    kwargs['user'] = request.user
     return render(request, 'clients/client_onboarding.html', _client_onboarding_context(**kwargs))
 
 
@@ -144,10 +152,11 @@ def _process_client_import_file(uploaded_file, user):
             if not name or not phone:
                 errors.append(f"Row {i}: missing name or phone")
                 continue
-            if tin and Client.objects.filter(tin=tin).exists():
+            clients = scope_queryset(user, Client.objects.all())
+            if tin and clients.filter(tin=tin).exists():
                 errors.append(f"Row {i}: {name} — TIN already exists, skipped")
                 continue
-            if Client.objects.filter(Q(phone_primary=phone) | Q(phone_whatsapp=phone)).exists():
+            if clients.filter(Q(phone_primary=phone) | Q(phone_whatsapp=phone)).exists():
                 errors.append(f"Row {i}: {name} — phone already exists, skipped")
                 continue
             Client.objects.create(
@@ -161,6 +170,7 @@ def _process_client_import_file(uploaded_file, user):
                 client_type=(row.get('client_type') or 'individual').strip().lower(),
                 assigned_officer=user,
                 created_by=user,
+                branch=get_entry_branch(user),
             )
             created += 1
         except Exception as e:
@@ -169,7 +179,10 @@ def _process_client_import_file(uploaded_file, user):
 
 @login_required
 def client_list(request):
-    clients = Client.objects.select_related('assigned_officer').all()
+    branch_clients = scope_queryset(
+        request.user, Client.objects.select_related('assigned_officer'),
+    )
+    clients = branch_clients
     q = request.GET.get('q', '')
     status = request.GET.get('status', '')
     ctype = request.GET.get('type', '')
@@ -216,13 +229,13 @@ def client_list(request):
         'q': q, 'status': status, 'ctype': ctype, 'debt_filter': debt_filter,
         'status_choices': Client.STATUS, 'type_choices': Client.CLIENT_TYPE,
         'total_outstanding': total_outstanding,
-        'counts': {s: Client.objects.filter(status=s).count() for s, _ in Client.STATUS},
+        'counts': {s: branch_clients.filter(status=s).count() for s, _ in Client.STATUS},
         'per_page_options': [15, 30, 50, 100],
     })
 
 @login_required
 def client_detail(request, pk):
-    client = get_object_or_404(Client, pk=pk)
+    client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=pk)
     job_cards = client.job_cards.prefetch_related('line_items').order_by('-created_at')[:20]
     invoices = client.invoices.order_by('-date_issued')[:20]
     pending_invoices = client.invoices.filter(
@@ -230,12 +243,16 @@ def client_detail(request, pk):
     ).order_by('date_issued', 'pk')
     total_invoiced = client.invoices.aggregate(s=Sum('grand_total'))['s'] or 0
     total_paid = client.invoices.aggregate(s=Sum('amount_paid'))['s'] or 0
-    client_payments = (
-        Payment.objects.filter(invoice__client=client)
-        .select_related('invoice', 'received_by')
-        .order_by('-payment_date', '-created_at')[:20]
-    )
-    total_collected = client_payments.aggregate(s=Sum('amount'))['s'] or 0
+    all_client_payments = Payment.objects.filter(
+        Q(client=client) | Q(invoice__client=client),
+    ).distinct()
+    total_collected = all_client_payments.aggregate(s=Sum('amount'))['s'] or 0
+    unapplied_payment_total = Payment.objects.filter(
+        client=client, invoice__isnull=True,
+    ).aggregate(s=Sum('amount'))['s'] or 0
+    client_payments = all_client_payments.select_related(
+        'invoice', 'client', 'received_by', 'service_type',
+    ).order_by('-payment_date', '-created_at')[:20]
     walkins = client.walkin_intakes.order_by('-visit_date')[:5]
     from credentials.models import ClientCredential
     from compliance.models import ComplianceObligation
@@ -261,6 +278,7 @@ def client_detail(request, pk):
         'pending_invoices': pending_invoices,
         'total_invoiced': total_invoiced, 'total_paid': total_paid,
         'total_collected': total_collected, 'client_payments': client_payments,
+        'unapplied_payment_total': unapplied_payment_total,
         'balance': total_invoiced - total_paid,
         'walkins': walkins, 'creds_count': creds_count,
         'obligations': obligations, 'details': details,
@@ -274,14 +292,22 @@ def client_detail(request, pk):
         'new_job_reg': request.GET.get('new_job_reg'),
         'new_job_reg_svc': request.GET.get('svc'),
         'new_job_reg_price': request.GET.get('price'),
-        'service_types_for_job': __import__('services.models', fromlist=['ServiceType']).ServiceType.objects.filter(is_active=True).order_by('category', 'name'),
-        'staff_for_job': __import__('core.models', fromlist=['User']).User.objects.filter(is_active_staff=True, is_active=True).order_by('first_name'),
+        'service_types_for_job': scope_queryset(
+            request.user,
+            __import__('services.models', fromlist=['ServiceType']).ServiceType.objects.filter(is_active=True),
+            branch_path='branches',
+        ).distinct().order_by('category', 'name'),
+        'staff_for_job': __import__('core.models', fromlist=['User']).User.objects.filter(
+            is_active_staff=True, is_active=True,
+            **({'company_id': request.user.company_id} if request.user.role in ('admin', 'ceo') and request.user.company_id else
+               {'branch_id': request.user.branch_id} if request.user.company_id else {}),
+        ).order_by('first_name'),
     })
 
 @login_required
 def client_create(request):
     if request.method == 'POST':
-        form = ClientForm(request.POST)
+        form = ClientForm(request.POST, user=request.user)
         if form.is_valid():
             # Check for potential duplicate clients before saving
             from core.duplicate_detection import find_duplicate_clients
@@ -315,6 +341,7 @@ def client_create(request):
             
             client = form.save(commit=False)
             client.created_by = request.user
+            client.branch = get_entry_branch(request.user)
             # Handle district from POST directly since it's a free select
             client.district = request.POST.get('district', 'Kampala')
             client.save()
@@ -465,10 +492,10 @@ def client_create(request):
                 client_form=form,
                 import_section_active='new_client',
             )
-    form = ClientForm()
+    form = ClientForm(user=request.user)
     section = request.GET.get('section', 'new_client')
     client_id = request.GET.get('client')
-    walkin_form = WalkInIntakeForm(initial={'client': client_id} if client_id else {})
+    walkin_form = WalkInIntakeForm(initial={'client': client_id} if client_id else {}, user=request.user)
     return _render_client_onboarding(
         request, 
         client_form=form, 
@@ -476,11 +503,52 @@ def client_create(request):
         import_section_active=section
     )
 
+
+@login_required
+@require_POST
+def quick_client_create(request):
+    form = ClientForm(request.POST, user=request.user)
+    if not form.is_valid():
+        errors = {
+            field: [str(error) for error in field_errors]
+            for field, field_errors in form.errors.items()
+        }
+        return JsonResponse({
+            'error': 'Please correct the customer details.',
+            'errors': errors,
+        }, status=400)
+
+    from core.duplicate_detection import find_duplicate_clients
+    duplicates = find_duplicate_clients(
+        full_name=form.cleaned_data.get('full_name'),
+        phone=form.cleaned_data.get('phone_primary'),
+        whatsapp=form.cleaned_data.get('phone_whatsapp'),
+        tin=form.cleaned_data.get('tin'),
+        similarity_threshold=80,
+    )
+    if duplicates:
+        names = ', '.join(candidate.get_display_name() for candidate, _, _ in duplicates)
+        return JsonResponse({
+            'error': f'Possible duplicate customer found: {names}. Select the existing customer instead.',
+        }, status=409)
+
+    client = form.save(commit=False)
+    client.created_by = request.user
+    client.branch = get_entry_branch(request.user)
+    client.district = form.cleaned_data.get('district') or 'Kampala'
+    client.save()
+    return JsonResponse({
+        'id': client.pk,
+        'label': f'{client.client_id} — {client.get_display_name()}',
+        'message': 'Customer added.',
+    })
+
+
 @login_required
 def client_edit(request, pk):
-    client = get_object_or_404(Client, pk=pk)
+    client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=pk)
     if request.method == 'POST':
-        form = ClientForm(request.POST, instance=client)
+        form = ClientForm(request.POST, instance=client, user=request.user)
         if form.is_valid():
             c = form.save(commit=False)
             c.district = request.POST.get('district', client.district)
@@ -488,7 +556,7 @@ def client_edit(request, pk):
             messages.success(request, 'Client updated successfully.')
             return redirect('clients:detail', pk=client.pk)
     else:
-        form = ClientForm(instance=client)
+        form = ClientForm(instance=client, user=request.user)
     return render(request, 'clients/client_form.html', {
         'form': form, 'title': f'Edit — {client.get_display_name()}',
         'client': client, 'districts': UGANDA_DISTRICTS,
@@ -497,7 +565,7 @@ def client_edit(request, pk):
 @login_required
 def walkin_create(request):
     if request.method == 'POST':
-        form = WalkInIntakeForm(request.POST)
+        form = WalkInIntakeForm(request.POST, user=request.user)
         if form.is_valid():
             intake = form.save(commit=False)
             if not intake.assigned_staff:
@@ -515,7 +583,7 @@ def walkin_create(request):
                 import_section_active='walkin',
             )
     client_id = request.GET.get('client')
-    form = WalkInIntakeForm(initial={'client': client_id} if client_id else {})
+    form = WalkInIntakeForm(initial={'client': client_id} if client_id else {}, user=request.user)
     return _render_client_onboarding(
         request,
         walkin_form=form,
@@ -525,13 +593,13 @@ def walkin_create(request):
 @login_required
 def client_search_api(request):
     q = request.GET.get('q','')
-    clients = Client.objects.filter(
+    clients = scope_queryset(request.user, Client.objects.filter(
         Q(full_name__icontains=q)|
         Q(tin__icontains=q)|
         Q(client_id__icontains=q)|
         Q(phone_primary__icontains=q)|
         Q(phone_whatsapp__icontains=q)
-    )[:10] if q else []
+    ))[:10] if q else []
     return render(request, 'clients/partials/search_results.html', {'clients': clients})
 
 
@@ -557,7 +625,7 @@ def client_import(request):
 
 @login_required
 def communication_log_create(request, pk):
-    client = get_object_or_404(Client, pk=pk)
+    client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=pk)
     if request.method == 'POST':
         CommunicationLog.objects.create(
             client=client,
@@ -573,7 +641,10 @@ def communication_log_create(request, pk):
 
 @login_required
 def communication_log_delete(request, pk):
-    log = get_object_or_404(CommunicationLog, pk=pk)
+    log = get_object_or_404(
+        scope_queryset(request.user, CommunicationLog.objects.all(), branch_path='client__branch'),
+        pk=pk,
+    )
     client_pk = log.client_id
     if request.method == 'POST':
         log.delete()
@@ -590,11 +661,12 @@ def check_duplicates(request):
     phone = request.GET.get('phone', '').strip()
     exclude_pk = request.GET.get('exclude', '')
 
+    visible_clients = scope_queryset(request.user, Client.objects.all())
     qs = Client.objects.none()
     if tin:
-        qs = qs | Client.objects.filter(tin=tin)
+        qs = qs | visible_clients.filter(tin=tin)
     if phone:
-        qs = qs | Client.objects.filter(
+        qs = qs | visible_clients.filter(
             Q(phone_primary=phone) | Q(phone_whatsapp=phone)
         )
     if exclude_pk:
@@ -621,7 +693,8 @@ def merge_clients(request, pk):
         messages.error(request, 'Only managers and admins can merge clients.')
         return redirect('clients:detail', pk=pk)
 
-    source = get_object_or_404(Client, pk=pk)
+    visible_clients = scope_queryset(request.user, Client.objects.all())
+    source = get_object_or_404(visible_clients, pk=pk)
 
     if request.method == 'POST':
         target_pk = request.POST.get('target_pk', '').strip()
@@ -629,7 +702,7 @@ def merge_clients(request, pk):
             messages.error(request, 'Please select a target client to merge into.')
             return redirect('clients:detail', pk=pk)
 
-        target = get_object_or_404(Client, pk=target_pk)
+        target = get_object_or_404(visible_clients, pk=target_pk)
         if target.pk == source.pk:
             messages.error(request, 'Cannot merge a client into itself.')
             return redirect('clients:detail', pk=pk)

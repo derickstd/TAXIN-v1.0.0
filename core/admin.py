@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, AuditLog, Company, Tenant, Branch
+from .models import User, AuditLog, Company, Branch
 from .models import ModelVisibility, UserModelPermission
 
 
@@ -10,6 +10,12 @@ class CompanyAdmin(admin.ModelAdmin):
     search_fields = ['name', 'slug', 'tin', 'registration_number', 'email']
     list_filter = ['active']
     prepopulated_fields = {'slug': ('name',)}
+
+    def has_add_permission(self, request):
+        return not Company.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class UserModelPermissionInline(admin.TabularInline):
@@ -75,17 +81,17 @@ class ModelVisibilityAdmin(admin.ModelAdmin):
     search_fields = ['content_type__app_label', 'content_type__model', 'description']
 
 
-@admin.register(Tenant)
-class TenantAdmin(admin.ModelAdmin):
-    list_display = ['company', 'db_alias', 'status', 'created_at']
-    list_filter = ['status']
-    readonly_fields = ['db_alias', 'db_path', 'status', 'created_by', 'last_error', 'created_at', 'updated_at']
-    search_fields = ['company__name', 'db_alias']
-
-
 @admin.register(Branch)
 class BranchAdmin(admin.ModelAdmin):
     list_display = ['company', 'name', 'is_active']
     search_fields = ['company__name', 'name', 'slug']
     list_filter = ['company', 'is_active']
+    fields = ['company', 'name', 'slug', 'phone', 'address', 'is_active', 'external_reporting']
+    readonly_fields = ['company', 'name', 'slug', 'external_reporting']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 

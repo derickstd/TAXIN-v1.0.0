@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Record Bank Deposit{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'documents:branch_account_statement' %}">Account Statement</a></li>
+<li class="active">Bank Deposit</li>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title"><i class="fas fa-building-columns"></i> Record Bank Deposit</h1>
+  <a class="btn btn-outline" href="{% url 'documents:branch_account_statement' %}{% if selected_branch %}?branch={{ selected_branch.pk }}{% endif %}">Back to Account Statement</a>
+</div>
+<section class="card-box">
+  <div class="card-box-header">Cash-to-bank transfer</div>
+  <div class="card-body">
+    <p class="form-hint">A bank deposit moves money between accounts. It is not an expense and will not reduce profit or total cash.</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-grid-2">
+        {% for field in form %}
+        <div>
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% for error in field.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% for error in form.non_field_errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+      <div class="form-actions mt-3">
+        <button class="btn btn-primary" type="submit"><i class="fas fa-save"></i> Record deposit</button>
+        <a class="btn btn-outline" href="{% url 'documents:branch_account_statement' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

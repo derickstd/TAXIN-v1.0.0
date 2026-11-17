@@ -20,10 +20,6 @@ urlpatterns = [
     path('admin/companies/<int:company_id>/branches/', admin_views.admin_company_branches, name='admin_company_branches'),
     path('admin/companies/<int:company_id>/suspend/', admin_views.admin_company_suspend, name='admin_company_suspend'),
     path('admin/companies/<int:company_id>/reactivate/', admin_views.admin_company_reactivate, name='admin_company_reactivate'),
-    path('admin/tenants/', admin_views.admin_tenants, name='admin_tenants'),
-    path('admin/tenants/<int:tenant_id>/approve/', admin_views.admin_tenant_approve, name='admin_tenant_approve'),
-    path('admin/tenants/<int:tenant_id>/suspend/', admin_views.admin_tenant_suspend, name='admin_tenant_suspend'),
-    path('admin/tenants/<int:tenant_id>/reactivate/', admin_views.admin_tenant_reactivate, name='admin_tenant_reactivate'),
     path('admin/audit-logs/', admin_views.admin_audit_logs, name='admin_audit_logs'),
     path('admin/audit-logs/export/', admin_views.admin_export_audit_logs, name='admin_export_audit_logs'),
     path('admin/analytics/', admin_views.admin_system_analytics, name='admin_analytics'),
@@ -61,7 +57,4 @@ urlpatterns = [
     path('export/credentials/pdf/', views.export_credentials_pdf, name='export_credentials_pdf'),
     path('export/deadlines/excel/', views.export_deadlines_excel, name='export_deadlines_excel'),
     path('export/deadlines/pdf/', views.export_deadlines_pdf, name='export_deadlines_pdf'),
-
-    path('tenants/<int:pk>/progress/', views.tenant_progress, name='tenant_progress'),
-    path('api/tenants/<int:pk>/status/', views.tenant_status, name='tenant_status'),
 ]

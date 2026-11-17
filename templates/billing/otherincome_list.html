@@ -71,7 +71,7 @@
         <tr>
           <td><strong>{{ income.source_name }}</strong></td>
           <td><span class="badge" style="background:#e5e7eb;color:#374151">{{ income.get_category_display }}</span></td>
-          <td style="color:#059669;font-weight:700">UGX {{ income.amount|floatformat:0|intcomma }}</td>
+          <td><span class="cash-flow-chip cash-flow-chip--in">UGX {{ income.amount|floatformat:0|intcomma }}</span></td>
           <td style="font-size:.9rem;color:#64748b">{{ income.income_date|date:"M d, Y" }}</td>
           <td style="font-size:.9rem">{{ income.get_collection_method_display }}</td>
           <td style="font-size:.85rem;color:#aaa">{{ income.reference|default:"—" }}</td>

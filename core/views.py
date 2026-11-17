@@ -3,15 +3,14 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.contrib.auth.hashers import make_password
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 import logging
 from .models import User, Company, AuditLog, Branch
 from django import forms
 from django.forms.models import inlineformset_factory
-from django.utils.text import slugify
 from .export_utils import export_to_excel, export_to_pdf, paginate_list
+from .branch_access import scope_queryset
 
 
 class UserForm(forms.ModelForm):
@@ -22,9 +21,37 @@ class UserForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ['username', 'first_name', 'last_name', 'email', 'email_notify',
-                  'phone_whatsapp', 'company', 'role', 'ui_theme', 'is_active_staff', 'is_active',
+                  'phone_whatsapp', 'branch', 'role', 'ui_theme', 'is_active_staff', 'is_active',
                   'receive_debt_alerts', 'receive_task_reminders', 'date_joined_firm']
         widgets = {'date_joined_firm': forms.DateInput(attrs={'type': 'date'})}
+
+    def __init__(self, *args, actor=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.actor = actor
+        company_id = getattr(self.instance, 'company_id', None) or getattr(actor, 'company_id', None)
+        branches = Branch.objects.filter(is_active=True)
+        if company_id:
+            branches = branches.filter(company_id=company_id)
+        elif actor and not actor.is_superuser and actor.branch_id:
+            branches = branches.filter(pk=actor.branch_id)
+        elif actor and not actor.is_superuser:
+            branches = branches.none()
+        active_branch_id = getattr(actor, 'active_branch_id', None)
+        if active_branch_id:
+            branches = branches.filter(pk=active_branch_id)
+        elif actor and not actor.is_superuser and actor.role not in ('admin', 'ceo'):
+            branches = branches.filter(pk=actor.branch_id)
+        if actor and actor.role == 'manager':
+            self.fields['role'].choices = [
+                choice for choice in self.fields['role'].choices
+                if choice[0] not in ('admin', 'ceo')
+            ]
+        self.fields['branch'].queryset = branches.order_by('name')
+        self.fields['branch'].required = False
+        if active_branch_id:
+            self.fields['branch'].initial = active_branch_id
+        elif actor and actor.branch_id:
+            self.fields['branch'].initial = actor.branch_id
 
     def clean(self):
         cd = super().clean()
@@ -32,6 +59,12 @@ class UserForm(forms.ModelForm):
         if p1 or p2:
             if p1 != p2:
                 raise forms.ValidationError('Passwords do not match.')
+        role = cd.get('role')
+        if self.actor and self.actor.role == 'manager' and role in ('admin', 'ceo'):
+            self.add_error('role', 'Branch managers cannot assign company leadership roles.')
+        company_id = getattr(self.instance, 'company_id', None) or getattr(self.actor, 'company_id', None)
+        if role not in ('admin', 'ceo') and company_id and self.fields['branch'].queryset.exists() and not cd.get('branch'):
+            self.add_error('branch', 'Assign this staff member to a branch.')
         return cd
 
 
@@ -60,155 +93,6 @@ class CompanySettingsForm(forms.ModelForm):
             self.fields['default_branch'].queryset = Branch.objects.none()
 
 
-class CompanySignupForm(forms.Form):
-    company_name = forms.CharField(label='Company Name', max_length=255)
-    slug = forms.SlugField(label='Company Slug', max_length=255, required=False,
-                           help_text='Unique URL-friendly identifier for your company.')
-    registration_number = forms.CharField(label='Registration Number', max_length=100, required=False)
-    tin = forms.CharField(label='TIN', max_length=100, required=False)
-    company_email = forms.EmailField(label='Company Email', required=False)
-    company_phone = forms.CharField(label='Company Phone', max_length=20, required=False)
-    company_address = forms.CharField(label='Company Address', widget=forms.Textarea(attrs={'rows': 3}), required=False)
-    create_database = forms.BooleanField(label='Create company database', required=False, initial=True,
-                                         help_text='Create a dedicated sqlite database file for this company and run migrations.')
-
-    username = forms.CharField(label='Admin Username', max_length=150)
-    first_name = forms.CharField(label='First Name', max_length=150)
-    last_name = forms.CharField(label='Last Name', max_length=150, required=False)
-    email = forms.EmailField(label='Admin Email')
-    password1 = forms.CharField(label='Password', widget=forms.PasswordInput)
-    password2 = forms.CharField(label='Confirm Password', widget=forms.PasswordInput)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        for name, field in self.fields.items():
-            if not isinstance(field.widget, forms.CheckboxInput):
-                existing_classes = field.widget.attrs.get('class', '')
-                field.widget.attrs['class'] = (existing_classes + ' form-ctrl').strip()
-
-    def clean(self):
-        cleaned = super().clean()
-        password1 = cleaned.get('password1')
-        password2 = cleaned.get('password2')
-        if password1 and password1 != password2:
-            raise forms.ValidationError('Passwords do not match.')
-        return cleaned
-
-    def clean_slug(self):
-        slug = self.cleaned_data.get('slug') or slugify(self.cleaned_data.get('company_name', ''))
-        if Company.objects.filter(slug=slug).exists():
-            raise forms.ValidationError('That company slug is already registered. Please choose another.')
-        return slug
-
-    def clean_username(self):
-        username = self.cleaned_data.get('username')
-        if User.objects.filter(username=username).exists():
-            raise forms.ValidationError('Username already exists. Choose another username.')
-        return username
-
-
-def _create_company_database(company, changed_by=None):
-    import os
-    from django.conf import settings
-    from django.core.management import call_command
-    from django.core.mail import mail_admins
-    from .models import Tenant
-
-    logger = logging.getLogger(__name__)
-    db_dir = os.path.join(settings.BASE_DIR, 'company_databases')
-    os.makedirs(db_dir, exist_ok=True)
-    db_path = os.path.join(db_dir, f"{company.slug}.sqlite3")
-    alias = f'company_{company.slug}'
-    
-    # Start with default database config, override for SQLite
-    tenant_db_config = settings.DATABASES['default'].copy()
-    tenant_db_config['ENGINE'] = 'django.db.backends.sqlite3'
-    tenant_db_config['NAME'] = db_path
-    tenant_db_config['ATOMIC_REQUESTS'] = True
-    tenant_db_config['TIME_ZONE'] = settings.TIME_ZONE
-    tenant_db_config['USE_TZ'] = settings.USE_TZ
-    
-    settings.DATABASES[alias] = tenant_db_config
-    logger.info('Preparing tenant DB record for company %s at %s (alias=%s)', company.slug, db_path, alias)
-
-    # Create Tenant record to track status
-    try:
-        tenant = Tenant.objects.create(
-            company=company,
-            db_alias=alias,
-            db_path=db_path,
-            status='pending',
-            created_by=changed_by
-        )
-    except Exception:
-        logger.exception('Failed to create Tenant record for %s', company.slug)
-        tenant = None
-
-    # Try Celery first, fallback to synchronous
-    try:
-        from . import tasks as core_tasks
-        if tenant:
-            logger.info('Enqueuing tenant migrations via Celery for %s', company.slug)
-            core_tasks.run_tenant_migrations.delay(tenant.pk)
-            logger.info('Successfully queued tenant migrations for %s', company.slug)
-            return alias
-    except Exception as e:
-        logger.warning('Celery not available or import failed (%s), falling back to synchronous', str(e))
-
-    # Run migrations synchronously (primary path - no Celery)
-    try:
-        logger.info('Running tenant migrations synchronously for %s', company.slug)
-        # Migrate only business logic apps, skip system apps like django_apscheduler
-        apps_to_migrate = [
-            'auth', 'contenttypes', 'sessions', 'core', 'clients', 'services',
-            'billing', 'compliance', 'credentials', 'notifications',
-            'expenses', 'documents', 'dashboard', 'taxcalendar'
-        ]
-        for app in apps_to_migrate:
-            try:
-                call_command('migrate', app, database=alias, interactive=False, verbosity=0)
-            except Exception as e:
-                logger.warning('Failed to migrate app %s for %s: %s', app, company.slug, e)
-                # Continue with other apps
-        
-        company.db_name = alias
-        company.save(update_fields=['db_name'])
-        if tenant:
-            tenant.status = 'ready'
-            tenant.save()
-        
-        # Record an audit log
-        try:
-            AuditLog.objects.create(
-                model_name='company',
-                object_id=str(company.pk),
-                action='UPDATE',
-                changed_fields={'db_name': alias},
-                changed_by=changed_by,
-                notes=f'Initiated tenant database {alias} at {db_path}'
-            )
-        except Exception:
-            logger.exception('Failed to record AuditLog for company DB creation: %s', company.slug)
-        
-        logger.info('Successfully created and migrated tenant DB for %s', company.slug)
-        try:
-            mail_admins(f'Tenant DB created: {company.slug}', f'Database {alias} at {db_path} created successfully.')
-        except Exception:
-            logger.warning('Failed to send admin email for tenant creation')
-        return alias
-    except Exception as e:
-        logger.exception('Error creating tenant DB for %s: %s', company.slug, e)
-        if tenant:
-            tenant.status = 'failed'
-            tenant.last_error = str(e)
-            tenant.save()
-        try:
-            mail_admins(f'Failed creating tenant DB: {company.slug}', f'Error: {str(e)[:500]}')
-        except Exception:
-            logger.warning('Failed to send admin error email for tenant creation')
-        raise
-
-
 @never_cache
 def offline(request):
     return render(request, 'core/offline.html')
@@ -225,128 +109,25 @@ def service_worker(request):
 
 
 def _require_admin(request):
-    return request.user.is_authenticated and (request.user.role in ('admin', 'manager') or request.user.is_superuser)
+    return request.user.is_authenticated and (request.user.role in ('admin', 'manager', 'ceo') or request.user.is_superuser)
 
 
 def _company_users(request):
     if request.user.is_superuser:
         return User.objects.all()
     if request.user.company_id:
-        return User.objects.filter(company=request.user.company)
+        users = User.objects.filter(company=request.user.company)
+        if request.user.role == 'manager':
+            return users.filter(branch_id=request.user.branch_id)
+        return users
     return User.objects.none()
 
 
 def signup(request):
     if request.user.is_authenticated:
         return redirect('dashboard:index')
-    if request.method == 'POST':
-        form = CompanySignupForm(request.POST)
-        if form.is_valid():
-            slug = form.cleaned_data['slug']
-            company = Company.objects.create(
-                name=form.cleaned_data['company_name'],
-                slug=slug,
-                registration_number=form.cleaned_data['registration_number'],
-                tin=form.cleaned_data['tin'],
-                email=form.cleaned_data['company_email'],
-                phone=form.cleaned_data['company_phone'],
-                address=form.cleaned_data['company_address'],
-                active=True,
-            )
-            user = User.objects.create_user(
-                username=form.cleaned_data['username'],
-                email=form.cleaned_data['email'],
-                password=form.cleaned_data['password1'],
-                first_name=form.cleaned_data['first_name'],
-                last_name=form.cleaned_data['last_name'],
-                company=company,
-                role='admin',
-                is_active=True,
-                is_active_staff=True,
-            )
-            company.owner = user
-            company.save()
-            # Create a default branch for the new company
-            try:
-                default_branch = Branch.objects.create(
-                    company=company,
-                    name='Main',
-                    slug=f'{company.slug}-main',
-                    is_active=True
-                )
-                company.default_branch = default_branch
-                company.save(update_fields=['default_branch'])
-            except Exception:
-                logging.getLogger(__name__).exception('Failed to create default branch for company %s', company.slug)
-
-            # Record company creation in audit log for admin visibility
-            try:
-                AuditLog.objects.create(
-                    model_name='company',
-                    object_id=str(company.pk),
-                    action='CREATE',
-                    changed_fields={'name': company.name, 'slug': company.slug},
-                    changed_by=user,
-                    notes='Company registered via signup form'
-                )
-            except Exception:
-                logging.getLogger(__name__).exception('Failed to create AuditLog for new company %s', company.slug)
-            # Optionally create a dedicated sqlite DB for this company and run migrations
-            if form.cleaned_data.get('create_database'):
-                try:
-                    _create_company_database(company, changed_by=user)
-                    # If tenant record exists, redirect user to progress page
-                    tenant = getattr(company, 'tenant', None)
-                    if tenant:
-                        request.session['tenant_progress_id'] = tenant.pk
-                        return redirect('core:tenant_progress', pk=tenant.pk)
-                except Exception as e:
-                    import logging
-                    logging.exception('Error creating company DB for %s: %s', company.slug, e)
-                    messages.error(request,
-                        'The company account was created, but the dedicated database could not be created automatically. '
-                        'Please contact the system administrator or try again later.')
-                    return render(request, 'core/signup.html', {'form': form})
-            messages.success(request, 'Company created successfully. You can now log in.')
-            return redirect('login')
-        else:
-            messages.error(request, 'Please correct the highlighted fields before continuing.')
-            for name in form.errors:
-                if name in form.fields:
-                    existing = form.fields[name].widget.attrs.get('class', '')
-                    if 'err' not in existing:
-                        form.fields[name].widget.attrs['class'] = (existing + ' err').strip()
-    else:
-        form = CompanySignupForm()
-    return render(request, 'core/signup.html', {'form': form})
-
-
-def tenant_progress(request, pk):
-    from django.shortcuts import get_object_or_404
-    from .models import Tenant
-    tenant = get_object_or_404(Tenant, pk=pk)
-    session_tenant_id = request.session.get('tenant_progress_id')
-    if not request.user.is_authenticated and session_tenant_id != tenant.pk:
-        return redirect('login')
-    if request.user.is_authenticated and request.user != tenant.created_by and not request.user.is_superuser:
-        return redirect('dashboard:index')
-    # We will render a template that polls the status API
-    return render(request, 'core/tenant_progress.html', {'tenant': tenant})
-
-
-def tenant_status(request, pk):
-    from django.shortcuts import get_object_or_404
-    from django.http import JsonResponse
-    from .models import Tenant
-    tenant = get_object_or_404(Tenant, pk=pk)
-    # Restrict access: only creator or superusers
-    if request.user != getattr(tenant, 'created_by', None) and not request.user.is_superuser:
-        return JsonResponse({'error': 'forbidden'}, status=403)
-    return JsonResponse({
-        'status': tenant.status,
-        'message': tenant.last_error or '',
-        'progress': 100 if tenant.status == 'ready' else (0 if tenant.status == 'pending' else 50)
-    })
+    messages.info(request, 'Company registration is disabled. Contact your administrator for access.')
+    return redirect('login')
 
 
 @login_required
@@ -364,7 +145,7 @@ def user_create(request):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
     if request.method == 'POST':
-        form = UserForm(request.POST)
+        form = UserForm(request.POST, actor=request.user)
         if form.is_valid():
             user = form.save(commit=False)
             if not request.user.is_superuser and request.user.company_id:
@@ -382,7 +163,7 @@ def user_create(request):
                 f'Ask them to change it after first login.'
             )
     else:
-        form = UserForm()
+        form = UserForm(actor=request.user)
     role_guide = [
         ('admin', 'Admin', 'Full access: users, settings, all data, all approvals'),
         ('manager', 'Manager', 'Finance, billing, approvals, reports, no system settings'),
@@ -399,65 +180,28 @@ def user_create(request):
 @csrf_protect
 @never_cache
 def custom_login(request):
-    """Custom login that validates tenant is ready before allowing login."""
+    """Authenticate staff for the single company workspace."""
     from django.contrib.auth import authenticate, login
-
-    login_company_slug = request.session.get('login_company_slug', '')
 
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password')
-        company_slug = request.POST.get('company_slug', '').strip().lower()
-
-        # Accept explicit slug field first, then fallback to username@slug notation.
-        if company_slug:
-            login_company_slug = company_slug
-            request.session['login_company_slug'] = login_company_slug
-        elif '@' in username:
-            username, slug_part = username.split('@', 1)
-            username = username.strip()
-            slug_part = slug_part.strip().lower()
-            if slug_part:
-                login_company_slug = slug_part
-                request.session['login_company_slug'] = login_company_slug
 
         user = authenticate(request, username=username, password=password)
 
         if user is not None:
-            if user.company_id:
-                try:
-                    tenant = user.company.tenant
-                    if tenant.status != 'ready':
-                        messages.error(
-                            request,
-                            f'Your company database is still being set up ({tenant.status}). '
-                            f'Please try again in a moment.'
-                        )
-                        return render(request, 'core/login.html', {
-                            'company_slug': login_company_slug,
-                        })
-                except Exception as e:
-                    messages.error(
-                        request,
-                        'Your company database is not yet initialized. Please contact support.'
-                    )
-                    logging.warning('Tenant check failed for user %s: %s', username, e)
-                    return render(request, 'core/login.html', {
-                        'company_slug': login_company_slug,
-                    })
+            if user.company_id and not user.company.active and not user.is_superuser:
+                messages.error(request, 'Company access is suspended. Contact your administrator.')
+                return render(request, 'core/login.html')
 
             login(request, user)
             next_url = request.POST.get('next') or request.GET.get('next', 'dashboard:index')
             return redirect(next_url)
         else:
             messages.error(request, 'Invalid username or password.')
-            return render(request, 'core/login.html', {
-                'company_slug': login_company_slug,
-            })
+            return render(request, 'core/login.html')
 
-    return render(request, 'core/login.html', {
-        'company_slug': login_company_slug,
-    })
+    return render(request, 'core/login.html')
 
 
 @login_required
@@ -468,9 +212,14 @@ def user_edit(request, pk):
     if request.user.is_superuser:
         user = get_object_or_404(User, pk=pk)
     else:
-        user = get_object_or_404(User, pk=pk, company=request.user.company)
+        users = User.objects.filter(company=request.user.company)
+        if request.user.role == 'manager':
+            users = users.filter(
+                branch_id=request.user.branch_id,
+            ).exclude(role__in=('admin', 'ceo'))
+        user = get_object_or_404(users, pk=pk)
     if request.method == 'POST':
-        form = UserForm(request.POST, instance=user)
+        form = UserForm(request.POST, instance=user, actor=request.user)
         if form.is_valid():
             u = form.save(commit=False)
             if not request.user.is_superuser and request.user.company_id:
@@ -482,7 +231,7 @@ def user_edit(request, pk):
             messages.success(request, f'User {u.username} updated.')
             return redirect('core:users')
     else:
-        form = UserForm(instance=user)
+        form = UserForm(instance=user, actor=request.user)
     
     role_guide = [
         ('admin','Admin','Full access: users, settings, all data, all approvals'),
@@ -585,10 +334,10 @@ def _run_daily_now_unlocked(request):
         from billing.models import Invoice
         results = []
         # 1. Mark overdue invoices
-        updated = Invoice.objects.filter(
+        updated = scope_queryset(request.user, Invoice.objects.filter(
             status__in=['sent', 'partially_paid'],
             due_date__lt=timezone.now().date()
-        ).update(status='overdue')
+        )).update(status='overdue')
         results.append(f'{updated} invoices marked overdue')
         # 2. Update client statuses
         try:
@@ -712,7 +461,7 @@ def export_clients_excel(request):
     """Export clients list to Excel"""
     from clients.models import Client
     
-    clients = Client.objects.select_related('assigned_officer').all()
+    clients = scope_queryset(request.user, Client.objects.select_related('assigned_officer'))
     q = request.GET.get('q', '')
     
     if q:
@@ -744,7 +493,9 @@ def export_clients_pdf(request):
     """Export clients list to PDF"""
     from clients.models import Client
     
-    clients = Client.objects.select_related('assigned_officer').all()[:500]  # Limit for PDF
+    clients = scope_queryset(
+        request.user, Client.objects.select_related('assigned_officer'),
+    )[:500]  # Limit for PDF
     columns = ['Client ID', 'Full Name', 'TIN', 'Phone', 'District', 'Status']
     data = []
     for c in clients:
@@ -764,7 +515,9 @@ def export_invoices_excel(request):
     """Export invoices list to Excel"""
     from billing.models import Invoice
     
-    invoices = Invoice.objects.select_related('client').all().order_by('-date_issued')
+    invoices = scope_queryset(
+        request.user, Invoice.objects.select_related('client'),
+    ).order_by('-date_issued')
     columns = ['Invoice Number', 'Client', 'Amount', 'Paid', 'Outstanding', 'Status', 'Date']
     data = []
     for inv in invoices[:1000]:
@@ -785,7 +538,9 @@ def export_invoices_pdf(request):
     """Export invoices list to PDF"""
     from billing.models import Invoice
     
-    invoices = Invoice.objects.select_related('client').all().order_by('-date_issued')[:500]
+    invoices = scope_queryset(
+        request.user, Invoice.objects.select_related('client'),
+    ).order_by('-date_issued')[:500]
     columns = ['Invoice', 'Client', 'Amount', 'Status', 'Date']
     data = []
     for inv in invoices:
@@ -805,7 +560,7 @@ def export_jobcards_excel(request):
     from services.models import JobCard
     from django.db.models import Q
     
-    cards = JobCard.objects.select_related('client', 'assigned_to').all()
+    cards = scope_queryset(request.user, JobCard.objects.select_related('client', 'assigned_to'))
     status = request.GET.get('status', '')
     if status:
         cards = cards.filter(status=status)
@@ -830,7 +585,9 @@ def export_jobcards_pdf(request):
     """Export job cards list to PDF"""
     from services.models import JobCard
     
-    cards = JobCard.objects.select_related('client', 'assigned_to').all()[:500]
+    cards = scope_queryset(
+        request.user, JobCard.objects.select_related('client', 'assigned_to'),
+    )[:500]
     columns = ['Job Number', 'Client', 'Status', 'Assigned To', 'Total Fee']
     data = []
     for card in cards:
@@ -849,7 +606,10 @@ def export_credentials_excel(request):
     """Export credentials list to Excel"""
     from credentials.models import ClientCredential
     
-    creds = ClientCredential.objects.select_related('client').all()
+    creds = scope_queryset(
+        request.user, ClientCredential.objects.select_related('client'),
+        branch_path='client__branch',
+    )
     columns = ['Credential Label', 'Client', 'Service', 'Created', 'Last Used']
     data = []
     for c in creds[:1000]:
@@ -868,7 +628,10 @@ def export_credentials_pdf(request):
     """Export credentials list to PDF"""
     from credentials.models import ClientCredential
     
-    creds = ClientCredential.objects.select_related('client').all()[:500]
+    creds = scope_queryset(
+        request.user, ClientCredential.objects.select_related('client'),
+        branch_path='client__branch',
+    )[:500]
     columns = ['Credential Label', 'Client', 'Service', 'Created']
     data = []
     for c in creds:
@@ -886,7 +649,11 @@ def export_deadlines_excel(request):
     """Export compliance deadlines list to Excel"""
     from compliance.models import ComplianceDeadline
     
-    deadlines = ComplianceDeadline.objects.select_related('obligation__client').all().order_by('due_date')
+    deadlines = scope_queryset(
+        request.user,
+        ComplianceDeadline.objects.select_related('obligation__client'),
+        branch_path='obligation__client__branch',
+    ).order_by('due_date')
     columns = ['Client', 'Obligation', 'Period', 'Due Date', 'Status', 'Priority']
     data = []
     for d in deadlines[:1000]:
@@ -906,7 +673,11 @@ def export_deadlines_pdf(request):
     """Export compliance deadlines list to PDF"""
     from compliance.models import ComplianceDeadline
     
-    deadlines = ComplianceDeadline.objects.select_related('obligation__client').all().order_by('due_date')[:500]
+    deadlines = scope_queryset(
+        request.user,
+        ComplianceDeadline.objects.select_related('obligation__client'),
+        branch_path='obligation__client__branch',
+    ).order_by('due_date')[:500]
     columns = ['Client', 'Obligation', 'Period', 'Due Date', 'Status']
     data = []
     for d in deadlines:

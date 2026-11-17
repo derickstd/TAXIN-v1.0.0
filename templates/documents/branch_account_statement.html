@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Branch Account Statement{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'documents:financial_reports' %}">Reports</a></li>
+<li class="active">Account Statement</li>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title"><i class="fas fa-book-open"></i> Branch Account Statement</h1>
+  <div class="d-flex gap-2 no-print">
+    <a class="btn btn-primary" href="{% url 'documents:branch_account_transfer' %}{% if selected_branch %}?branch={{ selected_branch.pk }}{% endif %}">
+      <i class="fas fa-building-columns"></i> Record Bank Deposit
+    </a>
+    <button class="btn btn-outline" type="button" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+  </div>
+</div>
+
+<section class="card-box mb-3 no-print">
+  <div class="card-body">
+    <form method="get" class="d-flex align-items-end gap-2 flex-wrap">
+      {% if branches %}
+      <div>
+        <label class="form-label" for="statement-branch">Branch</label>
+        <select id="statement-branch" class="form-control" name="branch">
+          <option value="">All accessible branches</option>
+          {% for branch in branches %}<option value="{{ branch.pk }}" {% if selected_branch.pk == branch.pk %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div><label class="form-label" for="statement-from">From</label><input id="statement-from" class="form-control" type="date" name="from" value="{{ date_from|date:'Y-m-d' }}"></div>
+      <div><label class="form-label" for="statement-to">To</label><input id="statement-to" class="form-control" type="date" name="to" value="{{ date_to|date:'Y-m-d' }}"></div>
+      <div>
+        <label class="form-label" for="statement-account">Account</label>
+        <select id="statement-account" class="form-control" name="account">
+          <option value="">All accounts</option>
+          {% for account in account_options %}<option value="{{ account }}" {% if selected_account == account %}selected{% endif %}>{{ account }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit">Show Statement</button>
+    </form>
+  </div>
+</section>
+
+<section class="card-box">
+  <div class="card-head">
+    Account activity
+    <span class="text-muted">{{ date_from|date:"d M Y" }} – {{ date_to|date:"d M Y" }}{% if selected_branch %} · {{ selected_branch.name }}{% endif %}</span>
+  </div>
+  <div class="stat-row"><span>Total money in</span><strong class="ugx cash-flow-chip cash-flow-chip--in">{{ total_inflow|floatformat:0|intcomma }}</strong></div>
+  <div class="stat-row"><span>Total money out</span><strong class="ugx cash-flow-chip cash-flow-chip--out">{{ total_outflow|floatformat:0|intcomma }}</strong></div>
+  <div class="form-hint px-3">Bank deposits appear as paired account movements and do not count as expenses or change total cash.</div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Date</th><th>Branch</th><th>Account</th><th>Entry</th><th>Description</th><th>Reference</th><th>Recorded by</th><th class="text-r">Money in</th><th class="text-r">Money out</th><th class="text-r">Balance snapshot</th></tr></thead>
+      <tbody>
+        {% for item in transactions %}
+        <tr>
+          <td>{{ item.date|date:"d M Y" }}</td>
+          <td>{{ item.branch.name }}</td>
+          <td>{{ item.account }}</td>
+          <td>{{ item.entry_type }}</td>
+          <td>{{ item.description }}</td>
+          <td>{{ item.reference }}</td>
+          <td>{{ item.recorded_by }}</td>
+          <td class="text-r">{% if item.inflow %}<span class="ugx cash-flow-chip cash-flow-chip--in">{{ item.inflow|floatformat:0|intcomma }}</span>{% else %}—{% endif %}</td>
+          <td class="text-r">{% if item.outflow %}<span class="ugx cash-flow-chip cash-flow-chip--out">{{ item.outflow|floatformat:0|intcomma }}</span>{% else %}—{% endif %}</td>
+          <td class="text-r ugx">{% if item.balance != None %}{{ item.balance|floatformat:0|intcomma }}{% else %}—{% endif %}</td>
+        </tr>
+        {% empty %}<tr><td colspan="10" class="text-c text-muted">No account activity was recorded for this period.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if transactions.has_other_pages %}
+  <div class="card-body d-flex align-items-center justify-content-between">
+    <span class="text-muted">Page {{ transactions.number }} of {{ transactions.paginator.num_pages }}</span>
+    <div class="d-flex gap-2">
+      {% if transactions.has_previous %}<a class="btn btn-outline btn-sm" href="?{{ filter_query }}&amp;page={{ transactions.previous_page_number }}">Previous</a>{% endif %}
+      {% if transactions.has_next %}<a class="btn btn-outline btn-sm" href="?{{ filter_query }}&amp;page={{ transactions.next_page_number }}">Next</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

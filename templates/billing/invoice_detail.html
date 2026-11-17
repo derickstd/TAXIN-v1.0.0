@@ -161,7 +161,7 @@
         <div style="padding:.65rem 1rem;border-bottom:1px solid #f3f4f6;font-size:.82rem">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div>
-              <div class="fw-6 ugx-g">UGX {{ pmt.amount|floatformat:0|intcomma }}</div>
+              <div class="cash-flow-chip cash-flow-chip--in">UGX {{ pmt.amount|floatformat:0|intcomma }}</div>
               <div class="fs-xs text-muted">{{ pmt.get_method_display }} &bull; {{ pmt.created_at|date:"d M Y H:i" }}</div>
               {% if pmt.reference %}<div class="fs-xs text-muted">Ref: {{ pmt.reference }}</div>{% endif %}
             </div>

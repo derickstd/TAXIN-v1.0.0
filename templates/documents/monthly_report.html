@@ -63,12 +63,12 @@
       </div>
       <div class="cf-card cf-card-success">
         <div class="cf-card-title">Cash Receipts</div>
-        <div class="cf-card-value ugx">+{{ total_cash_inflow|floatformat:0|intcomma }}</div>
+        <div class="cf-card-value ugx cash-flow-chip cash-flow-chip--in">+{{ total_cash_inflow|floatformat:0|intcomma }}</div>
         <div class="cf-card-sub">Total inflows</div>
       </div>
       <div class="cf-card cf-card-danger">
         <div class="cf-card-title">Cash Payments</div>
-        <div class="cf-card-value ugx">-{{ total_cash_outflow|floatformat:0|intcomma }}</div>
+        <div class="cf-card-value ugx cash-flow-chip cash-flow-chip--out">-{{ total_cash_outflow|floatformat:0|intcomma }}</div>
         <div class="cf-card-sub">Total outflows</div>
       </div>
       <div class="cf-card cf-card-highlight">
@@ -108,11 +108,11 @@
                 {% if row.inflow or row.outflow %}
                 <tr class="cf-transaction-row">
                   <td>{{ row.date|date:"d M" }}</td>
-                  <td class="text-end ugx {% if row.inflow %}cash-in-text fw-bold{% else %}text-muted{% endif %}">
-                    {% if row.inflow %}+{{ row.inflow|floatformat:0|intcomma }}{% else %}—{% endif %}
+                  <td class="text-end ugx">
+                    {% if row.inflow %}<span class="cash-flow-chip cash-flow-chip--in">+{{ row.inflow|floatformat:0|intcomma }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
                   </td>
-                  <td class="text-end ugx {% if row.outflow %}cash-out-text fw-bold{% else %}text-muted{% endif %}">
-                    {% if row.outflow %}-{{ row.outflow|floatformat:0|intcomma }}{% else %}—{% endif %}
+                  <td class="text-end ugx">
+                    {% if row.outflow %}<span class="cash-flow-chip cash-flow-chip--out">-{{ row.outflow|floatformat:0|intcomma }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
                   </td>
                   <td class="text-end ugx fw-bold {% if row.net >= 0 %}cash-in-text{% else %}cash-out-text{% endif %}">
                     {{ row.net|floatformat:0|intcomma }}
@@ -136,8 +136,8 @@
               <tfoot>
                 <tr class="cf-totals-row">
                   <th scope="row">Monthly Totals</th>
-                  <td class="text-end ugx cash-in-text fw-bold">+{{ total_cash_inflow|floatformat:0|intcomma }}</td>
-                  <td class="text-end ugx cash-out-text fw-bold">-{{ total_cash_outflow|floatformat:0|intcomma }}</td>
+                  <td class="text-end ugx"><span class="cash-flow-chip cash-flow-chip--in">+{{ total_cash_inflow|floatformat:0|intcomma }}</span></td>
+                  <td class="text-end ugx"><span class="cash-flow-chip cash-flow-chip--out">-{{ total_cash_outflow|floatformat:0|intcomma }}</span></td>
                   <td class="text-end ugx {% if cashflow_net_total >= 0 %}cash-in-text{% else %}cash-out-text{% endif %} fw-bold">{{ cashflow_net_total|floatformat:0|intcomma }}</td>
                   <td class="text-end ugx fw-bold">{{ cashflow_end_balance|floatformat:0|intcomma }}</td>
                   <td></td>

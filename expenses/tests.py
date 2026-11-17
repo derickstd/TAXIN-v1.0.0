@@ -2,8 +2,9 @@ from datetime import date
 from decimal import Decimal
 
 from django.test import TestCase
+from django.urls import reverse
 
-from core.models import User
+from core.models import Branch, Company, User
 from expenses.models import Expense, ExpenseCategory, ExpenseApprovalSettings
 from expenses.utils import should_require_approval
 
@@ -70,3 +71,48 @@ class ExpenseApprovalTests(TestCase):
         self.assertEqual(expense.status, 'approved')
         self.assertEqual(expense.approved_by, superuser)
         self.assertEqual(response.status_code, 302)
+
+    def test_expense_entry_uses_the_users_branch_workspace(self):
+        company = Company.objects.create(name='Expense Branch Co', slug='expense-branch')
+        branch = Branch.objects.create(company=company, name='TAXMAN')
+        self.user.company = company
+        self.user.branch = branch
+        self.user.save(update_fields=['company', 'branch'])
+        self.client.force_login(self.user)
+
+        page = self.client.get(reverse('expenses:create'))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'class="floating-expense-button"')
+        self.assertContains(page, 'Record an expense for TAXMAN')
+
+        response = self.client.post(reverse('expenses:create'), {
+            'expense_date': date.today().isoformat(),
+            'category': self.category.pk,
+            'description': 'Branch workspace expense',
+            'amount': '25000',
+            'payment_method': 'cash',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        expense = Expense.objects.get(description='Branch workspace expense')
+        self.assertEqual(expense.branch, branch)
+
+    def test_external_branch_expense_entry_opens_daily_total_form(self):
+        company = Company.objects.create(name='External Expense Co', slug='external-expense')
+        branch = Branch.objects.create(
+            company=company, name='PRIME FOCUS', external_reporting=True,
+        )
+        self.user.company = company
+        self.user.branch = branch
+        self.user.save(update_fields=['company', 'branch'])
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('expenses:create'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response['Location'],
+            f"{reverse('documents:branch_daily_expense')}?branch={branch.pk}"
+            '&open=transaction&direction=outflow&category=operating_expense',
+        )
+        self.assertFalse(Expense.objects.exists())

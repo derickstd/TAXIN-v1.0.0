@@ -1,5 +1,6 @@
 from django import forms
 from .models import Invoice
+from core.branch_access import scope_queryset
 
 
 class InvoiceForm(forms.ModelForm):
@@ -15,8 +16,12 @@ class InvoiceForm(forms.ModelForm):
             'notes': forms.Textarea(attrs={'rows': 3}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if user:
+            self.fields['client'].queryset = scope_queryset(
+                user, self.fields['client'].queryset,
+            )
         for field in self.fields.values():
             widget = field.widget
             if not widget.attrs.get('class'):

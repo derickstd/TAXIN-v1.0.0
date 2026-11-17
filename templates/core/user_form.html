@@ -24,6 +24,13 @@
           <select name="role" class="s2" data-ph="Select role">
             {% for val,label in form.fields.role.choices %}<option value="{{ val }}" {% if form.role.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
           </select></div>
+        <div><label class="form-label">Assigned Branch</label>
+          <select name="branch" class="s2" data-ph="Select branch">
+            <option value="">All branches (leadership only)</option>
+            {% for branch in form.fields.branch.queryset %}<option value="{{ branch.pk }}" {% if form.branch.value|stringformat:'s' == branch.pk|stringformat:'s' %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
+          </select>
+          {% for e in form.branch.errors %}<span class="err-msg">{{ e }}</span>{% endfor %}
+        </div>
         <div><label class="form-label">WhatsApp Number</label>
           <input type="text" name="phone_whatsapp" value="{{ form.phone_whatsapp.value|default:'' }}" class="form-ctrl" placeholder="+256 700 000000">
           <div class="form-hint">Used for debt reports and task reminders</div></div>

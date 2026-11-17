@@ -1,4 +1,5 @@
 from django.db import IntegrityError, models
+from django.db.models.functions import Lower
 from django.utils import timezone
 from clients.models import Client
 from core.models import User
@@ -18,6 +19,8 @@ class ServiceType(models.Model):
         ('ura_filing','URA Filing'),('nssf','NSSF'),('ursb','URSB'),
         ('ura_advisory','URA Advisory'),('immigration','Immigration'),
         ('customs','Customs'),('advisory','Advisory'),('miscellaneous','Miscellaneous'),
+        ('printing','Printing'),('stationery','Stationery'),
+        ('lending','Lending'),('investment','Investment'),
     ]
     DEADLINE_TYPE = [
         ('monthly_15','15th of Following Month'),
@@ -27,16 +30,34 @@ class ServiceType(models.Model):
         ('none','No Fixed Deadline'),
     ]
     name = models.CharField(max_length=200)
-    category = models.CharField(max_length=30, choices=CATEGORY)
+    category = models.CharField(max_length=30)
     default_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     deadline_type = models.CharField(max_length=20, choices=DEADLINE_TYPE, default='none')
     is_recurring = models.BooleanField(default=False)
     vat_applicable = models.BooleanField(default=False)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    branches = models.ManyToManyField('core.Branch', blank=True, related_name='services')
 
     def __str__(self):
         return f"{self.name} (UGX {self.default_price:,.0f})"
+
+    def get_category_display(self):
+        return dict(self.CATEGORY).get(self.category, self.category)
+
+
+class ServiceCategory(models.Model):
+    name = models.CharField(max_length=30)
+
+    class Meta:
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(Lower('name'), name='service_category_name_ci_unique'),
+        ]
+
+    def __str__(self):
+        return self.name
+
 
 class ClientServiceSubscription(models.Model):
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='subscriptions')

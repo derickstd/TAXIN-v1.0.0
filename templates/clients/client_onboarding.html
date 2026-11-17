@@ -1,14 +1,14 @@
 {% extends 'base.html' %}
-{% block title %}Client Onboarding{% endblock %}
+{% block title %}Add Customer{% endblock %}
 {% block nav_cnew %}{% if import_section_active == 'new_client' %}active{% endif %}{% endblock %}
 {% block nav_import %}{% if import_section_active == 'batch_import' %}active{% endif %}{% endblock %}
-{% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">Client Onboarding</li>{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">Add Customer</li>{% endblock %}
 {% block content %}
 <div class="modal-overlay open" id="clientOnboardingModal">
-  <div class="modal-box" style="width:min(100%,1180px);max-width:1180px;">
+  <div class="modal-box client-onboarding-dialog">
     <div class="modal-hd">
       <div>
-        <h5><i class="fas fa-user-plus"></i> Client Onboarding</h5>
+        <h5><i class="fas fa-user-plus"></i> Add Customer</h5>
         <div class="fs-sm text-muted">Register a new client, record a walk-in, or import a CSV from one page.</div>
       </div>
       <a href="{% url 'clients:list' %}" class="modal-close">&times;</a>
@@ -18,7 +18,7 @@
       <a href="{% url 'clients:import' %}" class="btn btn-sm {% if import_section_active == 'batch_import' %}btn-primary{% else %}btn-outline{% endif %}"><i class="fas fa-file-import"></i> Batch Import</a>
     </div>
 
-    <div class="layout-main-sidebar">
+    <div class="layout-main-sidebar{% if import_section_active != 'batch_import' %} client-onboarding-single-column{% endif %}">
       <div class="stack">
     <div class="card-box card-compact" id="new-client-section">
       <div class="card-head"><i class="fas fa-id-card"></i>New Client Registration</div>

@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}Record Payment{% endblock %}
+{% block nav_inv %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">Record Payment</li>{% endblock %}
+{% block content %}
+<div class="modal-overlay open" id="quickPaymentPageOverlay">
+  <div class="modal-box" style="max-width:680px" role="dialog" aria-modal="true">
+    {% include 'billing/partials/quick_payment_popover.html' %}
+  </div>
+</div>
+{% endblock %}

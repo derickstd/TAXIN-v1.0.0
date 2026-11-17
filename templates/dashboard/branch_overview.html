@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Branch Dashboard{% endblock %}
+{% block nav_dash %}active{% endblock %}
+{% block breadcrumbs %}<li class="active">Dashboard</li>{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title"><i class="fas fa-chart-line"></i> {% if active_branch %}{{ active_branch.name }} Workspace{% else %}Branch Overview{% endif %}</h1>
+    <p class="text-muted mb-0">{{ user.company.name }} · {% if active_branch %}branch operations and cash flow{% else %}company-wide branch cash flow and remaining balances{% endif %}</p>
+  </div>
+  <form method="get" class="d-flex align-items-end gap-2 flex-wrap no-print">
+    <div>
+      <label class="form-label" for="branch-overview-period">Reporting period</label>
+      <select id="branch-overview-period" class="form-control" name="period">
+        {% for value, label in period_options %}<option value="{{ value }}" {% if period == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-outline" type="submit">Show</button>
+    <a class="btn btn-primary" href="{% url 'documents:financial_reports' %}?period={{ period }}{% if active_branch %}&amp;branch={{ active_branch.pk }}{% endif %}">Open reports</a>
+  </form>
+</div>
+
+{% if not active_branch and can_switch_branch %}
+
+{% endif %}
+
+{% if not branches %}
+  <div class="alert-note">
+    No branches have been set up yet. Company leadership can create the TAXMAN, PRIME FOCUS, and ABA UGANDA branches from company branch settings.
+  </div>
+  {% if user.is_superuser or user.role == 'admin' or user.role == 'ceo' %}
+  <a class="btn btn-outline" href="{% url 'core:admin_companies' %}">Manage branches</a>
+  {% endif %}
+{% else %}
+{% if not active_branch and can_switch_branch and branches %}
+<section class="card-box mb-3">
+  <div class="card-head">
+    <span><i class="fas fa-chart-bar"></i> Branch sales, expenses &amp; profit · {{ period_label }}</span>
+    <span class="text-muted">{{ period_start|date:'d M Y' }}–{{ today|date:'d M Y' }}</span>
+  </div>
+  <div class="card-body">
+    <p class="form-hint mb-2">Revenue uses recorded receipts; profit is cash-basis receipts minus recorded expenses.</p>
+    <div style="height:320px;position:relative">
+      <canvas id="branchPerformanceChart" aria-label="{{ period_label }} operating receipts, expenses, and profit by branch" role="img"></canvas>
+    </div>
+  </div>
+</section>
+{{ branch_chart_data|json_script:"branch-performance-data" }}
+{% endif %}
+
+{% if active_branch and workspace_summary %}
+<section class="card-box mb-3">
+  <div class="card-head">
+    <span><i class="fas fa-calendar-week"></i> {{ period_label }} <span class="text-muted">({{ period_start|date:'d M' }}–{{ today|date:'d M Y' }})</span></span>
+    <a class="btn btn-outline btn-sm" href="{% url 'documents:financial_reports' %}?period={{ period }}{% if active_branch %}&amp;branch={{ active_branch.pk }}{% endif %}">Detailed report</a>
+  </div>
+  <div class="stats-grid card-body">
+    <div class="kpi-card"><div class="kpi-label">Cash in</div><div class="kpi-value ugx">{{ workspace_summary.inflow|floatformat:0|intcomma }}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Expenses</div><div class="kpi-value ugx">{{ workspace_summary.outflow|floatformat:0|intcomma }}</div></div>
+    <div class="kpi-card {% if workspace_summary.net_cash_flow >= 0 %}green{% else %}red{% endif %}"><div class="kpi-label">Net cash flow</div><div class="kpi-value ugx">{{ workspace_summary.net_cash_flow|floatformat:0|intcomma }}</div></div>
+    <div class="kpi-card gold"><div class="kpi-label">Cash remaining</div><div class="kpi-value ugx">{{ workspace_summary.closing_cash|floatformat:0|intcomma }}</div></div>
+  </div>
+</section>
+{% else %}
+<section class="card-box mb-3">
+  <div class="card-head">
+    <span><i class="fas fa-calendar-week"></i> Branch comparison · {{ period_label }} <span class="text-muted">({{ period_start|date:'d M' }}–{{ today|date:'d M Y' }})</span></span>
+    <a class="btn btn-outline btn-sm" href="{% url 'documents:financial_reports' %}?period={{ period }}">Detailed report</a>
+  </div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Branch</th><th>Entry source</th><th class="text-r">Cash in</th><th class="text-r">Cash out</th><th class="text-r">Net flow</th><th class="text-r">Cash remaining</th><th class="text-r">Daily entries</th></tr></thead>
+      <tbody>
+      {% for row in branch_comparison %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td>{% if row.external_reporting %}Daily ledger / summaries{% else %}System transactions{% endif %}</td>
+          <td class="text-r"><span class="ugx cash-flow-chip cash-flow-chip--in">{{ row.inflow|floatformat:0|intcomma }}</span></td>
+          <td class="text-r"><span class="ugx cash-flow-chip cash-flow-chip--out">{{ row.outflow|floatformat:0|intcomma }}</span></td>
+          <td class="text-r ugx">{{ row.net_cash_flow|floatformat:0|intcomma }}</td>
+          <td class="text-r ugx">{{ row.closing_cash|floatformat:0|intcomma }}</td>
+          <td class="text-r">{{ row.entry_count }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="text-c text-muted">No branch is assigned to your account.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="card-box mb-3">
+  <div class="card-head">
+    <span><i class="fas fa-chart-pie"></i> {% if active_branch %}Cash flow mix{% else %}Cash inflows by branch{% endif %} · {{ period_label }}</span>
+  </div>
+  <div class="card-body">
+    {% if pie_chart_has_data %}
+    <div style="height:320px;position:relative">
+      <canvas id="branchCashFlowPieChart" aria-label="{% if active_branch %}Cash in and cash out proportions for {{ active_branch.name }}{% else %}Cash inflows by branch{% endif %}" role="img"></canvas>
+    </div>
+    {{ pie_chart_data|json_script:"branch-cashflow-pie-data" }}
+    {% else %}
+    <p class="text-muted mb-0">No cash movements were recorded for this reporting period.</p>
+    {% endif %}
+  </div>
+</section>
+
+<div class="d-flex gap-2 flex-wrap">
+  <a class="btn btn-outline" href="{% url 'documents:branch_daily_ledger' %}"><i class="fas fa-book"></i> Daily transaction ledger</a>
+  <a class="btn btn-outline" href="{% url 'documents:branch_daily_summaries' %}?open=summary"><i class="fas fa-clipboard-check"></i> Enter end-of-day summary</a>
+  <div class="form-hint align-self-center">Ledger totals feed branch cash-flow reports when available.</div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  var period = document.getElementById('branch-overview-period');
+  if (!period) return;
+  period.addEventListener('change', function(){ period.form.submit(); });
+})();
+</script>
+{% if not active_branch and can_switch_branch and branches %}
+<script>
+(function(){
+  var canvas = document.getElementById('branchPerformanceChart');
+  var dataElement = document.getElementById('branch-performance-data');
+  if (!canvas || !dataElement || !window.Chart) return;
+  var data = JSON.parse(dataElement.textContent);
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: data.labels,
+      datasets: [
+        {label: 'Operating receipts', data: data.sales, backgroundColor: 'rgba(37, 99, 235, .78)'},
+        {label: 'Expenses', data: data.expenses, backgroundColor: 'rgba(220, 38, 38, .72)'},
+        {label: 'Operating profit', data: data.profit, backgroundColor: 'rgba(22, 163, 74, .78)'}
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {y: {beginAtZero: true, ticks: {callback: function(value){ return 'UGX ' + Number(value).toLocaleString(); }}}},
+      plugins: {tooltip: {callbacks: {label: function(context){ return context.dataset.label + ': UGX ' + Number(context.raw).toLocaleString(); }}}}
+    }
+  });
+})();
+</script>
+{% endif %}
+<script>
+(function(){
+  var canvas = document.getElementById('branchCashFlowPieChart');
+  var dataElement = document.getElementById('branch-cashflow-pie-data');
+  if (!canvas || !dataElement || !window.Chart) return;
+  var data = JSON.parse(dataElement.textContent);
+  var palette = [
+    'rgba(37, 99, 235, .82)',
+    'rgba(22, 163, 74, .82)',
+    'rgba(217, 119, 6, .82)',
+    'rgba(124, 58, 237, .82)',
+    'rgba(8, 145, 178, .82)',
+    'rgba(219, 39, 119, .82)'
+  ];
+  var colors = data.labels.map(function(label, index){
+    if (label === 'Cash in') return 'rgba(22, 163, 74, .82)';
+    if (label === 'Cash out') return 'rgba(220, 38, 38, .78)';
+    return palette[index % palette.length];
+  });
+  new Chart(canvas, {
+    type: 'pie',
+    data: {
+      labels: data.labels,
+      datasets: [{data: data.values, backgroundColor: colors}]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {position: 'bottom'},
+        tooltip: {callbacks: {label: function(context){
+          var total = context.dataset.data.reduce(function(sum, value){
+            return sum + Number(value || 0);
+          }, 0);
+          var percentage = total ? (Number(context.raw) / total * 100).toFixed(1) : '0.0';
+          return context.label + ': UGX ' + Number(context.raw).toLocaleString() + ' (' + percentage + '%)';
+        }}}
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

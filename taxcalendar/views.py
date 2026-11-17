@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
+from django.db.models import Q
 from .models import TaxEvent
 from .forms import TaxEventForm
 from django.db.models import Sum
@@ -10,19 +11,44 @@ from datetime import date
 from billing.models import OtherIncome, Payment
 from expenses.models import Expense
 from types import SimpleNamespace
+from core.branch_access import (
+    accessible_branches, get_entry_branch, has_company_wide_branch_access,
+    scope_queryset,
+)
+
+
+def _event_queryset(user):
+    events = TaxEvent.objects.all()
+    if user.is_superuser or (not user.company_id and not user.branch_id):
+        return events
+    if user.company_id and has_company_wide_branch_access(user):
+        return events.filter(
+            Q(created_by__company_id=user.company_id)
+            | Q(assigned_to__company_id=user.company_id)
+        )
+    branches = accessible_branches(user)
+    return events.filter(
+        Q(created_by__branch__in=branches)
+        | Q(assigned_to__branch__in=branches)
+    )
 
 
 @login_required
 def calendar_view(request):
     today = timezone.now().date()
-    events = list(TaxEvent.objects.select_related('assigned_to').all())
+    events = list(_event_queryset(request.user).select_related('assigned_to'))
     from compliance.models import ComplianceDeadline
 
     # Compliance deadlines are the system-generated tax records. Present them
     # alongside manually added calendar events instead of hiding them in a separate section.
-    for deadline in ComplianceDeadline.objects.select_related(
-        'obligation__client', 'obligation__service_type', 'filed_by'
-    ).all():
+    deadlines = scope_queryset(
+        request.user,
+        ComplianceDeadline.objects.select_related(
+            'obligation__client', 'obligation__service_type', 'filed_by',
+        ),
+        branch_path='obligation__client__branch',
+    )
+    for deadline in deadlines:
         if deadline.status in ('filed_and_paid',):
             display_status = 'done'
         elif deadline.status in ('overdue', 'penalty_issued'):
@@ -51,14 +77,20 @@ def calendar_view(request):
         try:
             from datetime import datetime
             filter_day = datetime.strptime(day_param, '%Y-%m-%d').date()
-            day_payments = Payment.objects.filter(created_at__date=filter_day).order_by('-created_at')
-            day_expenses = Expense.objects.filter(created_at__date=filter_day).order_by('-created_at')
+            day_payments = scope_queryset(
+                request.user, Payment.objects.filter(created_at__date=filter_day),
+            ).order_by('-created_at')
+            day_expenses = scope_queryset(
+                request.user, Expense.objects.filter(created_at__date=filter_day),
+            ).order_by('-created_at')
         except Exception:
             filter_day = None
     if status:
         events = [event for event in events if event.status == status]
     # Auto-mark overdue upcoming events
-    TaxEvent.objects.filter(status='upcoming', due_date__lt=today).update(status='missed')
+    _event_queryset(request.user).filter(
+        status='upcoming', due_date__lt=today,
+    ).update(status='missed')
     # Financial summary: money in (payments) and money out (approved expenses) for each day of current month
     year = today.year
     month = today.month
@@ -66,16 +98,23 @@ def calendar_view(request):
     month_days = [date(year, month, d) for d in range(1, days_in_month + 1)]
     daily_summaries = {}
     daily_list = []
+    branch = get_entry_branch(request.user)
     for d in month_days:
-        payment_in = Payment.objects.filter(created_at__date=d).aggregate(total=Sum('amount'))['total'] or 0
-        other_income_in = OtherIncome.objects.filter(created_at__date=d).aggregate(total=Sum('amount'))['total'] or 0
-        money_in = payment_in + other_income_in
-        money_out = Expense.objects.filter(created_at__date=d).aggregate(total=Sum('amount'))['total'] or 0
-        transaction_count = (
-            Payment.objects.filter(created_at__date=d).count()
-            + OtherIncome.objects.filter(created_at__date=d).count()
-            + Expense.objects.filter(created_at__date=d).count()
-        )
+        if branch and branch.external_reporting:
+            from billing.models import BranchDailySummary
+            summary = BranchDailySummary.objects.filter(branch=branch, business_date=d).first()
+            money_in = summary.cash_inflow if summary else 0
+            money_out = summary.cash_outflow if summary else 0
+            transaction_count = 1 if summary else 0
+        else:
+            day_payments = scope_queryset(request.user, Payment.objects.filter(created_at__date=d))
+            day_income = scope_queryset(request.user, OtherIncome.objects.filter(created_at__date=d))
+            day_expenses = scope_queryset(request.user, Expense.objects.filter(created_at__date=d))
+            payment_in = day_payments.aggregate(total=Sum('amount'))['total'] or 0
+            other_income_in = day_income.aggregate(total=Sum('amount'))['total'] or 0
+            money_in = payment_in + other_income_in
+            money_out = day_expenses.aggregate(total=Sum('amount'))['total'] or 0
+            transaction_count = day_payments.count() + day_income.count() + day_expenses.count()
         daily_summaries[d] = {
             'money_in': money_in,
             'money_out': money_out,
@@ -115,7 +154,7 @@ def calendar_view(request):
         'status': status,
         'status_choices': TaxEvent.STATUS,
         'today': today,
-        'form': TaxEventForm(),
+        'form': TaxEventForm(user=request.user),
         'month_days': month_days,
         'daily_summaries': daily_summaries,
         'daily_list': daily_list,
@@ -132,7 +171,7 @@ def calendar_view(request):
 @login_required
 def event_create(request):
     if request.method == 'POST':
-        form = TaxEventForm(request.POST)
+        form = TaxEventForm(request.POST, user=request.user)
         if form.is_valid():
             ev = form.save(commit=False)
             ev.created_by = request.user
@@ -141,7 +180,7 @@ def event_create(request):
             return redirect('taxcalendar:list')
         messages.error(request, 'Please fix the errors below.')
         return render(request, 'taxcalendar/calendar.html', {
-            'events': TaxEvent.objects.all(),
+            'events': _event_queryset(request.user),
             'form': form,
             'open_modal': True,
             'status_choices': TaxEvent.STATUS,
@@ -152,7 +191,10 @@ def event_create(request):
 
 @login_required
 def event_update_status(request, pk):
-    ev = get_object_or_404(TaxEvent, pk=pk)
+    ev = get_object_or_404(
+        _event_queryset(request.user),
+        pk=pk,
+    )
     if request.method == 'POST':
         new_status = request.POST.get('status')
         if new_status in dict(TaxEvent.STATUS):
@@ -163,7 +205,10 @@ def event_update_status(request, pk):
 
 @login_required
 def event_delete(request, pk):
-    ev = get_object_or_404(TaxEvent, pk=pk)
+    ev = get_object_or_404(
+        _event_queryset(request.user),
+        pk=pk,
+    )
     if request.method == 'POST':
         ev.delete()
         messages.success(request, 'Event deleted.')

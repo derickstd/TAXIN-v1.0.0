@@ -35,19 +35,30 @@ from core.reporting import (
     generate_expenses_report,
     generate_performance_summary,
 )
+from core.branch_access import has_company_wide_branch_access, scope_queryset
 
 
 def is_superuser(user):
     """Check if user is allowed to edit transactions."""
-    return bool(user and (getattr(user, 'is_superuser', False) or getattr(user, 'role', None) == 'admin'))
+    return bool(user and (
+        getattr(user, 'is_superuser', False)
+        or getattr(user, 'role', None) in ('admin', 'ceo')
+    ))
 
 
 @login_required
 def duplicate_clients_list(request):
     """List potential duplicate clients for review and merging."""
-    suggestions = DuplicateClientSuggestion.objects.select_related(
+    suggestions = scope_queryset(
+        request.user,
+        DuplicateClientSuggestion.objects.select_related(
         'primary_client', 'duplicate_client', 'reviewed_by'
-    ).all()
+        ),
+        branch_path='primary_client__branch',
+    )
+    suggestions = scope_queryset(
+        request.user, suggestions, branch_path='duplicate_client__branch',
+    )
     
     # Filter form
     filter_form = DuplicateDetectionFiltersForm(request.GET or None)
@@ -81,7 +92,14 @@ def duplicate_clients_list(request):
 @login_required
 def duplicate_client_detail(request, pk):
     """View detail of a duplicate client suggestion."""
-    suggestion = get_object_or_404(DuplicateClientSuggestion, pk=pk)
+    suggestions = scope_queryset(
+        request.user, DuplicateClientSuggestion.objects.all(),
+        branch_path='primary_client__branch',
+    )
+    suggestions = scope_queryset(
+        request.user, suggestions, branch_path='duplicate_client__branch',
+    )
+    suggestion = get_object_or_404(suggestions, pk=pk)
     
     if request.method == 'POST':
         form = DuplicateClientMergeForm(request.POST)
@@ -139,7 +157,10 @@ def transaction_edit_log(request):
         from django.core.exceptions import PermissionDenied
         raise PermissionDenied()
     """View transaction edit logs (superuser only)."""
-    edits = TransactionEditLog.objects.select_related('client', 'edited_by').all()
+    edits = scope_queryset(
+        request.user, TransactionEditLog.objects.select_related('client', 'edited_by'),
+        branch_path='client__branch',
+    )
     
     # Filters
     transaction_type = request.GET.get('transaction_type')
@@ -176,11 +197,21 @@ def edit_transaction(request, transaction_type, transaction_id):
     # Get the transaction object
     transaction_obj = None
     if transaction_type == 'invoice':
-        transaction_obj = get_object_or_404(Invoice, pk=transaction_id)
+        transaction_obj = get_object_or_404(
+            scope_queryset(request.user, Invoice.objects.all()), pk=transaction_id,
+        )
     elif transaction_type == 'job_card':
-        transaction_obj = get_object_or_404(JobCard, pk=transaction_id)
+        transaction_obj = get_object_or_404(
+            scope_queryset(request.user, JobCard.objects.all()), pk=transaction_id,
+        )
     elif transaction_type == 'compliance_deadline':
-        transaction_obj = get_object_or_404(ComplianceDeadline, pk=transaction_id)
+        transaction_obj = get_object_or_404(
+            scope_queryset(
+                request.user, ComplianceDeadline.objects.all(),
+                branch_path='obligation__client__branch',
+            ),
+            pk=transaction_id,
+        )
     else:
         messages.error(request, "Invalid transaction type")
         return redirect('dashboard')
@@ -235,7 +266,11 @@ def edit_transaction(request, transaction_type, transaction_id):
 @login_required
 def duplicate_transactions_alerts(request):
     """View duplicate transaction alerts."""
-    alerts = DuplicateTransactionAlert.objects.select_related('client', 'reviewed_by').all()
+    alerts = scope_queryset(
+        request.user,
+        DuplicateTransactionAlert.objects.select_related('client', 'reviewed_by'),
+        branch_path='client__branch',
+    )
     
     status = request.GET.get('status')
     if status:
@@ -259,6 +294,9 @@ def reporting_settings(request):
     if not company:
         messages.error(request, "You must be assigned to a company")
         return redirect('dashboard')
+    if not has_company_wide_branch_access(request.user):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied()
     
     settings_list = ReportingSettings.objects.filter(company=company)
     
@@ -282,6 +320,9 @@ def reporting_settings(request):
 @login_required
 def reporting_settings_edit(request, pk):
     """Edit a reporting setting."""
+    if not has_company_wide_branch_access(request.user):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied()
     setting = get_object_or_404(ReportingSettings, pk=pk, company=request.user.company)
     
     if request.method == 'POST':
@@ -306,6 +347,9 @@ def generate_report(request, report_type):
     if not company:
         messages.error(request, "You must be assigned to a company")
         return redirect('dashboard')
+    if not has_company_wide_branch_access(request.user):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied()
     
     start_date_str = request.GET.get('start_date')
     end_date_str = request.GET.get('end_date')

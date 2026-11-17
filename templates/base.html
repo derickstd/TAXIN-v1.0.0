@@ -39,30 +39,69 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
-<link rel="stylesheet" href="{% static 'css/app.css' %}?v=6"><style>
-.floating-message-button {
+<link rel="stylesheet" href="{% static 'css/app.css' %}?v=9"><style>
+.floating-payment-button {
   position:fixed;
   right:1rem;
   bottom:1rem;
-  width:56px;
-  height:56px;
-  border-radius:50%;
-  background:#1a3c6e;
+  min-height:44px;
+  padding:0 .85rem;
+  border-radius:6px;
+  background:rgba(22,163,74,.86);
   color:#fff;
   display:flex;
   align-items:center;
   justify-content:center;
-  box-shadow:0 22px 42px rgba(10,33,88,.24);
+  gap:.55rem;
+  text-decoration:none;
+  font-size:.84rem;
+  font-weight:700;
+  font-family:inherit;
+  border:0;
+  cursor:pointer;
+  box-shadow:0 2px 6px rgba(0,0,0,.14);
   z-index:1100;
-  transition:transform .2s ease, box-shadow .2s ease, background .2s ease;
+  transition:background .15s ease, opacity .15s ease;
 }
-.floating-message-button:hover {
-  transform:translateY(-2px) scale(1.03);
-  box-shadow:0 26px 48px rgba(10,33,88,.28);
-  background:#162f5e;
+.floating-payment-button:hover {
+  opacity:1;
+  box-shadow:none;
+  background:#15803d;
+  color:#fff;
 }
+.floating-expense-button {
+  position:fixed;
+  left:calc(var(--sidebar-w) + 1rem);
+  bottom:1rem;
+  min-height:44px;
+  padding:0 .85rem;
+  border-radius:6px;
+  background:#dc2626;
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:.55rem;
+  text-decoration:none;
+  font-size:.84rem;
+  font-weight:700;
+  font-family:inherit;
+  border:0;
+  cursor:pointer;
+  box-shadow:0 2px 6px rgba(0,0,0,.14);
+  z-index:300;
+}
+.floating-expense-button:hover { background:#b91c1c; color:#fff; }
+.floating-expense-button:disabled { opacity:.55; cursor:not-allowed; }
+body[data-theme="dark"] .floating-payment-button { color:#fff; }
+body[data-theme="dark"] .floating-payment-button:hover { color:#fff; }
+body[data-theme="dark"] .floating-expense-button { color:#fff; }
 @media (max-width: 768px) {
-  .floating-message-button { right:.75rem; bottom:.75rem; width:52px; height:52px; }
+  .floating-payment-button { right:.75rem; bottom:.75rem; min-height:44px; }
+  .floating-expense-button { left:.75rem; bottom:.75rem; min-height:44px; }
+}
+@media (max-width: 900px) {
+  .floating-expense-button { left:.75rem; }
 }
 </style>{% block extra_css %}{% endblock %}
 </head>
@@ -95,12 +134,33 @@
     <div class="sb-icon"><img src="{% static 'icons/primeserver.png' %}" alt="Logo" style="width:100%;height:100%;object-fit:contain"></div>
     <div class="sb-brand-text">
       <div class="sb-brand-name">Taxin</div>
-      <div class="sb-brand-sub">Tax &amp; Compliance — KLA</div>
+      <div class="sb-brand-sub">{% if active_branch %}{{ active_branch.name }} workspace{% elif user.company %}{{ user.company.name }} · all branches{% else %}Tax &amp; Compliance — KLA{% endif %}</div>
     </div>
     <button type="button" class="sb-toggle" id="sidebarToggle" title="Toggle sidebar">
       <i class="fas fa-chevron-left" id="sidebarToggleIcon"></i>
     </button>
   </div>
+
+  {% if can_switch_branch %}
+  <div class="sb-workspace-switcher" style="padding:.65rem .8rem;border-bottom:1px solid var(--border)">
+    <form method="post" action="{% url 'dashboard:switch_branch' %}">
+      {% csrf_token %}
+      <label class="form-label" for="active-branch-workspace" style="font-size:.72rem;margin-bottom:.3rem">Workspace</label>
+      <select class="form-control" id="active-branch-workspace" name="branch">
+        <option value="" {% if not active_branch %}selected{% endif %}>All branches</option>
+        {% for branch in workspace_branches %}
+        <option value="{{ branch.pk }}" {% if active_branch.pk == branch.pk %}selected{% endif %}>{{ branch.name }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button class="btn btn-outline btn-sm" type="submit" style="width:100%;margin-top:.4rem">Open workspace</button>
+    </form>
+  </div>
+  {% elif active_branch %}
+  <div class="sb-workspace-switcher" style="padding:.65rem .8rem;border-bottom:1px solid var(--border);font-size:.78rem;color:var(--text-muted)">
+    <i class="fas fa-building"></i> {{ active_branch.name }} workspace
+  </div>
+  {% endif %}
 
   <!-- Scrollable nav -->
   <div class="sb-scroll">
@@ -182,8 +242,11 @@
         <a href="{% url 'billing:create' %}"  class="sb-link" title="New Invoice"><i class="fas fa-file-medical"></i><span class="sb-lbl">New Invoice</span></a>
         <a href="{% url 'billing:aging' %}"   class="sb-link" title="Aging Report"><i class="fas fa-chart-bar"></i><span class="sb-lbl">Aging Report</span></a>
         <a href="{% url 'billing:bad_debts' %}" class="sb-link" title="Bad Debts Report"><i class="fas fa-file-medical-alt"></i><span class="sb-lbl">Bad Debts Report</span></a>
+        {% if not external_reporting_workspace %}
         <a href="{% url 'expenses:list' %}"   class="sb-link {% block nav_exp %}{% endblock %}" title="Expenses"><i class="fas fa-receipt"></i><span class="sb-lbl">Expenses</span></a>
-        <a href="{% url 'expenses:create' %}" class="sb-link" title="Log Expense"><i class="fas fa-plus"></i><span class="sb-lbl">Log Expense</span></a>
+        {% endif %}
+        <a href="{% if active_branch.external_reporting %}{% url 'documents:branch_daily_expense' %}?branch={{ active_branch.pk }}&amp;open=transaction{% else %}{% url 'expenses:create' %}{% endif %}" class="sb-link" title="{% if active_branch.external_reporting %}Branch Daily Entries{% else %}Log Expense{% endif %}"><i class="fas fa-plus"></i><span class="sb-lbl">{% if active_branch.external_reporting %}Branch Daily Entries{% else %}Log Expense{% endif %}</span></a>
+        {% if external_reporting_workspace %}<a href="{% url 'documents:branch_account_transfer' %}?branch={{ active_branch.pk }}" class="sb-link" title="Record bank deposit"><i class="fas fa-building-columns"></i><span class="sb-lbl">Bank Deposit</span></a>{% endif %}
       </div>
     </div>
 
@@ -191,16 +254,24 @@
 
     {% if module_visibility.insights %}
     <div class="sb-group" id="grp-reports" data-module-key="insights">
-      <button type="button" class="sb-group-hd" data-grp="grp-reports" data-href="{% url 'documents:price_list' %}" title="Insights">
+      <button type="button" class="sb-group-hd" data-grp="grp-reports" data-href="{% url 'documents:financial_reports' %}" title="Reports">
         <i class="fas fa-chart-line"></i>
-        <span class="sb-lbl">{{ module_labels.insights|default:'Insights' }}</span>
+        <span class="sb-lbl">Reports</span>
         <i class="fas fa-chevron-down sb-arrow"></i>
       </button>
       <div class="sb-sub" id="sub-reports">
+        <a href="{% url 'documents:financial_reports' %}" class="sb-link {% block nav_financial_reports %}{% endblock %}" title="Financial Reports"><i class="fas fa-scale-balanced"></i><span class="sb-lbl">Cash Flow &amp; Balance Sheet</span></a>
+        <a href="{% url 'documents:branch_account_statement' %}{% if active_branch %}?branch={{ active_branch.pk }}{% endif %}" class="sb-link" title="Branch Account Statement"><i class="fas fa-book-open"></i><span class="sb-lbl">Account Statement</span></a>
+        {% if not active_branch or external_reporting_workspace %}
+        <a href="{% url 'documents:branch_daily_ledger' %}" class="sb-link {% block nav_branch_ledger %}{% endblock %}" title="Branch Daily Transaction Ledger"><i class="fas fa-clipboard-check"></i><span class="sb-lbl">Daily Transaction Ledger</span></a>
+        <a href="{% url 'documents:branch_daily_summaries' %}" class="sb-link" title="Branch Daily Summaries"><i class="fas fa-calendar-check"></i><span class="sb-lbl">Daily Summaries</span></a>
+        {% endif %}
         <a href="{% url 'documents:price_list' %}"     class="sb-link {% block nav_price %}{% endblock %}" title="Price List"><i class="fas fa-tags"></i><span class="sb-lbl">Price List</span></a>
         <a href="{% url 'documents:doc_list' %}"         class="sb-link" title="Documents"><i class="fas fa-folder-open"></i><span class="sb-lbl">Documents</span></a>
+        {% if not external_reporting_workspace %}
         <a href="{% url 'documents:monthly_report' %}" class="sb-link" title="Monthly Report"><i class="fas fa-chart-line"></i><span class="sb-lbl">Monthly Report</span></a>
         <a href="{% url 'documents:audit_books' %}"    class="sb-link" title="Audit Books"><i class="fas fa-book"></i><span class="sb-lbl">Audit Books</span></a>
+        {% endif %}
         <a href="{% url 'notifications:list' %}"       class="sb-link {% block nav_notif %}{% endblock %}" title="Notifications"><i class="fas fa-bell"></i><span class="sb-lbl">Notifications</span></a>
         <a href="{% url 'notifications:message_threads' %}" class="sb-link {% block nav_messages %}{% endblock %}" title="Messages"><i class="fas fa-comments"></i><span class="sb-lbl">Messages</span></a>
       </div>
@@ -243,7 +314,7 @@
   <div class="sb-footer">
     <div class="sb-user-info">
       <div class="sb-uname">{{ user.get_full_name|default:user.username }}</div>
-      <div class="sb-urole">{{ user.get_role_display }}{% if user.phone_whatsapp %} · {{ user.phone_whatsapp }}{% endif %}</div>
+      <div class="sb-urole">{{ user.get_role_display }}{% if active_branch %} · {{ active_branch.name }}{% elif user.branch %} · {{ user.branch.name }}{% endif %}{% if user.phone_whatsapp %} · {{ user.phone_whatsapp }}{% endif %}</div>
     </div>
     <form method="post" action="{% url 'logout' %}" style="margin:0">{% csrf_token %}
       <button type="submit" class="sb-logout-btn">
@@ -353,7 +424,7 @@
       a.addEventListener('click', function(){ if(!isDesktop()) closeMobile(); });
     });
 
-    /* Apply tenant-configured module ordering without duplicating sidebar markup. */
+    /* Apply company-configured module ordering without duplicating sidebar markup. */
     var moduleOrders = {{ module_orders_json|default:'{}'|safe }};
     var scroll = document.querySelector('#sidebar .sb-scroll');
     if(scroll && moduleOrders){
@@ -475,7 +546,285 @@
 </script>
 {% block extra_js %}{% endblock %}
 
-<a href="{% url 'notifications:message_new' %}" class="floating-message-button" title="New staff message"><i class="fas fa-comment-alt"></i></a>
+<button type="button" class="floating-payment-button" id="floatingPaymentButton" title="Record a payment">
+  <i class="fas fa-money-bill-wave"></i><span>Record Payment</span>
+</button>
+{% if active_branch %}
+<a class="floating-expense-button"
+   href="{% if active_branch.external_reporting %}{% url 'documents:branch_daily_expense' %}?branch={{ active_branch.pk }}&amp;open=transaction{% else %}{% url 'expenses:create' %}{% endif %}"
+   title="Record an expense for {{ active_branch.name }}"
+   aria-label="Record an expense for {{ active_branch.name }}">
+  <i class="fas fa-receipt"></i><span>Record Expense</span>
+</a>
+{% else %}
+<button type="button" class="floating-expense-button" disabled
+        title="Select a branch workspace before recording an expense"
+        aria-label="Select a branch workspace before recording an expense">
+  <i class="fas fa-receipt"></i><span>Record Expense</span>
+</button>
+{% endif %}
+<div class="modal-overlay" id="quickPaymentOverlay" aria-hidden="true">
+  <div class="modal-box" style="max-width:680px" role="dialog" aria-modal="true" aria-labelledby="quickPaymentTitle">
+    <div id="quickPaymentPopoverContent" aria-live="polite">
+      <div class="text-muted">Loading payment form…</div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var trigger = document.getElementById('floatingPaymentButton');
+  var overlay = document.getElementById('quickPaymentOverlay');
+  var content = document.getElementById('quickPaymentPopoverContent');
+  if (!trigger || !overlay || !content) return;
+
+  function showPaymentPanel(){
+    var paymentPanel = document.getElementById('quickPaymentPanel');
+    var customerPanel = document.getElementById('quickCustomerPanel');
+    var servicePanel = document.getElementById('quickServicePanel');
+    var categoryPanel = document.getElementById('quickServiceCategoryInline');
+    var categoryTrigger = document.querySelector('[data-open-quick-category]');
+    if (customerPanel) customerPanel.style.display = 'none';
+    if (servicePanel) servicePanel.style.display = 'none';
+    if (categoryPanel) categoryPanel.hidden = true;
+    if (categoryTrigger) categoryTrigger.setAttribute('aria-expanded', 'false');
+    if (paymentPanel) paymentPanel.style.display = '';
+  }
+
+  function showServicePanel(){
+    var paymentPanel = document.getElementById('quickPaymentPanel');
+    var customerPanel = document.getElementById('quickCustomerPanel');
+    var servicePanel = document.getElementById('quickServicePanel');
+    var categoryPanel = document.getElementById('quickServiceCategoryInline');
+    var categoryTrigger = document.querySelector('[data-open-quick-category]');
+    if (paymentPanel) paymentPanel.style.display = 'none';
+    if (customerPanel) customerPanel.style.display = 'none';
+    if (categoryPanel) categoryPanel.hidden = true;
+    if (categoryTrigger) categoryTrigger.setAttribute('aria-expanded', 'false');
+    if (servicePanel) servicePanel.style.display = '';
+    var serviceName = document.getElementById('quick-service-name');
+    if (serviceName) serviceName.focus();
+  }
+
+  function addServiceCategory(button){
+    var panel = document.getElementById('quickServiceCategoryInline');
+    var input = document.getElementById('quick-service-category-name');
+    var status = document.getElementById('quickServiceCategoryStatus');
+    var serviceForm = document.querySelector('[data-quick-form="service"]');
+    var categorySelect = document.getElementById('quick-service-category');
+    if (!panel || !input || !status || !serviceForm || !categorySelect) return;
+
+    var name = input.value.trim();
+    if (!name) {
+      status.textContent = 'Enter a category name.';
+      input.focus();
+      return;
+    }
+
+    var body = new FormData();
+    body.append('name', name);
+    var csrf = serviceForm.querySelector('[name="csrfmiddlewaretoken"]');
+    if (csrf) body.append('csrfmiddlewaretoken', csrf.value);
+    status.textContent = '';
+    button.disabled = true;
+    fetch(panel.dataset.createUrl, {
+      method:'POST',
+      body:body,
+      headers:{'X-Requested-With':'XMLHttpRequest'},
+      credentials:'same-origin'
+    }).then(function(response){
+      return response.json().then(function(data){
+        if (!response.ok) throw data;
+        return data;
+      });
+    }).then(function(data){
+      var option = Array.prototype.find.call(categorySelect.options, function(item){
+        return item.value === data.value;
+      });
+      if (!option) {
+        option = document.createElement('option');
+        option.value = data.value;
+        option.textContent = data.label;
+        categorySelect.appendChild(option);
+      }
+      categorySelect.value = data.value;
+      status.textContent = data.existing ? 'Category is already available.' : 'Category added.';
+      input.value = '';
+      panel.hidden = true;
+      var trigger = document.querySelector('[data-open-quick-category]');
+      if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    }).catch(function(error){
+      status.textContent = error.error || 'Could not add the category. Please try again.';
+    }).finally(function(){
+      button.disabled = false;
+    });
+  }
+
+  function initializePaymentSelects(){
+    if (!window.jQuery || !jQuery.fn.select2) return;
+    jQuery(content).find('.s2').filter(function(){
+      return !jQuery(this).hasClass('select2-hidden-accessible');
+    }).select2({
+      theme:'bootstrap-5',
+      width:'100%',
+      dropdownParent:jQuery(overlay)
+    });
+  }
+
+  function closeOverlay(target){
+    if (!target) return;
+    target.classList.remove('open');
+    target.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  trigger.addEventListener('click', function(){
+    overlay.classList.add('open');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    if (content.dataset.loaded === 'true') {
+      showPaymentPanel();
+      return;
+    }
+    fetch('{% url "billing:quick_payment" %}?popover=1', {credentials:'same-origin'})
+      .then(function(response){
+        if (!response.ok) throw new Error('Could not load the payment form.');
+        return response.text();
+      })
+      .then(function(html){
+        content.innerHTML = html;
+        content.dataset.loaded = 'true';
+        initializePaymentSelects();
+        var amount = content.querySelector('#payment-amount');
+        if (amount) amount.focus();
+      })
+      .catch(function(){
+        content.innerHTML = '<div class="modal-hd"><h5>Record Payment</h5><button type="button" class="modal-close" data-quick-payment-close aria-label="Close">&times;</button></div><div class="alert alert-danger">Could not load the payment form. Please try again.</div>';
+      });
+  });
+
+  document.addEventListener('click', function(event){
+    var closeButton = event.target.closest('[data-quick-payment-close]');
+    if (closeButton) {
+      closeOverlay(closeButton.closest('.modal-overlay'));
+      return;
+    }
+    if (event.target === overlay || event.target.id === 'quickPaymentPageOverlay') {
+      closeOverlay(event.target);
+    }
+    if (event.target.closest('[data-open-quick-customer]')) {
+      var paymentPanel = document.getElementById('quickPaymentPanel');
+      var customerPanel = document.getElementById('quickCustomerPanel');
+      if (paymentPanel) paymentPanel.style.display = 'none';
+      if (customerPanel) customerPanel.style.display = '';
+      var customerName = document.getElementById('quick-customer-name');
+      if (customerName) customerName.focus();
+    }
+    if (event.target.closest('[data-open-quick-service]')) showServicePanel();
+    if (event.target.closest('[data-close-quick-customer]')) showPaymentPanel();
+    if (event.target.closest('[data-close-quick-service]')) showPaymentPanel();
+    var categoryTrigger = event.target.closest('[data-open-quick-category]');
+    if (categoryTrigger) {
+      var categoryPanel = document.getElementById('quickServiceCategoryInline');
+      var categoryName = document.getElementById('quick-service-category-name');
+      if (categoryPanel) categoryPanel.hidden = false;
+      categoryTrigger.setAttribute('aria-expanded', 'true');
+      if (categoryName) categoryName.focus();
+    }
+    if (event.target.closest('[data-cancel-quick-category]')) {
+      var categoryPanel = document.getElementById('quickServiceCategoryInline');
+      var categoryStatus = document.getElementById('quickServiceCategoryStatus');
+      var categoryTrigger = document.querySelector('[data-open-quick-category]');
+      if (categoryPanel) categoryPanel.hidden = true;
+      if (categoryStatus) categoryStatus.textContent = '';
+      if (categoryTrigger) categoryTrigger.setAttribute('aria-expanded', 'false');
+    }
+    var saveCategoryButton = event.target.closest('[data-save-quick-category]');
+    if (saveCategoryButton) addServiceCategory(saveCategoryButton);
+  });
+
+  document.addEventListener('keydown', function(event){
+  if (event.key === 'Escape' && overlay.classList.contains('open')) closeOverlay(overlay);
+  if (event.key === 'Escape') {
+    var pageOverlay = document.getElementById('quickPaymentPageOverlay');
+    if (pageOverlay && pageOverlay.classList.contains('open')) closeOverlay(pageOverlay);
+  }
+  });
+
+  document.addEventListener('submit', function(event){
+    var form = event.target.closest('[data-quick-form]');
+    if (!form) return;
+    event.preventDefault();
+    var kind = form.dataset.quickForm;
+    var statusId = {
+      payment:'quickPaymentStatus',
+      customer:'quickCustomerStatus',
+      service:'quickServiceStatus'
+    }[kind];
+    var status = document.getElementById(statusId);
+    var submit = form.querySelector('[type="submit"]');
+    if (status) status.textContent = '';
+    if (submit) submit.disabled = true;
+    fetch(form.action, {
+      method:'POST',
+      body:new FormData(form),
+      headers:{'X-Requested-With':'XMLHttpRequest'},
+      credentials:'same-origin'
+    }).then(function(response){
+      return response.json().then(function(data){
+        if (!response.ok) throw data;
+        return data;
+      });
+    }).then(function(data){
+      if (kind === 'payment') {
+        if (status) status.textContent = data.message || 'Payment recorded. Refreshing…';
+        window.location.reload();
+        return;
+      }
+      if (kind === 'service') {
+        var serviceSelect = document.getElementById('payment-service');
+        if (serviceSelect) {
+          var serviceOption = document.createElement('option');
+          serviceOption.value = data.id;
+          serviceOption.textContent = data.label;
+          serviceOption.dataset.branchIds = (data.branch_ids || []).join(',');
+          serviceSelect.appendChild(serviceOption);
+          serviceSelect.value = data.id;
+          if (window.jQuery && jQuery.fn.select2) jQuery(serviceSelect).trigger('change');
+        }
+        form.reset();
+        showPaymentPanel();
+        var paymentStatus = document.getElementById('quickPaymentStatus');
+        if (paymentStatus) paymentStatus.textContent = 'Service added to the branch catalogue.';
+        return;
+      }
+      var select = document.getElementById('payment-client');
+      if (select) {
+        var option = document.createElement('option');
+        option.value = data.id;
+        option.textContent = data.label;
+        select.appendChild(option);
+        select.value = data.id;
+      }
+      form.reset();
+      showPaymentPanel();
+      var paymentStatus = document.getElementById('quickPaymentStatus');
+      if (paymentStatus) paymentStatus.textContent = data.message;
+    }).catch(function(error){
+      if (status) {
+        var detail = error.error || 'Could not save the form. Please try again.';
+        if (error.errors) {
+          detail += ' ' + Object.keys(error.errors).map(function(field){
+            return field + ': ' + error.errors[field].join(' ');
+          }).join(' ');
+        }
+        status.textContent = detail;
+      }
+    }).finally(function(){
+      if (submit) submit.disabled = false;
+    });
+  });
+})();
+</script>
 
 <!-- PWA: Service Worker + Install Prompt -->
 <script>

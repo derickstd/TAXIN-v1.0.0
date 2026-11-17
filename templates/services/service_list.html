@@ -137,6 +137,14 @@
         <textarea name="{{ service_form.description.html_name }}" id="{{ service_form.description.id_for_label }}" class="form-ctrl" rows="3" placeholder="Optional notes shown in the catalogue">{{ service_form.description.value|default:'' }}</textarea>
         {% if service_form.description.errors %}<div class="err-msg">{{ service_form.description.errors|join:', ' }}</div>{% endif %}
       </div>
+      {% if available_branches %}
+      <div style="margin-bottom:.8rem">
+        <label class="form-label" for="{{ service_form.branches.id_for_label }}">Available to branches</label>
+        {{ service_form.branches }}
+        <div class="form-hint">Only the selected branch catalogues will include this service.</div>
+        {% if service_form.branches.errors %}<div class="err-msg">{{ service_form.branches.errors|join:', ' }}</div>{% endif %}
+      </div>
+      {% endif %}
       <div class="flex gap-2 mt-3">
         <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Add Service</button>
         <button type="button" class="btn btn-outline" onclick="document.getElementById('addModal').classList.remove('open')">Cancel</button>

@@ -1,17 +1,19 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.views.decorators.http import require_POST
 from django.db.models import Q
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from decimal import Decimal
-from .models import JobCard, JobCardLineItem, ServiceType, StaffActivityLog, TimeEntry
+from .models import JobCard, JobCardLineItem, ServiceCategory, ServiceType, StaffActivityLog, TimeEntry
 from .forms import JobCardForm, LineItemFormSet, ServiceTypeForm
 import calendar as cal
 from core.utils import paginate_queryset
 from clients.models import Client
 from core.models import User, AuditLog
+from core.branch_access import accessible_branches, get_entry_branch, scope_queryset
 
 
 def _auto_log_time(job, user, description, hours=Decimal('0.25')):
@@ -107,13 +109,26 @@ def _can_manage_services(user):
     return user.is_superuser or user.is_manager_or_admin()
 
 
+def _external_branch_message(request):
+    branch = get_entry_branch(request.user)
+    if branch and branch.external_reporting:
+        messages.info(request, 'Use Branch Daily Entries for this branch; daily totals come from its external accounting system.')
+        return True
+    return False
+
+
 def _service_catalogue_context(request, service_form=None, open_add_modal=False):
-    services = ServiceType.objects.all().order_by('category', 'name') if _can_manage_services(request.user) else ServiceType.objects.filter(is_active=True).order_by('category', 'name')
+    services = scope_queryset(
+        request.user, ServiceType.objects.all(), branch_path='branches',
+    ).distinct()
+    if not _can_manage_services(request.user):
+        services = services.filter(is_active=True)
     return {
-        'services': services,
+        'services': services.order_by('category', 'name'),
         'can_manage_services': _can_manage_services(request.user),
-        'service_form': service_form or ServiceTypeForm(),
+        'service_form': service_form or ServiceTypeForm(user=request.user),
         'open_add_modal': open_add_modal,
+        'available_branches': accessible_branches(request.user),
     }
 
 
@@ -152,7 +167,10 @@ def _get_job_task_counts(job):
 
 @login_required
 def jobcard_list(request):
-    all_jobs_qs = JobCard.objects.select_related('client','assigned_to').prefetch_related('line_items').all()
+    all_jobs_qs = scope_queryset(
+        request.user,
+        JobCard.objects.select_related('client', 'assigned_to').prefetch_related('line_items'),
+    )
     status = request.GET.get('status','')
     q = request.GET.get('q','')
     jobs_qs = all_jobs_qs
@@ -182,7 +200,7 @@ def jobcard_list(request):
 
 @login_required
 def jobcard_detail(request, pk):
-    job = get_object_or_404(JobCard, pk=pk)
+    job = get_object_or_404(scope_queryset(request.user, JobCard.objects.all()), pk=pk)
     logs = job.activity_logs.select_related('staff').all()
     time_entries = job.time_entries.select_related('staff').all()
     total_hours = sum(t.hours for t in time_entries)
@@ -202,14 +220,16 @@ def jobcard_detail(request, pk):
 
 @login_required
 def jobcard_create(request):
+    if _external_branch_message(request):
+        return redirect('documents:branch_daily_summaries')
     today = timezone.now()
     years = list(range(today.year - 1, today.year + 3))
     from core.models import User
     default_officer = User.objects.filter(role='tax_officer', is_active=True).first()
 
     if request.method == 'POST':
-        form = JobCardForm(request.POST)
-        formset = LineItemFormSet(request.POST, prefix='line_items')
+        form = JobCardForm(request.POST, user=request.user)
+        formset = LineItemFormSet(request.POST, prefix='line_items', form_kwargs={'user': request.user})
         intake_pk = request.POST.get('walkin_intake_pk')
         from_walkin = bool(intake_pk) or bool(request.POST.get('new_job_reg'))
 
@@ -238,11 +258,13 @@ def jobcard_create(request):
                 if candidate:
                     svc_id = candidate
                     break
-        svc = ServiceType.objects.filter(pk=svc_id).first() if svc_id else None
+        svc = scope_queryset(
+            request.user, ServiceType.objects.filter(is_active=True), branch_path='branches',
+        ).filter(pk=svc_id).first() if svc_id else None
         client_obj = None
         client_pk = request.POST.get('client')
         if client_pk:
-            client_obj = Client.objects.filter(pk=client_pk).first()
+            client_obj = scope_queryset(request.user, Client.objects.all()).filter(pk=client_pk).first()
         similar = check_duplicate_transaction(
             client=client_obj,
             service_type=svc,
@@ -274,6 +296,7 @@ def jobcard_create(request):
                 job.period_month = period_month
                 job.period_year = period_year
             job.created_by = request.user
+            job.branch = get_entry_branch(request.user)
             job.save()
 
             if from_walkin:
@@ -291,7 +314,9 @@ def jobcard_create(request):
                     default_price = Decimal('0')
                 svc = None
                 if svc_id:
-                    svc = ServiceType.objects.filter(pk=svc_id).first()
+                    svc = scope_queryset(
+                        request.user, ServiceType.objects.filter(is_active=True), branch_path='branches',
+                    ).filter(pk=svc_id).first()
                 vat = price * Decimal('0.18') if svc and svc.vat_applicable else Decimal('0')
                 JobCardLineItem.objects.create(
                     job_card=job,
@@ -340,8 +365,8 @@ def jobcard_create(request):
         initial = {}
         if client_id:
             initial['client'] = client_id
-        form = JobCardForm(initial=initial)
-        formset = LineItemFormSet(prefix='line_items')
+        form = JobCardForm(initial=initial, user=request.user)
+        formset = LineItemFormSet(prefix='line_items', form_kwargs={'user': request.user})
 
     return render(request, 'services/jobcard_form.html', {
         'form': form, 'formset': formset, 'title': 'New Job Card',
@@ -397,6 +422,8 @@ def _get_quick_create_period(request):
 def jobcard_quick_create(request):
     if request.method != 'POST':
         return redirect('services:list')
+    if _external_branch_message(request):
+        return redirect('documents:branch_daily_summaries')
 
     from core.duplicate_detection import check_duplicate_transaction
     from billing.models import Invoice, Payment
@@ -407,8 +434,10 @@ def jobcard_quick_create(request):
         'jobcardlineitem_set-0-service_type',
         'line_items-0-service_type'
     )
-    client = Client.objects.filter(pk=client_pk).first() if client_pk else None
-    service = ServiceType.objects.filter(pk=service_pk).first() if service_pk else None
+    client = scope_queryset(request.user, Client.objects.all()).filter(pk=client_pk).first() if client_pk else None
+    service = scope_queryset(
+        request.user, ServiceType.objects.filter(is_active=True), branch_path='branches',
+    ).filter(pk=service_pk).first() if service_pk else None
     period_month, period_year = _get_quick_create_period(request)
 
     if not client or not service:
@@ -448,10 +477,17 @@ def jobcard_quick_create(request):
         'jobcardlineitem_set-0-assigned_to',
         'line_items-0-assigned_to'
     )
-    assigned_to = User.objects.filter(pk=assigned_to_id).first() if assigned_to_id else None
+    staff = User.objects.filter(pk=assigned_to_id, is_active=True, is_active_staff=True)
+    if request.user.company_id and not request.user.is_superuser:
+        if request.user.role in ('admin', 'ceo'):
+            staff = staff.filter(company_id=request.user.company_id)
+        else:
+            staff = staff.filter(branch_id=request.user.branch_id)
+    assigned_to = staff.first() if assigned_to_id else None
 
     job = JobCard(
         client=client,
+        branch=get_entry_branch(request.user),
         assigned_to=assigned_to,
         priority=request.POST.get('priority', 'normal'),
         notes=request.POST.get('notes', '').strip(),
@@ -509,6 +545,7 @@ def jobcard_quick_create(request):
                 payment_amount = invoice.grand_total
             Payment.objects.create(
                 invoice=invoice,
+                branch=invoice.branch,
                 amount=payment_amount,
                 method=request.POST.get('payment_method', 'cash'),
                 reference=request.POST.get('payment_reference', ''),
@@ -526,15 +563,21 @@ def jobcard_quick_create(request):
 
 @login_required
 def jobcard_edit(request, pk):
-    job = get_object_or_404(JobCard, pk=pk)
+    job = get_object_or_404(scope_queryset(request.user, JobCard.objects.all()), pk=pk)
+    if job.branch_id and job.branch.external_reporting:
+        messages.info(request, 'External-system branch transactions are recorded as daily summaries.')
+        return redirect('documents:branch_daily_summaries')
     today = timezone.now()
     years = list(range(today.year - 1, today.year + 3))
     from core.models import User
     default_officer = User.objects.filter(role='tax_officer', is_active=True).first()
 
     if request.method == 'POST':
-        form = JobCardForm(request.POST, instance=job)
-        formset = LineItemFormSet(request.POST, prefix='line_items', instance=job)
+        form = JobCardForm(request.POST, instance=job, user=request.user)
+        formset = LineItemFormSet(
+            request.POST, prefix='line_items', instance=job,
+            form_kwargs={'user': request.user},
+        )
         period_month, period_year = _get_first_item_period(request)
         if form.is_valid() and formset.is_valid():
             job = form.save(commit=False)
@@ -575,8 +618,8 @@ def jobcard_edit(request, pk):
             return redirect('services:detail', pk=job.pk)
         messages.error(request, 'Please fix the errors below.')
     else:
-        form = JobCardForm(instance=job)
-        formset = LineItemFormSet(prefix='line_items', instance=job)
+        form = JobCardForm(instance=job, user=request.user)
+        formset = LineItemFormSet(prefix='line_items', instance=job, form_kwargs={'user': request.user})
 
     return render(request, 'services/jobcard_form.html', {
         'form': form, 'formset': formset, 'title': f'Edit {job.job_number}',
@@ -588,7 +631,7 @@ def jobcard_edit(request, pk):
 
 @login_required
 def jobcard_delete(request, pk):
-    job = get_object_or_404(JobCard, pk=pk)
+    job = get_object_or_404(scope_queryset(request.user, JobCard.objects.all()), pk=pk)
     if request.method == 'POST':
         if getattr(job, 'invoice', None) and job.invoice.payments.exists():
             messages.error(request, 'Cannot delete a job card when its invoice has recorded payments.')
@@ -614,7 +657,7 @@ def _auto_create_invoice(job, user):
     due = job.due_date or (timezone.now().date() + timezone.timedelta(days=14))
     grand_total = subtotal + vat_total
     invoice = Invoice.objects.create(
-        client=job.client, job_card=job, due_date=due,
+        client=job.client, job_card=job, branch=job.branch, due_date=due,
         subtotal=subtotal, vat_total=vat_total, grand_total=grand_total,
         status='sent' if subtotal > 0 else 'draft', created_by=user,
     )
@@ -735,7 +778,13 @@ def ajax_check_duplicate(request):
 
 @login_required
 def update_line_status(request, pk):
-    item = get_object_or_404(JobCardLineItem, pk=pk)
+    item = get_object_or_404(
+        scope_queryset(request.user, JobCardLineItem.objects.all(), branch_path='job_card__branch'),
+        pk=pk,
+    )
+    if item.job_card.branch_id and item.job_card.branch.external_reporting:
+        messages.info(request, 'External-system branch transactions are recorded as daily summaries.')
+        return redirect('documents:branch_daily_summaries')
     if request.method == 'POST':
         new_status = request.POST.get('status')
         if new_status in dict(JobCardLineItem.ITEM_STATUS):
@@ -799,6 +848,7 @@ def update_line_status(request, pk):
                     if amount_to_record > 0:
                         Payment.objects.create(
                             invoice=inv,
+                            branch=inv.branch,
                             amount=amount_to_record,
                             method=inv.payment_method if inv.payment_method in dict(Payment.METHOD) else 'cash',
                             reference=f'Auto-recorded when {job.job_number} was marked handled and paid',
@@ -828,7 +878,7 @@ def update_line_status(request, pk):
 @login_required
 def update_jobcard_status(request, pk):
     """Job card status is now auto-updated based on line items. Manual updates disabled."""
-    job = get_object_or_404(JobCard, pk=pk)
+    job = get_object_or_404(scope_queryset(request.user, JobCard.objects.all()), pk=pk)
     messages.info(request, 'Job card status is automatically updated based on line item progress. Update individual line items to change job status.')
     return redirect('services:detail', pk=pk)
 
@@ -849,11 +899,12 @@ def service_create(request):
         messages.error(request, 'Only managers and admins can add services.')
         return redirect('services:catalogue')
     if request.method == 'POST':
-        form = ServiceTypeForm(request.POST)
+        form = ServiceTypeForm(request.POST, user=request.user)
         if form.is_valid():
             service = form.save(commit=False)
             service.is_active = True
             service.save()
+            form.save_m2m()
             messages.success(request, f'Service "{service.name}" added.')
             return redirect('services:catalogue')
         messages.error(request, 'Please fix the service details below.')
@@ -864,12 +915,81 @@ def service_create(request):
 
 
 @login_required
+@require_POST
+def service_quick_create(request):
+    if not _can_manage_services(request.user):
+        return JsonResponse({'error': 'Only managers and admins can add services.'}, status=403)
+    form = ServiceTypeForm(request.POST, user=request.user)
+    if not form.is_valid():
+        return JsonResponse({
+            'error': 'Please correct the service details.',
+            'errors': {
+                field: [str(error) for error in errors]
+                for field, errors in form.errors.items()
+            },
+        }, status=400)
+    if not form.cleaned_data['branches']:
+        return JsonResponse({
+            'error': 'Select at least one branch for this service.',
+            'errors': {'branches': ['Select at least one branch.']},
+        }, status=400)
+
+    service = form.save(commit=False)
+    service.is_active = True
+    service.save()
+    form.save_m2m()
+    return JsonResponse({
+        'success': True,
+        'id': service.pk,
+        'name': service.name,
+        'label': service.name,
+        'branch_ids': list(service.branches.values_list('pk', flat=True)),
+    })
+
+
+@login_required
+@require_POST
+def service_category_quick_create(request):
+    if not _can_manage_services(request.user):
+        return JsonResponse({'error': 'Only managers and admins can add service categories.'}, status=403)
+
+    name = request.POST.get('name', '').strip()
+    if not name:
+        return JsonResponse({'error': 'Enter a category name.'}, status=400)
+    if len(name) > 30:
+        return JsonResponse({'error': 'Category names must be 30 characters or fewer.'}, status=400)
+
+    for value, label in ServiceType.CATEGORY:
+        if name.casefold() in (value.casefold(), label.casefold()):
+            return JsonResponse({
+                'success': True,
+                'value': value,
+                'label': label,
+                'existing': True,
+            })
+
+    category, created = ServiceCategory.objects.get_or_create(
+        name__iexact=name,
+        defaults={'name': name},
+    )
+    return JsonResponse({
+        'success': True,
+        'value': category.name,
+        'label': category.name,
+        'existing': not created,
+    })
+
+
+@login_required
 def service_toggle(request, pk):
     """Admin/Manager only: activate or deactivate a service."""
     if not _can_manage_services(request.user):
         messages.error(request, 'Permission denied.')
         return redirect('services:catalogue')
-    svc = get_object_or_404(ServiceType, pk=pk)
+    svc = get_object_or_404(
+        scope_queryset(request.user, ServiceType.objects.all(), branch_path='branches').distinct(),
+        pk=pk,
+    )
     if request.method == 'POST':
         action = request.POST.get('action', 'toggle')
         if action in ('delete', 'remove'):
@@ -894,7 +1014,10 @@ def service_toggle(request, pk):
 
 @login_required
 def log_time(request, pk):
-    job = get_object_or_404(JobCard, pk=pk)
+    job = get_object_or_404(scope_queryset(request.user, JobCard.objects.all()), pk=pk)
+    if job.branch_id and job.branch.external_reporting:
+        messages.info(request, 'External-system branch transactions are recorded as daily summaries.')
+        return redirect('documents:branch_daily_summaries')
     if request.method == 'POST':
         hours = request.POST.get('hours', '').strip()
         description = request.POST.get('description', '').strip()

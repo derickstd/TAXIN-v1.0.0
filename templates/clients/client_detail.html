@@ -40,6 +40,7 @@
         <div class="stat-row"><span>Total Invoiced</span><span class="ugx">UGX {{ total_invoiced|floatformat:0|intcomma }}</span></div>
         <div class="stat-row"><span>Total Paid</span><span class="ugx ugx-green">UGX {{ total_paid|floatformat:0|intcomma }}</span></div>
         <div class="stat-row"><span>Collected to Date</span><span class="ugx ugx-green">UGX {{ total_collected|floatformat:0|intcomma }}</span></div>
+        <div class="stat-row"><span>Unapplied Payments</span><span class="ugx">UGX {{ unapplied_payment_total|floatformat:0|intcomma }}</span></div>
         <div class="stat-row" style="border-top:2px solid #f0f2f5;padding-top:.6rem">
           <span style="font-weight:700">Balance Due</span>
           <span class="ugx {% if balance > 0 %}ugx-red{% else %}ugx-green{% endif %}" style="font-weight:800;font-size:1rem">UGX {{ balance|floatformat:0|intcomma }}</span>
@@ -115,12 +116,17 @@
         <div style="padding:.7rem .9rem;border-bottom:1px solid #f3f4f6;font-size:.82rem">
           <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start">
             <div>
-              <div class="fw-6 ugx-g">UGX {{ payment.amount|floatformat:0|intcomma }}</div>
+              <div class="cash-flow-chip cash-flow-chip--in">UGX {{ payment.amount|floatformat:0|intcomma }}</div>
               <div class="text-muted">{{ payment.payment_date }} &bull; {{ payment.get_method_display }}</div>
+              {% if payment.service_type %}<div class="text-muted">Service: {{ payment.service_type.name }}</div>{% endif %}
               {% if payment.reference %}<div class="text-muted">Ref: {{ payment.reference }}</div>{% endif %}
             </div>
             <div class="text-r">
+              {% if payment.invoice %}
               <div class="fw-6"><a href="{% url 'billing:detail' payment.invoice.pk %}" style="color:var(--blue)">{{ payment.invoice.invoice_number }}</a></div>
+              {% else %}
+              <div class="fw-6">Direct payment</div>
+              {% endif %}
               <div class="text-muted">{{ payment.received_by.get_full_name|default:"—" }}</div>
             </div>
           </div>

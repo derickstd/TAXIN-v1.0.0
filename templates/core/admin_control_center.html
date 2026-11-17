@@ -4,8 +4,8 @@
 <div style="padding:2rem;max-width:1400px;margin:0 auto;">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem;">
     <div>
-      <h1 style="margin:0;color:#1A3C6E;font-size:2rem;font-weight:800;">Tenant Control Center</h1>
-      <p style="margin:.4rem 0 0;color:#6b7280;">Manage visibility and shortcuts for {{ tenant_name }} only. Changes stay inside this tenant and do not affect other tenants.</p>
+      <h1 style="margin:0;color:#1A3C6E;font-size:2rem;font-weight:800;">Company Control Center</h1>
+      <p style="margin:.4rem 0 0;color:#6b7280;">Manage visibility, staff roles, and shortcuts for {{ company_name }} and its branches.</p>
     </div>
     <a href="{% url 'core:admin_dashboard' %}" style="background:#6b7280;color:#fff;padding:.8rem 1.15rem;border-radius:8px;text-decoration:none;font-weight:700;">
       <i class="fas fa-arrow-left" style="margin-right:.5rem;"></i>Back to admin dashboard
@@ -36,13 +36,13 @@
 
     {% if can_manage_roles %}
     <div style="background:#fff;border-radius:14px;padding:1.5rem;box-shadow:0 2px 10px rgba(0,0,0,.08);margin-bottom:1.5rem;">
-      <h2 style="margin:0 0 1rem;color:#1A3C6E;font-size:1.15rem;font-weight:800;">Tenant role control</h2>
-      <p style="margin:0 0 1rem;color:#6b7280;">Assign staff roles for {{ tenant_name }}. CEO and Admin roles can manage this control center.</p>
+      <h2 style="margin:0 0 1rem;color:#1A3C6E;font-size:1.15rem;font-weight:800;">Staff role control</h2>
+      <p style="margin:0 0 1rem;color:#6b7280;">Assign staff roles for {{ company_name }}. CEO and Admin roles can manage this control center.</p>
       <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;">
         <label style="display:flex;flex-direction:column;gap:.35rem;color:#374151;font-weight:700;">Staff member
           <select name="role_user" style="min-width:240px;padding:.65rem;border:1px solid #d1d5db;border-radius:6px;">
             <option value="">Select staff member</option>
-            {% for tenant_user in tenant_users %}<option value="{{ tenant_user.pk }}">{{ tenant_user.get_full_name|default:tenant_user.username }} ({{ tenant_user.get_role_display }})</option>{% endfor %}
+            {% for company_user in company_users %}<option value="{{ company_user.pk }}">{{ company_user.get_full_name|default:company_user.username }} ({{ company_user.get_role_display }})</option>{% endfor %}
           </select>
         </label>
         <label style="display:flex;flex-direction:column;gap:.35rem;color:#374151;font-weight:700;">Role

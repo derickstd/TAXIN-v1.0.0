@@ -77,8 +77,8 @@
         <div style="font-size:1.6rem;font-weight:800;color:#10b981;">{{ health.total_users }}</div>
       </div>
       <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #f59e0b;">
-        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Tenants</div>
-        <div style="font-size:1.6rem;font-weight:800;color:#f59e0b;">{{ health.total_tenants }}</div>
+        <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Branches</div>
+        <div style="font-size:1.6rem;font-weight:800;color:#f59e0b;">{{ health.total_branches }}</div>
       </div>
       <div style="background:#f3f4f6;padding:1rem;border-radius:8px;border-left:4px solid #8b5cf6;">
         <div style="color:#6b7280;font-size:.85rem;font-weight:600;margin-bottom:.5rem;">Audit Logs</div>
@@ -86,27 +86,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Alerts -->
-  {% if health.pending_tenants > 0 or health.failed_tenants > 0 %}
-  <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:1.5rem;border-radius:8px;margin-bottom:2rem;">
-    <h4 style="margin:0 0 1rem;color:#92400e;font-weight:700;font-size:.95rem;">⚠️ Alerts</h4>
-    <ul style="margin:0;padding:0 0 0 1.5rem;color:#92400e;font-size:.95rem;">
-      {% if health.pending_tenants > 0 %}
-      <li style="margin-bottom:.5rem;">
-        <strong>{{ health.pending_tenants }}</strong> pending tenant(s) awaiting approval
-        <a href="{% url 'core:admin_tenants' %}?status=pending" style="color:#92400e;font-weight:700;text-decoration:underline;">Review →</a>
-      </li>
-      {% endif %}
-      {% if health.failed_tenants > 0 %}
-      <li>
-        <strong>{{ health.failed_tenants }}</strong> failed tenant(s) need attention
-        <a href="{% url 'core:admin_tenants' %}?status=failed" style="color:#92400e;font-weight:700;text-decoration:underline;">Review →</a>
-      </li>
-      {% endif %}
-    </ul>
-  </div>
-  {% endif %}
 
   <div style="display:flex;gap:1rem;">
     <a href="{% url 'core:admin_dashboard' %}" style="background:#6b7280;color:#fff;padding:.75rem 1.5rem;border-radius:8px;text-decoration:none;font-weight:700;">

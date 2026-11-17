@@ -3,9 +3,10 @@ from datetime import date, datetime, timezone as datetime_timezone
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.db import DatabaseError
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 import core
@@ -19,8 +20,10 @@ from services.models import ClientServiceSubscription, ServiceType
 from core.jobs import generate_monthly_jobcards
 from clients.models import Client
 from core.apps import CoreConfig
-from core.models import User, ModelVisibility, UserModelPermission, SystemModuleVisibility, Company, AuditLog
+from core.models import User, ModelVisibility, UserModelPermission, SystemModuleVisibility, Company, Branch, AuditLog
 from core.utils import is_model_visible, user_can_view_model, user_can_edit_model
+from core.branch_access import scope_queryset
+from core.views import UserForm
 
 
 class CoreVisibilityTests(TestCase):
@@ -52,6 +55,200 @@ class CoreVisibilityTests(TestCase):
         admin = User.objects.create_superuser(username='admin', password='pass123', email='admin@example.com')
         self.assertTrue(user_can_view_model(admin, Client))
         self.assertTrue(user_can_edit_model(admin, Client))
+
+    def test_company_user_can_log_in_without_tenant_database(self):
+        company = Company.objects.create(name='TAXMAN', slug='taxman')
+        user = User.objects.create_user(
+            username='companyuser',
+            password='pass1234',
+            role='admin',
+            company=company,
+        )
+
+        response = self.client.post(reverse('login'), {
+            'username': user.username,
+            'password': 'pass1234',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('dashboard:index'))
+        self.assertEqual(int(self.client.session['_auth_user_id']), user.pk)
+
+    def test_superuser_can_log_in_to_reactivate_a_suspended_company(self):
+        company = Company.objects.create(name='TAXMAN', slug='taxman', active=False)
+        superuser = User.objects.create_superuser(
+            username='rootuser',
+            password='pass1234',
+            email='rootuser@example.com',
+            company=company,
+        )
+
+        response = self.client.post(reverse('login'), {
+            'username': superuser.username,
+            'password': 'pass1234',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('dashboard:index'))
+
+    def test_company_signup_cannot_create_another_company(self):
+        Company.objects.create(name='TAXMAN', slug='taxman')
+
+        response = self.client.post(reverse('signup'), {
+            'company_name': 'Another Company',
+            'slug': 'another-company',
+            'username': 'anotheradmin',
+            'password1': 'pass1234',
+            'password2': 'pass1234',
+        })
+
+        self.assertRedirects(response, reverse('login'))
+        self.assertEqual(Company.objects.count(), 1)
+        self.assertFalse(User.objects.filter(username='anotheradmin').exists())
+
+    def test_django_admin_allows_only_the_initial_company(self):
+        request = RequestFactory().get('/admin/')
+        company_admin = admin.site._registry[Company]
+
+        self.assertTrue(company_admin.has_add_permission(request))
+        Company.objects.create(name='TAXMAN', slug='taxman')
+        self.assertFalse(company_admin.has_add_permission(request))
+        self.assertFalse(company_admin.has_delete_permission(request))
+
+    def test_company_branch_setup_is_limited_to_the_three_supported_branches(self):
+        company = Company.objects.create(name='TAXMAN', slug='taxman')
+        admin_user = User.objects.create_superuser(
+            username='branchsetupadmin',
+            password='pass1234',
+            email='branchsetupadmin@example.com',
+        )
+        self.client.force_login(admin_user)
+        url = reverse('core:admin_company_branches', args=[company.pk])
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Create New Branch')
+
+        response = self.client.post(url, {'action': 'setup_business_branches'})
+        self.assertRedirects(response, url)
+        response = self.client.post(url, {'action': 'setup_business_branches'})
+        self.assertRedirects(response, url)
+        self.assertCountEqual(
+            company.branches.values_list('name', flat=True),
+            ['TAXMAN', 'PRIME FOCUS', 'ABA UGANDA'],
+        )
+
+        self.client.post(url, {'name': 'UNSUPPORTED BRANCH'})
+        self.assertEqual(company.branches.count(), 3)
+
+        branch_admin = admin.site._registry[Branch]
+        request = RequestFactory().get('/admin/')
+        self.assertFalse(branch_admin.has_add_permission(request))
+        self.assertFalse(branch_admin.has_delete_permission(request))
+
+    def test_company_admin_pages_render_without_tenant_workflows(self):
+        company = Company.objects.create(name='TAXMAN', slug='taxman')
+        Branch.objects.create(company=company, name='TAXMAN')
+        admin_user = User.objects.create_superuser(
+            username='workspaceadmin',
+            password='pass1234',
+            email='workspaceadmin@example.com',
+        )
+        self.client.force_login(admin_user)
+
+        pages = (
+            'core:admin_dashboard',
+            'core:admin_control_center',
+            'core:admin_companies',
+            'core:admin_analytics',
+            'core:admin_health',
+        )
+        for page_name in pages:
+            with self.subTest(page=page_name):
+                response = self.client.get(reverse(page_name))
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, 'Manage Tenants')
+
+
+class BranchAccessTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(name='Branch Test Co', slug='branch-test')
+        self.other_company = Company.objects.create(name='Other Co', slug='other-co')
+        self.branch_one = Branch.objects.create(company=self.company, name='Branch One')
+        self.branch_two = Branch.objects.create(company=self.company, name='Branch Two')
+        self.other_branch = Branch.objects.create(company=self.other_company, name='Other Branch')
+        self.client_one = Client.objects.create(
+            full_name='Branch One Client', phone_primary='+256700100001',
+            branch=self.branch_one,
+        )
+        self.client_two = Client.objects.create(
+            full_name='Branch Two Client', phone_primary='+256700100002',
+            branch=self.branch_two,
+        )
+        self.other_client = Client.objects.create(
+            full_name='Other Company Client', phone_primary='+256700100003',
+            branch=self.other_branch,
+        )
+        self.staff = User.objects.create_user(
+            username='branchstaff', password='pass1234', role='tax_officer',
+            company=self.company, branch=self.branch_one,
+        )
+        self.manager = User.objects.create_user(
+            username='branchmanager', password='pass1234', role='manager',
+            company=self.company, branch=self.branch_one,
+        )
+        self.admin = User.objects.create_user(
+            username='branchadmin', password='pass1234', role='admin',
+            company=self.company,
+        )
+
+    def test_staff_is_limited_to_assigned_branch(self):
+        visible = scope_queryset(self.staff, Client.objects.all())
+
+        self.assertEqual(list(visible), [self.client_one])
+
+    def test_company_admin_can_see_company_branches_but_not_other_companies(self):
+        visible = scope_queryset(self.admin, Client.objects.all())
+
+        self.assertCountEqual(list(visible), [self.client_one, self.client_two])
+
+    def test_unassigned_staff_has_no_branch_data_access(self):
+        unassigned = User.objects.create_user(
+            username='unassigned', password='pass1234', role='tax_officer',
+            company=self.company,
+        )
+
+        self.assertFalse(scope_queryset(unassigned, Client.objects.all()).exists())
+
+    def test_manager_cannot_assign_company_leadership_role(self):
+        form = UserForm(
+            data={'username': 'promoted_user', 'role': 'admin'},
+            actor=self.manager,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertNotIn(
+            'admin',
+            [value for value, _label in form.fields['role'].choices],
+        )
+
+    def test_new_user_form_defaults_to_managers_branch(self):
+        form = UserForm(actor=self.manager)
+
+        self.assertEqual(form['branch'].value(), self.branch_one.pk)
+
+    def test_unlinked_admin_retains_legacy_unscoped_access(self):
+        legacy_admin = User.objects.create_user(
+            username='legacyadmin', password='pass1234', role='admin',
+        )
+        legacy_client = Client.objects.create(
+            full_name='Legacy Client', phone_primary='+256700100004',
+        )
+
+        self.assertCountEqual(
+            list(scope_queryset(legacy_admin, Client.objects.all())),
+            [self.client_one, self.client_two, self.other_client, legacy_client],
+        )
 
 
 @override_settings(RECEIVABLES_API_KEY='test-receivables-key')
@@ -286,22 +483,35 @@ class AdminControlCenterTests(TestCase):
         module.refresh_from_db()
         self.assertFalse(module.enabled)
 
-    def test_tenant_admin_controls_are_scoped_to_their_company(self):
+    def test_branch_manager_cannot_open_company_control_center(self):
+        company = Company.objects.create(name='Branch Controls', slug='branch-controls')
+        branch = Branch.objects.create(company=company, name='Assigned Branch')
+        manager = User.objects.create_user(
+            username='branchmanager', password='pass123',
+            role='manager', company=company, branch=branch,
+        )
+        self.client.force_login(manager)
+
+        response = self.client.get(reverse('core:admin_control_center'))
+
+        self.assertEqual(response.status_code, 302)
+
+    def test_company_admin_controls_are_scoped_to_their_company(self):
         self.client.force_login(self.admin)
-        company = Company.objects.create(name='Tenant One', slug='tenant-one')
+        company = Company.objects.create(name='Company One', slug='company-one')
         self.admin.company = company
         self.admin.save(update_fields=['company'])
 
-        other_company = Company.objects.create(name='Tenant Two', slug='tenant-two')
+        other_company = Company.objects.create(name='Company Two', slug='company-two')
         other_module = SystemModuleVisibility.objects.create(key='clients', company=other_company, label='Clients', enabled=True)
-        tenant_module = SystemModuleVisibility.objects.create(key='clients', company=company, label='Clients', enabled=True)
+        company_module = SystemModuleVisibility.objects.create(key='clients', company=company, label='Clients', enabled=True)
 
         response = self.client.post(reverse('core:admin_control_center'), {'module_clients': 'off'})
 
         self.assertEqual(response.status_code, 302)
-        tenant_module.refresh_from_db()
+        company_module.refresh_from_db()
         other_module.refresh_from_db()
-        self.assertFalse(tenant_module.enabled)
+        self.assertFalse(company_module.enabled)
         self.assertTrue(other_module.enabled)
 
 

@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Balance Sheet{% endblock %}
+{% block nav_financial_reports %}active{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'documents:financial_reports' %}">Reports</a></li>
+<li class="active">Balance Sheet</li>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title"><i class="fas fa-scale-balanced"></i> Balance Sheet</h1>
+  <form method="get" class="d-flex align-items-end gap-2 flex-wrap no-print">
+    {% if branches %}
+    <div>
+      <label class="form-label" for="balance-branch">Branch</label>
+      <select id="balance-branch" class="form-control" name="branch">
+        <option value="">All accessible branches</option>
+        {% for branch in branches %}<option value="{{ branch.pk }}" {% if selected_branch.pk == branch.pk %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div>
+      <label class="form-label" for="balance-period">As of</label>
+      <select id="balance-period" class="form-control" name="period">
+        {% for value, label in period_options %}<option value="{{ value }}" {% if period == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-primary" type="submit">Show Balance Sheet</button>
+    <button class="btn btn-outline" type="button" onclick="window.print()">Print</button>
+  </form>
+</div>
+
+<nav class="d-flex gap-2 mb-3 no-print" aria-label="Financial reports">
+  <a class="btn btn-outline" href="{% url 'documents:financial_reports' %}?{{ report_scope_query }}">Cash Flow</a>
+  <a class="btn btn-primary" href="{% url 'documents:balance_sheet_report' %}?{{ report_scope_query }}">Balance Sheet</a>
+  <a class="btn btn-outline" href="{% url 'documents:branch_account_statement' %}?branch={{ selected_branch.pk|default:'' }}">Account Statement</a>
+</nav>
+
+<section class="card-box mb-3">
+  <div class="card-head">
+    Detailed Balance Sheet Snapshot
+    <span class="text-muted">As of {{ date_to|date:"d M Y" }}{% if selected_branch %} · {{ selected_branch.name }}{% endif %}</span>
+  </div>
+  <div class="card-body">
+    <h3 class="fs-6 fw-7">Assets</h3>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>Account</th><th>Classification</th><th>Source</th><th class="text-r">Balance (UGX)</th></tr></thead>
+        <tbody>
+          {% for item in balance_sheet_assets %}
+          <tr>
+            <td>{{ item.account_name }}</td>
+            <td>{{ item.category }}</td>
+            <td>{{ item.source }}</td>
+            <td class="text-r ugx">{{ item.amount|floatformat:0|intcomma }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot><tr><th colspan="3">Total tracked assets</th><th class="text-r ugx">{{ total_assets|floatformat:0|intcomma }}</th></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="row g-3 mt-2">
+      <div class="col-lg-6">
+        <h3 class="fs-6 fw-7">Liabilities</h3>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Account</th><th>Classification</th><th class="text-r">Balance (UGX)</th></tr></thead>
+            <tbody>
+              {% for item in balance_sheet_liabilities %}
+              <tr><td>{{ item.account_name }}</td><td>{{ item.category }}</td><td class="text-r ugx">{{ item.amount|floatformat:0|intcomma }}</td></tr>
+              {% empty %}<tr><td colspan="3" class="text-muted">No liability balances entered.</td></tr>{% endfor %}
+            </tbody>
+            <tfoot><tr><th colspan="2">Total Liabilities</th><th class="text-r ugx">{{ total_liabilities|floatformat:0|intcomma }}</th></tr></tfoot>
+          </table>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <h3 class="fs-6 fw-7">Equity</h3>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Account</th><th>Classification</th><th class="text-r">Balance (UGX)</th></tr></thead>
+            <tbody>
+              {% for item in balance_sheet_equity %}
+              <tr><td>{{ item.account_name }}</td><td>{{ item.category }}</td><td class="text-r ugx">{{ item.amount|floatformat:0|intcomma }}</td></tr>
+              {% empty %}<tr><td colspan="3" class="text-muted">No equity balances recorded.</td></tr>{% endfor %}
+            </tbody>
+            <tfoot><tr><th colspan="2">Total Equity</th><th class="text-r ugx">{{ total_equity|floatformat:0|intcomma }}</th></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-row mt-3"><strong>Liabilities and equity</strong><strong class="ugx">{{ total_liabilities|add:total_equity|floatformat:0|intcomma }}</strong></div>
+    <div class="stat-row"><strong>Balance check (assets less liabilities and equity)</strong><strong class="ugx {% if balance_difference == 0 %}cash-in-text{% else %}cash-out-text{% endif %}">{{ balance_difference|floatformat:0|intcomma }}</strong></div>
+    <div class="form-hint mt-2">
+      Cash and bank balances are derived from recorded transactions and dated balance snapshots. Receivables use unpaid invoices. Work in progress is a provisional contract-value estimate for in-progress jobs, not a cost valuation. Enter liabilities, creditors, fixed/other assets, opening capital, and retained earnings below. Cash-basis operating surplus is not a substitute for accrual accounting.
+    </div>
+  </div>
+</section>
+
+{% if user.is_superuser or user.role == 'admin' or user.role == 'manager' or user.role == 'ceo' %}
+<section class="card-box mb-3 no-print">
+  <div class="card-head"><i class="fas fa-plus-circle"></i> Add or update an account balance</div>
+  <div class="card-body">
+    <p class="form-hint">Enter a dated balance for an asset, liability, creditor, or equity account. For cash, bank, and mobile money, the latest snapshot rolls forward with later recorded transactions.</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-grid-2">
+        {% for field in balance_sheet_entry_form %}
+        <div>
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% for error in field.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% for error in balance_sheet_entry_form.non_field_errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+      <div class="form-actions mt-3"><button class="btn btn-primary" type="submit"><i class="fas fa-save"></i> Save account balance</button></div>
+    </form>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  var period = document.getElementById('balance-period');
+  if (!period) return;
+  period.addEventListener('change', function(){ period.form.submit(); });
+})();
+</script>
+{% endblock %}

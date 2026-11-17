@@ -1,17 +1,37 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.paginator import Paginator
 from django.utils import timezone
-from django.db.models import Sum, Count
-from services.models import ServiceType, JobCard
-from billing.models import Invoice, Payment
-from expenses.models import Expense
+from django.db.models import Q, Sum, Count
+from services.models import ServiceType, JobCard, JobCardLineItem
+from billing.models import (
+    BranchDailySummary, BranchDailyTransaction, Invoice, Payment, OtherIncome,
+)
+from expenses.models import Expense, ExpenseCategory
 from clients.models import Client
-from .models import ClientDocument
+from .models import (
+    BranchAccountTransfer, BranchBalanceSheetEntry, ClientDocument,
+)
 import calendar
 from datetime import date, timedelta
 from decimal import Decimal
 from core.utils import paginate_queryset
+from core.branch_access import accessible_branches, scope_queryset
+from core.branch_reporting import (
+    branch_cash_summary, branch_comparison_for_user, company_branches_for_user,
+)
+from core.models import Branch
+from .forms import (
+    BranchAccountTransferForm, BranchBalanceSheetEntryForm,
+    BranchDailySummaryForm, BranchDailyTransactionForm,
+)
+from .accounting import (
+    branch_cash_account_balances, branch_cash_account_movements,
+    latest_balance_sheet_entries,
+)
+from django.db import IntegrityError, transaction
 
 @login_required
 def documents_home(request):
@@ -21,7 +41,11 @@ def documents_home(request):
 @login_required
 def doc_list(request):
     client_pk = request.GET.get('client')
-    docs = ClientDocument.objects.select_related('client', 'uploaded_by', 'job_card')
+    docs = scope_queryset(
+        request.user,
+        ClientDocument.objects.select_related('client', 'uploaded_by', 'job_card'),
+        branch_path='client__branch',
+    )
     if client_pk:
         docs = docs.filter(client_id=client_pk)
     page_obj = paginate_queryset(request, docs.order_by('-uploaded_at'), per_page=25)
@@ -29,7 +53,7 @@ def doc_list(request):
         'docs': page_obj, 'page_obj': page_obj,
         'client_filter': client_pk,
         'doc_types': ClientDocument.DOC_TYPE,
-        'clients': Client.objects.order_by('full_name'),
+        'clients': scope_queryset(request.user, Client.objects.order_by('full_name')),
     })
 
 
@@ -37,15 +61,21 @@ def doc_list(request):
 def doc_upload(request):
     if request.method == 'POST':
         client_id = request.POST.get('client')
-        client = get_object_or_404(Client, pk=client_id)
+        client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=client_id)
         job_card_id = request.POST.get('job_card') or None
+        job_card = None
+        if job_card_id:
+            job_card = get_object_or_404(
+                scope_queryset(request.user, JobCard.objects.all()),
+                pk=job_card_id, client=client,
+            )
         f = request.FILES.get('file')
         if not f:
             messages.error(request, 'Please select a file to upload.')
             return redirect(request.META.get('HTTP_REFERER', 'documents:doc_list'))
         ClientDocument.objects.create(
             client=client,
-            job_card_id=job_card_id,
+            job_card=job_card,
             doc_type=request.POST.get('doc_type', 'other'),
             title=request.POST.get('title', f.name),
             file=f,
@@ -61,7 +91,10 @@ def doc_upload(request):
 
 @login_required
 def doc_delete(request, pk):
-    doc = get_object_or_404(ClientDocument, pk=pk)
+    doc = get_object_or_404(
+        scope_queryset(request.user, ClientDocument.objects.all(), branch_path='client__branch'),
+        pk=pk,
+    )
     if request.method == 'POST':
         doc.file.delete(save=False)
         doc.delete()
@@ -70,7 +103,9 @@ def doc_delete(request, pk):
 
 @login_required
 def price_list(request):
-    services = ServiceType.objects.filter(is_active=True).order_by('category','name')
+    services = scope_queryset(
+        request.user, ServiceType.objects.filter(is_active=True), branch_path='branches',
+    ).distinct().order_by('category', 'name')
     by_category = {}
     for s in services:
         cat = s.get_category_display()
@@ -83,10 +118,12 @@ def price_list(request):
 
 @login_required
 def client_statement(request, pk):
-    client = get_object_or_404(Client, pk=pk)
+    client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=pk)
     date_from = request.GET.get('from')
     date_to = request.GET.get('to')
-    invoices = client.invoices.order_by('date_issued')
+    invoices = scope_queryset(
+        request.user, client.invoices.all(),
+    ).order_by('date_issued')
     if date_from:
         invoices = invoices.filter(date_issued__gte=date_from)
     if date_to:
@@ -109,9 +146,9 @@ def monthly_report(request):
     years = list(range(today.year - 2, today.year + 2))
     months = [(i, calendar.month_name[i]) for i in range(1, 13)]
 
-    invoices = Invoice.objects.filter(date_issued__month=month, date_issued__year=year)
-    expenses = Expense.objects.filter(expense_date__month=month, expense_date__year=year, status='approved')
-    payments = Payment.objects.filter(payment_date__month=month, payment_date__year=year)
+    invoices = scope_queryset(request.user, Invoice.objects.filter(date_issued__month=month, date_issued__year=year))
+    expenses = scope_queryset(request.user, Expense.objects.filter(expense_date__month=month, expense_date__year=year, status='approved'))
+    payments = scope_queryset(request.user, Payment.objects.filter(payment_date__month=month, payment_date__year=year))
 
     total_invoiced = invoices.aggregate(s=Sum('grand_total'))['s'] or 0
     total_collected = payments.aggregate(s=Sum('amount'))['s'] or Decimal('0')
@@ -149,8 +186,9 @@ def monthly_report(request):
 
     cashflow_end_balance = cashflow_by_date[-1]['balance'] if cashflow_by_date else Decimal('0')
 
-    top_clients = (Client.objects
+    top_clients = (scope_queryset(request.user, Client.objects
         .filter(invoices__date_issued__month=month, invoices__date_issued__year=year)
+    )
         .annotate(revenue=Sum('invoices__grand_total'))
         .order_by('-revenue')[:10])
 
@@ -158,7 +196,9 @@ def monthly_report(request):
 
     job_summary = {}
     for s,_ in JobCard.STATUS:
-        cnt = JobCard.objects.filter(created_at__month=month, created_at__year=year, status=s).count()
+        cnt = scope_queryset(request.user, JobCard.objects.filter(
+            created_at__month=month, created_at__year=year, status=s,
+        )).count()
         if cnt: job_summary[s] = cnt
 
     invoice_summary = {}
@@ -186,16 +226,1513 @@ def monthly_report(request):
         'today': today,
     })
 
+
+@login_required
+def branch_daily_summaries(request):
+    open_summary_modal = request.GET.get('open') == 'summary' or request.method == 'POST'
+    branches = accessible_branches(request.user)
+    if request.user.is_superuser:
+        branches = Branch.objects.filter(is_active=True)
+    branch_id = request.GET.get('branch') or request.POST.get('branch')
+    selected_branch = None
+    if branch_id:
+        selected_branch = get_object_or_404(branches, pk=branch_id)
+    elif branches.count() == 1:
+        selected_branch = branches.first()
+
+    raw_date = request.GET.get('date') or request.POST.get('business_date', '')
+    try:
+        business_date = date.fromisoformat(raw_date) if raw_date else timezone.localdate()
+    except ValueError:
+        business_date = timezone.localdate()
+        messages.error(request, 'Invalid business date.')
+
+    existing = None
+    if selected_branch:
+        existing = BranchDailySummary.objects.filter(
+            branch=selected_branch, business_date=business_date,
+        ).first()
+        if (
+            existing and request.method == 'POST'
+            and existing.submitted_by_id != request.user.pk
+            and not request.user.is_manager_or_admin()
+        ):
+            messages.error(request, 'Only the original submitter or a branch manager can update this summary.')
+            return redirect(
+                f"{request.path}?branch={selected_branch.pk}&date={business_date.isoformat()}"
+            )
+        if existing and existing.reviewed_at:
+            if request.user != existing.submitted_by and not request.user.is_manager_or_admin():
+                messages.error(request, 'This summary is locked after review.')
+                existing = None
+            elif request.method == 'POST':
+                messages.error(request, 'This summary has been reviewed and is locked.')
+                existing = None
+                form = BranchDailySummaryForm(
+                    request.POST, branches=branches,
+                )
+                form.add_error(None, 'Reviewed summaries cannot be changed.')
+                return render(request, 'documents/branch_daily_summaries.html', {
+                    'branches': branches, 'selected_branch': selected_branch,
+                    'summaries': scope_queryset(
+                        request.user, BranchDailySummary.objects.select_related(
+                            'branch', 'submitted_by', 'updated_by', 'reviewed_by',
+                        ),
+                    ).order_by('-business_date')[:60],
+                    'form': form, 'business_date': business_date,
+                    'open_summary_modal': True,
+                })
+
+    if request.method == 'POST':
+        form = BranchDailySummaryForm(
+            request.POST, instance=existing, branches=branches,
+        )
+        if form.is_valid():
+            summary = form.save(commit=False)
+            summary.submitted_by = existing.submitted_by if existing else request.user
+            summary.updated_by = request.user
+            try:
+                with transaction.atomic():
+                    summary.save()
+                messages.success(request, 'Daily branch summary saved.')
+                return redirect(
+                    f"{request.path}?branch={summary.branch_id}&date={summary.business_date.isoformat()}"
+                )
+            except IntegrityError:
+                form.add_error(None, 'A summary for this branch and date was just saved by another user.')
+    else:
+        initial = {'business_date': business_date}
+        if selected_branch:
+            initial['branch'] = selected_branch
+            daily_totals = branch_cash_summary(
+                selected_branch, business_date, business_date,
+            )
+            initial.update({
+                'opening_balance': daily_totals['opening_cash'],
+                'cash_inflow': daily_totals['inflow'],
+                'cash_outflow': daily_totals['outflow'],
+                'closing_balance': (
+                    daily_totals['opening_cash']
+                    + daily_totals['inflow']
+                    - daily_totals['outflow']
+                ),
+            })
+        form = BranchDailySummaryForm(
+            instance=existing, initial=initial, branches=branches,
+        )
+
+    summaries = scope_queryset(
+        request.user,
+        BranchDailySummary.objects.select_related(
+            'branch', 'submitted_by', 'updated_by', 'reviewed_by',
+        ),
+    ).order_by('-business_date')[:60]
+    return render(request, 'documents/branch_daily_summaries.html', {
+        'branches': branches,
+        'selected_branch': selected_branch,
+        'summaries': summaries,
+        'form': form,
+        'business_date': business_date,
+        'open_summary_modal': open_summary_modal,
+    })
+
+
+@login_required
+def branch_daily_ledger(request):
+    return _branch_daily_ledger(request)
+
+
+@login_required
+def branch_daily_expense(request):
+    return _branch_daily_ledger(request, expense_only=True)
+
+
+def _branch_daily_ledger(request, expense_only=False):
+    branches = accessible_branches(request.user)
+    external_branches = branches.filter(external_reporting=True)
+    branch_id = request.GET.get('branch') or request.POST.get('branch')
+    selected_branch = get_object_or_404(branches, pk=branch_id) if branch_id else None
+    if not selected_branch and branches.count() == 1:
+        selected_branch = branches.first()
+
+    raw_date = request.GET.get('date') or request.POST.get('business_date', '')
+    try:
+        business_date = date.fromisoformat(raw_date) if raw_date else timezone.localdate()
+    except ValueError:
+        business_date = timezone.localdate()
+        messages.error(request, 'Invalid transaction date.')
+
+    initial = {'business_date': business_date}
+    if selected_branch and selected_branch.external_reporting:
+        initial['branch'] = selected_branch
+    requested_direction = request.GET.get('direction')
+    requested_category = request.GET.get('category')
+    if expense_only:
+        initial.update({
+            'direction': 'outflow',
+            'category': 'operating_expense',
+        })
+    else:
+        if requested_direction in dict(BranchDailyTransaction.DIRECTION):
+            initial['direction'] = requested_direction
+        if requested_category in dict(BranchDailyTransaction.CATEGORY):
+            initial['category'] = requested_category
+    open_transaction_modal = request.GET.get('open') == 'transaction' or request.method == 'POST'
+    if request.method == 'POST':
+        form = BranchDailyTransactionForm(
+            request.POST, branches=external_branches,
+            expense_only=expense_only,
+        )
+        if form.is_valid():
+            branch = form.cleaned_data['branch']
+            entry_date = form.cleaned_data['business_date']
+            try:
+                with transaction.atomic():
+                    summary = BranchDailySummary.objects.select_for_update().filter(
+                        branch=branch, business_date=entry_date,
+                    ).first()
+                    if summary and summary.reviewed_at:
+                        form.add_error(None, 'This day has been reviewed and locked.')
+                    else:
+                        entry = form.save(commit=False)
+                        entry.entered_by = request.user
+                        entry.save()
+                if not form.errors:
+                    messages.success(request, 'Daily transaction recorded.')
+                    return redirect(
+                        f'{request.path}?branch={branch.pk}&date={entry_date.isoformat()}'
+                    )
+            except IntegrityError:
+                form.add_error(
+                    'reference',
+                    'This reference has already been recorded for the branch and date.',
+                )
+    else:
+        form = BranchDailyTransactionForm(
+            initial=initial, branches=external_branches,
+            expense_only=expense_only,
+        )
+
+    selected_branches = branches
+    if selected_branch:
+        selected_branches = selected_branches.filter(pk=selected_branch.pk)
+    internal_branches = selected_branches.filter(external_reporting=False)
+    summaries = list(
+        BranchDailySummary.objects.filter(
+            branch__in=selected_branches, business_date=business_date,
+        ).select_related('branch', 'submitted_by', 'reviewed_by')
+    )
+    summary_by_branch = {summary.branch_id: summary for summary in summaries}
+    external_entries = list(
+        BranchDailyTransaction.objects.filter(
+            branch__in=selected_branches.filter(external_reporting=True),
+            business_date=business_date,
+        ).select_related('branch', 'entered_by')
+    )
+    zero = Decimal('0')
+    ledger_totals_by_branch = {}
+    for entry in external_entries:
+        totals = ledger_totals_by_branch.setdefault(
+            entry.branch_id, {'inflow': zero, 'outflow': zero},
+        )
+        key = 'inflow' if entry.direction == 'inflow' else 'outflow'
+        totals[key] += entry.amount
+    reconciliations = []
+    for summary in summaries:
+        ledger_totals = ledger_totals_by_branch.get(summary.branch_id)
+        if summary.branch.external_reporting and ledger_totals is not None:
+            reconciliations.append({
+                'summary': summary,
+                'ledger_inflow': ledger_totals['inflow'],
+                'ledger_outflow': ledger_totals['outflow'],
+                'totals_match': (
+                    summary.cash_inflow == ledger_totals['inflow']
+                    and summary.cash_outflow == ledger_totals['outflow']
+                ),
+                'closing_variance': summary.closing_balance - (
+                    summary.opening_balance
+                    + ledger_totals['inflow'] - ledger_totals['outflow']
+                ),
+            })
+    transactions = []
+
+    def user_label(user):
+        return (user.get_full_name() or user.username) if user else '—'
+
+    def append_transaction(
+        *, branch, created_at, pk, entry_type, description, method, reference,
+        recorded_by, inflow=zero, outflow=zero, counts_in_totals=True,
+    ):
+        transactions.append({
+            'branch': branch,
+            'created_at': created_at,
+            'id': pk,
+            'type': entry_type,
+            'description': description,
+            'method': method,
+            'reference': reference or '—',
+            'recorded_by': recorded_by,
+            'inflow': inflow,
+            'outflow': outflow,
+            'counts_in_totals': counts_in_totals,
+        })
+
+    for entry in external_entries:
+        append_transaction(
+            branch=entry.branch,
+            created_at=entry.created_at,
+            pk=entry.pk,
+            entry_type=entry.get_category_display(),
+            description=entry.description,
+            method=entry.get_account_display(),
+            reference=entry.reference,
+            recorded_by=user_label(entry.entered_by),
+            inflow=entry.amount if entry.direction == 'inflow' else zero,
+            outflow=entry.amount if entry.direction == 'outflow' else zero,
+        )
+
+    payments = Payment.objects.filter(
+        branch__in=internal_branches, payment_date=business_date,
+    ).select_related('branch', 'invoice__client', 'client', 'received_by')
+    for payment in payments:
+        if payment.branch_id in summary_by_branch:
+            continue
+        if payment.invoice_id:
+            customer = payment.client.get_display_name() if payment.client_id else 'Customer'
+            description = f'{payment.invoice.invoice_number} — {customer}'
+        else:
+            description = payment.client.get_display_name() if payment.client_id else 'Direct payment'
+        append_transaction(
+            branch=payment.branch,
+            created_at=payment.created_at,
+            pk=payment.pk,
+            entry_type='Customer payment',
+            description=description,
+            method=payment.get_method_display(),
+            reference=payment.reference,
+            recorded_by=user_label(payment.received_by),
+            inflow=payment.amount,
+        )
+
+    incomes = OtherIncome.objects.filter(
+        branch__in=internal_branches, income_date=business_date,
+    ).select_related('branch', 'recorded_by')
+    for income in incomes:
+        if income.branch_id in summary_by_branch:
+            continue
+        append_transaction(
+            branch=income.branch,
+            created_at=income.created_at,
+            pk=income.pk,
+            entry_type=income.get_category_display(),
+            description=income.source_name,
+            method=income.get_collection_method_display(),
+            reference=income.reference,
+            recorded_by=user_label(income.recorded_by),
+            inflow=income.amount,
+        )
+
+    expenses = Expense.objects.filter(
+        branch__in=internal_branches, expense_date=business_date,
+        status__in=('submitted', 'approved'),
+    ).select_related('branch', 'category', 'paid_by', 'created_by')
+    for expense in expenses:
+        if expense.branch_id in summary_by_branch:
+            continue
+        description = expense.description
+        if expense.category_id:
+            description = f'{expense.category.name} — {description}'
+        append_transaction(
+            branch=expense.branch,
+            created_at=expense.created_at,
+            pk=expense.pk,
+            entry_type=(
+                'Approved expense' if expense.status == 'approved'
+                else 'Pending expense'
+            ),
+            description=description,
+            method=expense.get_payment_method_display(),
+            reference=expense.reference,
+            recorded_by=user_label(expense.paid_by or expense.created_by),
+            outflow=expense.amount,
+            counts_in_totals=expense.status == 'approved',
+        )
+
+    for transfer in BranchAccountTransfer.objects.filter(
+        branch__in=selected_branches, transfer_date=business_date,
+    ).select_related('branch', 'entered_by'):
+        source_label = dict(BranchAccountTransfer.SOURCE_ACCOUNT)[
+            transfer.source_account
+        ]
+        append_transaction(
+            branch=transfer.branch,
+            created_at=transfer.created_at,
+            pk=transfer.pk,
+            entry_type='Bank deposit transfer',
+            description=f'{source_label} → Bank — {transfer.description}',
+            method='Internal transfer',
+            reference=transfer.reference,
+            recorded_by=user_label(transfer.entered_by),
+            inflow=transfer.amount,
+            outflow=transfer.amount,
+            counts_in_totals=False,
+        )
+
+    external_entry_branches = {entry.branch_id for entry in external_entries}
+    for summary in summaries:
+        if summary.branch.external_reporting and summary.branch_id in external_entry_branches:
+            continue
+        append_transaction(
+            branch=summary.branch,
+            created_at=summary.created_at,
+            pk=summary.pk,
+            entry_type='Branch daily summary',
+            description=f'{summary.branch.name} end-of-day summary',
+            method='End-of-day summary',
+            reference='',
+            recorded_by=user_label(summary.submitted_by),
+            inflow=summary.cash_inflow,
+            outflow=summary.cash_outflow,
+        )
+
+    transactions.sort(
+        key=lambda item: (item['created_at'], item['branch'].name, item['id']),
+        reverse=True,
+    )
+    total_inflow = sum(
+        (item['inflow'] for item in transactions if item['counts_in_totals']),
+        zero,
+    )
+    total_outflow = sum(
+        (item['outflow'] for item in transactions if item['counts_in_totals']),
+        zero,
+    )
+    transaction_page = Paginator(transactions, 50).get_page(request.GET.get('page'))
+
+    return render(request, 'documents/branch_daily_ledger.html', {
+        'branches': branches,
+        'external_branches': external_branches,
+        'selected_branch': selected_branch,
+        'business_date': business_date,
+        'form': form,
+        'transactions': transaction_page,
+        'total_inflow': total_inflow,
+        'total_outflow': total_outflow,
+        'net_movement': total_inflow - total_outflow,
+        'reconciliations': reconciliations,
+        'can_review_summary': request.user.is_manager_or_admin(),
+        'open_transaction_modal': open_transaction_modal,
+        'category_directions': BranchDailyTransaction.CATEGORY_DIRECTIONS,
+        'expense_only': expense_only,
+    })
+
+
+@login_required
+def review_branch_daily_summary(request, pk):
+    if request.method != 'POST' or not request.user.is_manager_or_admin():
+        messages.error(request, 'Only branch managers and leadership can review summaries.')
+        return redirect('documents:branch_daily_summaries')
+    with transaction.atomic():
+        summary = get_object_or_404(
+            scope_queryset(
+                request.user, BranchDailySummary.objects.select_for_update(),
+            ),
+            pk=pk,
+        )
+        if summary.reviewed_at:
+            messages.info(request, 'This summary has already been reviewed.')
+        else:
+            ledger_totals = BranchDailyTransaction.objects.filter(
+                branch=summary.branch, business_date=summary.business_date,
+            ).values('direction').annotate(total=Sum('amount'))
+            totals = {item['direction']: item['total'] for item in ledger_totals}
+            has_ledger_entries = bool(totals)
+            if summary.branch.external_reporting and has_ledger_entries and (
+                summary.cash_inflow != totals.get('inflow', Decimal('0'))
+                or summary.cash_outflow != totals.get('outflow', Decimal('0'))
+            ):
+                messages.error(
+                    request,
+                    'Daily summary totals must match the ledger transactions before review.',
+                )
+            else:
+                summary.reviewed_by = request.user
+                summary.reviewed_at = timezone.now()
+                summary.save(update_fields=['reviewed_by', 'reviewed_at', 'updated_at'])
+                messages.success(request, 'Daily summary reviewed and locked.')
+    return redirect(
+        f"{reverse('documents:branch_daily_summaries')}?branch={summary.branch_id}"
+    )
+
+
+@login_required
+def financial_reports(request):
+    return _financial_report(request, 'cash_flow')
+
+
+@login_required
+def balance_sheet_report(request):
+    branches = company_branches_for_user(request.user).order_by('name')
+    if request.method == 'POST':
+        if not request.user.is_manager_or_admin():
+            messages.error(request, 'Only branch managers and leadership can update balance-sheet accounts.')
+            return redirect('documents:balance_sheet_report')
+        form = BranchBalanceSheetEntryForm(request.POST, branches=branches)
+        if form.is_valid():
+            entry = form.save(commit=False)
+            entry.entered_by = request.user
+            entry.save()
+            messages.success(request, 'Balance-sheet account saved.')
+            return redirect(
+                f"{reverse('documents:balance_sheet_report')}?"
+                f"branch={entry.branch_id}&from={entry.as_of_date.isoformat()}&"
+                f"to={entry.as_of_date.isoformat()}"
+            )
+    else:
+        form = None
+    return _financial_report(
+        request, 'balance_sheet', balance_sheet_entry_form=form,
+    )
+
+
+@login_required
+def branch_account_transfer(request):
+    branches = accessible_branches(request.user)
+    if request.user.is_superuser:
+        branches = Branch.objects.filter(is_active=True)
+    branch_id = request.GET.get('branch') or request.POST.get('branch')
+    selected_branch = get_object_or_404(branches, pk=branch_id) if branch_id else None
+    if selected_branch is None and branches.count() == 1:
+        selected_branch = branches.first()
+    initial = {'transfer_date': timezone.localdate()}
+    if selected_branch:
+        initial['branch'] = selected_branch
+
+    if request.method == 'POST':
+        form = BranchAccountTransferForm(request.POST, branches=branches)
+        if form.is_valid():
+            transfer = form.save(commit=False)
+            transfer.entered_by = request.user
+            try:
+                with transaction.atomic():
+                    summary = BranchDailySummary.objects.select_for_update().filter(
+                        branch=transfer.branch,
+                        business_date=transfer.transfer_date,
+                    ).first()
+                    if summary and summary.reviewed_at:
+                        form.add_error(None, 'This day has been reviewed and locked.')
+                    else:
+                        transfer.save()
+                if not form.errors:
+                    messages.success(
+                        request, 'Bank deposit recorded as an account transfer.',
+                    )
+                    return redirect(
+                        f"{reverse('documents:branch_account_statement')}?"
+                        f"branch={transfer.branch_id}&from={transfer.transfer_date.isoformat()}&"
+                        f"to={transfer.transfer_date.isoformat()}"
+                    )
+            except IntegrityError:
+                form.add_error(
+                    'reference',
+                    'This reference has already been recorded for the branch and date.',
+                )
+    else:
+        form = BranchAccountTransferForm(
+            initial=initial, branches=branches,
+        )
+
+    return render(request, 'documents/branch_account_transfer.html', {
+        'form': form,
+        'branches': branches,
+        'selected_branch': selected_branch,
+    })
+
+
+@login_required
+def branch_account_statement(request):
+    today = timezone.localdate()
+    month_start = date(today.year, today.month, 1)
+    try:
+        date_from = date.fromisoformat(request.GET.get('from', '')) if request.GET.get('from') else month_start
+        date_to = date.fromisoformat(request.GET.get('to', '')) if request.GET.get('to') else today
+    except ValueError:
+        messages.error(request, 'Invalid statement dates. Showing the current month instead.')
+        date_from, date_to = month_start, today
+    if date_from > date_to:
+        messages.error(request, 'The start date must be on or before the end date.')
+        date_from, date_to = month_start, today
+
+    branches = accessible_branches(request.user).order_by('name')
+    branch_id = request.GET.get('branch')
+    selected_branch = get_object_or_404(branches, pk=branch_id) if branch_id else None
+    if selected_branch is None and branches.count() == 1:
+        selected_branch = branches.first()
+    statement_branches = branches
+    if selected_branch:
+        statement_branches = statement_branches.filter(pk=selected_branch.pk)
+
+    summaries = list(BranchDailySummary.objects.filter(
+        branch__in=statement_branches,
+        business_date__range=(date_from, date_to),
+    ).select_related('branch', 'submitted_by'))
+    summary_dates = {
+        (summary.branch_id, summary.business_date) for summary in summaries
+    }
+    ledger_entries = list(BranchDailyTransaction.objects.filter(
+        branch__in=statement_branches.filter(external_reporting=True),
+        business_date__range=(date_from, date_to),
+    ).select_related('branch', 'entered_by'))
+    ledger_dates = {
+        (entry.branch_id, entry.business_date) for entry in ledger_entries
+    }
+    internal_branches = statement_branches.filter(external_reporting=False)
+    rows = []
+
+    def append_row(
+        *, branch, transaction_date, account, description, reference,
+        recorded_by, inflow=Decimal('0'), outflow=Decimal('0'),
+        balance=None, entry_type='Transaction',
+    ):
+        rows.append({
+            'branch': branch,
+            'date': transaction_date,
+            'account': account,
+            'description': description,
+            'reference': reference or '—',
+            'recorded_by': recorded_by or '—',
+            'inflow': inflow,
+            'outflow': outflow,
+            'balance': balance,
+            'entry_type': entry_type,
+        })
+
+    for payment in Payment.objects.filter(
+        branch__in=internal_branches,
+        payment_date__range=(date_from, date_to),
+    ).select_related('branch', 'client', 'invoice', 'received_by'):
+        if (payment.branch_id, payment.payment_date) in summary_dates:
+            continue
+        append_row(
+            branch=payment.branch,
+            transaction_date=payment.payment_date,
+            account=payment.get_payment_method_display(),
+            description=(
+                payment.client.get_display_name()
+                if payment.client_id else 'Customer payment'
+            ),
+            reference=payment.reference,
+            recorded_by=(
+                payment.received_by.get_full_name() or payment.received_by.username
+                if payment.received_by_id else '—'
+            ),
+            inflow=payment.amount,
+        )
+
+    for income in OtherIncome.objects.filter(
+        branch__in=internal_branches,
+        income_date__range=(date_from, date_to),
+    ).select_related('branch', 'recorded_by'):
+        if (income.branch_id, income.income_date) in summary_dates:
+            continue
+        append_row(
+            branch=income.branch,
+            transaction_date=income.income_date,
+            account=income.get_collection_method_display(),
+            description=income.source_name,
+            reference=income.reference,
+            recorded_by=(
+                income.recorded_by.get_full_name() or income.recorded_by.username
+                if income.recorded_by_id else '—'
+            ),
+            inflow=income.amount,
+        )
+
+    for expense in Expense.objects.filter(
+        branch__in=internal_branches,
+        expense_date__range=(date_from, date_to),
+        status='approved',
+    ).select_related('branch', 'category', 'paid_by', 'created_by'):
+        if (expense.branch_id, expense.expense_date) in summary_dates:
+            continue
+        append_row(
+            branch=expense.branch,
+            transaction_date=expense.expense_date,
+            account=expense.get_payment_method_display(),
+            description=(
+                f'{expense.category.name} — {expense.description}'
+                if expense.category_id else expense.description
+            ),
+            reference=expense.reference,
+            recorded_by=(
+                expense.paid_by.get_full_name() or expense.paid_by.username
+                if expense.paid_by_id
+                else expense.created_by.get_full_name() or expense.created_by.username
+                if expense.created_by_id else '—'
+            ),
+            outflow=expense.amount,
+        )
+
+    for entry in ledger_entries:
+        append_row(
+            branch=entry.branch,
+            transaction_date=entry.business_date,
+            account=entry.get_account_display(),
+            description=f'{entry.get_category_display()} — {entry.description}',
+            reference=entry.reference,
+            recorded_by=(
+                entry.entered_by.get_full_name() or entry.entered_by.username
+            ),
+            inflow=entry.amount if entry.direction == 'inflow' else Decimal('0'),
+            outflow=entry.amount if entry.direction == 'outflow' else Decimal('0'),
+        )
+
+    for summary in summaries:
+        if (
+            summary.branch.external_reporting
+            and (summary.branch_id, summary.business_date) in ledger_dates
+        ):
+            continue
+        append_row(
+            branch=summary.branch,
+            transaction_date=summary.business_date,
+            account='Cash at hand (summary)',
+            description='End-of-day summary; account split was not recorded',
+            reference='',
+            recorded_by=(
+                summary.submitted_by.get_full_name() or summary.submitted_by.username
+                if summary.submitted_by_id else '—'
+            ),
+            inflow=summary.cash_inflow,
+            outflow=summary.cash_outflow,
+            entry_type='Daily summary',
+        )
+
+    for transfer in BranchAccountTransfer.objects.filter(
+        branch__in=statement_branches,
+        transfer_date__range=(date_from, date_to),
+    ).select_related('branch', 'entered_by'):
+        actor = transfer.entered_by.get_full_name() or transfer.entered_by.username
+        append_row(
+            branch=transfer.branch,
+            transaction_date=transfer.transfer_date,
+            account=dict(BranchAccountTransfer.SOURCE_ACCOUNT)[transfer.source_account],
+            description=f'{transfer.description} → Bank',
+            reference=transfer.reference,
+            recorded_by=actor,
+            outflow=transfer.amount,
+            entry_type='Transfer',
+        )
+        append_row(
+            branch=transfer.branch,
+            transaction_date=transfer.transfer_date,
+            account='Bank',
+            description=f'{transfer.description} from {dict(BranchAccountTransfer.SOURCE_ACCOUNT)[transfer.source_account]}',
+            reference=transfer.reference,
+            recorded_by=actor,
+            inflow=transfer.amount,
+            entry_type='Transfer',
+        )
+
+    for entry in BranchBalanceSheetEntry.objects.filter(
+        branch__in=statement_branches,
+        as_of_date__range=(date_from, date_to),
+    ).select_related('branch', 'entered_by'):
+        append_row(
+            branch=entry.branch,
+            transaction_date=entry.as_of_date,
+            account=entry.get_category_display(),
+            description=f'{entry.account_name} balance',
+            reference='',
+            recorded_by=(
+                entry.entered_by.get_full_name() or entry.entered_by.username
+                if entry.entered_by_id else '—'
+            ),
+            balance=entry.amount,
+            entry_type='Balance snapshot',
+        )
+
+    account_options = sorted(
+        {row['account'] for row in rows},
+        key=str.casefold,
+    )
+    selected_account = request.GET.get('account', '').strip()
+    if selected_account:
+        rows = [row for row in rows if row['account'].casefold() == selected_account.casefold()]
+    rows.sort(key=lambda row: (row['date'], row['branch'].name, row['description']), reverse=True)
+    transaction_page = Paginator(rows, 50).get_page(request.GET.get('page'))
+    filter_params = request.GET.copy()
+    filter_params.pop('page', None)
+
+    return render(request, 'documents/branch_account_statement.html', {
+        'branches': branches,
+        'selected_branch': selected_branch,
+        'date_from': date_from,
+        'date_to': date_to,
+        'transactions': transaction_page,
+        'selected_account': selected_account,
+        'account_options': account_options,
+        'filter_query': filter_params.urlencode(),
+        'total_inflow': sum((row['inflow'] for row in rows), Decimal('0')),
+        'total_outflow': sum((row['outflow'] for row in rows), Decimal('0')),
+    })
+
+
+def _financial_report(request, report_view, balance_sheet_entry_form=None):
+    today = timezone.localdate()
+    month_start = date(today.year, today.month, 1)
+    raw_start = request.GET.get('from', '').strip()
+    raw_end = request.GET.get('to', '').strip()
+    period = request.GET.get('period', 'this_month')
+    period_options = [
+        ('this_week', 'This week'),
+        ('this_month', 'This month'),
+    ]
+    valid_periods = {value for value, label in period_options}
+    if period not in valid_periods:
+        period = 'this_month'
+
+    custom_dates = bool(raw_start or raw_end)
+    if custom_dates:
+        try:
+            date_from = date.fromisoformat(raw_start) if raw_start else month_start
+            date_to = date.fromisoformat(raw_end) if raw_end else today
+            period = 'custom'
+        except ValueError:
+            messages.error(request, 'Invalid report dates. Showing the current month instead.')
+            date_from, date_to, period = month_start, today, 'this_month'
+    elif period == 'this_week':
+        date_from = today - timezone.timedelta(days=today.weekday())
+        date_to = today
+    else:
+        date_from, date_to = month_start, today
+
+    if date_from > date_to:
+        messages.error(request, 'The start date must be on or before the end date.')
+        date_from, date_to, period = month_start, today, 'this_month'
+
+    zero = Decimal('0')
+
+    def total_amount(queryset):
+        return queryset.aggregate(total=Sum('amount'))['total'] or zero
+
+    branches = company_branches_for_user(request.user).order_by('name')
+    branch_count = branches.count()
+    selected_branch = None
+    requested_branch = request.GET.get('branch')
+    if requested_branch:
+        selected_branch = get_object_or_404(branches, pk=requested_branch)
+    elif branch_count == 1:
+        selected_branch = branches.first()
+    has_branches = branch_count > 0
+
+    payments = Payment.objects.filter(payment_date__range=(date_from, date_to))
+    other_income = OtherIncome.objects.filter(income_date__range=(date_from, date_to))
+    expenses = Expense.objects.filter(
+        expense_date__range=(date_from, date_to),
+        status='approved',
+    )
+    payments = scope_queryset(request.user, payments)
+    other_income = scope_queryset(request.user, other_income)
+    expenses = scope_queryset(request.user, expenses)
+    if selected_branch:
+        payments = payments.filter(branch=selected_branch)
+        other_income = other_income.filter(branch=selected_branch)
+        expenses = expenses.filter(branch=selected_branch)
+    elif has_branches:
+        payments = payments.filter(branch__external_reporting=False)
+        other_income = other_income.filter(branch__external_reporting=False)
+        expenses = expenses.filter(branch__external_reporting=False)
+
+    summary_branches = branches
+    if selected_branch:
+        summary_branches = summary_branches.filter(pk=selected_branch.pk)
+    daily_summaries = list(BranchDailySummary.objects.filter(
+        branch__in=summary_branches,
+        business_date__range=(date_from, date_to),
+    ).select_related('branch', 'submitted_by', 'reviewed_by'))
+    daily_ledger_entries = list(BranchDailyTransaction.objects.filter(
+        branch__in=summary_branches,
+        business_date__range=(date_from, date_to),
+    ).select_related('branch', 'entered_by'))
+    ledger_dates = {
+        (entry.branch_id, entry.business_date)
+        for entry in daily_ledger_entries
+    }
+    summary_overrides = [
+        (summary.branch_id, summary.business_date)
+        for summary in daily_summaries
+        if not summary.branch.external_reporting
+    ]
+    if summary_overrides:
+        payment_overrides = Q()
+        income_overrides = Q()
+        expense_overrides = Q()
+        for summary_branch_id, summary_date in summary_overrides:
+            payment_overrides |= Q(branch_id=summary_branch_id, payment_date=summary_date)
+            income_overrides |= Q(branch_id=summary_branch_id, income_date=summary_date)
+            expense_overrides |= Q(branch_id=summary_branch_id, expense_date=summary_date)
+        payments = payments.exclude(payment_overrides)
+        other_income = other_income.exclude(income_overrides)
+        expenses = expenses.exclude(expense_overrides)
+
+    customer_receipts = total_amount(payments)
+    capital_injections = total_amount(
+        other_income.filter(category='capital_injection'),
+    )
+    other_receipts = total_amount(
+        other_income.exclude(category='capital_injection'),
+    )
+    cash_outflow = total_amount(expenses)
+    cash_inflow = customer_receipts + other_receipts + capital_injections
+    net_cash_flow = cash_inflow - cash_outflow
+
+    opening_cash = (
+        total_amount(scope_queryset(request.user, Payment.objects.filter(payment_date__lt=date_from)))
+        + total_amount(scope_queryset(request.user, OtherIncome.objects.filter(income_date__lt=date_from)))
+        - total_amount(scope_queryset(request.user, Expense.objects.filter(
+            expense_date__lt=date_from, status='approved',
+        )))
+    )
+    closing_cash = opening_cash + net_cash_flow
+
+    branch_comparison = branch_comparison_for_user(request.user, date_from, date_to)
+    if selected_branch:
+        branch_comparison = [
+            row for row in branch_comparison if row['branch'].pk == selected_branch.pk
+        ]
+    if has_branches:
+        customer_receipts = sum((row['customer_receipts'] for row in branch_comparison), zero)
+        other_receipts = sum((row['other_receipts'] for row in branch_comparison), zero)
+        capital_injections = sum(
+            (row['capital_injections'] for row in branch_comparison), zero,
+        )
+        cash_inflow = customer_receipts + other_receipts + capital_injections
+        cash_outflow = sum((row['outflow'] for row in branch_comparison), zero)
+        net_cash_flow = cash_inflow - cash_outflow
+        opening_cash = sum((row['opening_cash'] for row in branch_comparison), zero)
+        closing_cash = sum((row['closing_cash'] for row in branch_comparison), zero)
+
+    receivable_invoices = Invoice.objects.filter(
+        date_issued__lte=date_to,
+        document_type='invoice',
+        status__in=('sent', 'partially_paid', 'paid', 'overdue'),
+    )
+    receivable_invoices = scope_queryset(request.user, receivable_invoices)
+    if selected_branch:
+        receivable_invoices = receivable_invoices.filter(branch=selected_branch)
+    elif has_branches:
+        receivable_invoices = receivable_invoices.filter(branch__in=branches)
+    invoice_rows = list(receivable_invoices.values(
+        'pk', 'branch_id', 'grand_total',
+    ))
+    invoiced_total = sum(
+        (invoice['grand_total'] for invoice in invoice_rows), zero,
+    )
+    invoice_payments = Payment.objects.filter(
+        invoice__in=receivable_invoices,
+        payment_date__lte=date_to,
+    )
+    collected_total = total_amount(invoice_payments)
+    paid_by_invoice = {
+        row['invoice_id']: row['total'] or zero
+        for row in invoice_payments.values('invoice_id').annotate(total=Sum('amount'))
+    }
+    accounts_receivable = sum(
+        (
+            max(invoice['grand_total'] - paid_by_invoice.get(invoice['pk'], zero), zero)
+            for invoice in invoice_rows
+        ),
+        zero,
+    )
+
+    balance_sheet_branches = list(
+        branches.filter(pk=selected_branch.pk) if selected_branch else branches
+    )
+    balance_sheet_assets = []
+    balance_sheet_liabilities = []
+    balance_sheet_equity = []
+    cash_account_totals = {
+        'cash_on_hand': zero,
+        'bank_deposit': zero,
+        'mobile_money': zero,
+    }
+    branch_prefix = (
+        len(balance_sheet_branches) > 1
+        and not selected_branch
+    )
+    account_labels = {
+        'cash_on_hand': 'Cash at hand',
+        'bank_deposit': 'Bank deposits',
+        'mobile_money': 'Mobile money',
+    }
+    for branch in balance_sheet_branches:
+        cash_accounts = branch_cash_account_balances(branch, date_to)
+        for account, label in account_labels.items():
+            amount = cash_accounts[account]
+            cash_account_totals[account] += amount
+            balance_sheet_assets.append({
+                'account_name': (
+                    f'{branch.name} — {label}' if branch_prefix else label
+                ),
+                'category': label,
+                'amount': amount,
+                'source': 'Recorded transactions',
+            })
+    if not balance_sheet_branches:
+        cash_account_totals['cash_on_hand'] = closing_cash
+        balance_sheet_assets.append({
+            'account_name': 'Recorded cash and bank',
+            'category': 'Cash and cash equivalents',
+            'amount': closing_cash,
+            'source': 'Recorded receipts less expenses',
+        })
+
+    balance_sheet_assets.append({
+        'account_name': 'Accounts receivable',
+        'category': 'Debtors',
+        'amount': accounts_receivable,
+        'source': 'Unpaid invoices',
+    })
+
+    work_in_progress_by_branch = {branch.pk: zero for branch in balance_sheet_branches}
+    for line_item in JobCardLineItem.objects.filter(
+        job_card__branch__in=balance_sheet_branches,
+        job_card__status='in_progress',
+        job_card__created_at__date__lte=date_to,
+        status='not_handled',
+    ).select_related('job_card'):
+        work_in_progress_by_branch[line_item.job_card.branch_id] += (
+            line_item.negotiated_price + line_item.vat_amount
+        )
+    work_in_progress = sum(work_in_progress_by_branch.values(), zero)
+    balance_sheet_assets.append({
+        'account_name': 'Work in progress (contract value estimate)',
+        'category': 'Work in progress',
+        'amount': work_in_progress,
+        'source': 'Uncompleted services on in-progress jobs',
+    })
+
+    manual_entries = latest_balance_sheet_entries(
+        balance_sheet_branches, date_to,
+    )
+    automatic_cash_categories = {'cash_on_hand', 'bank_deposit', 'mobile_money'}
+    for entry in manual_entries:
+        if entry.category in automatic_cash_categories:
+            continue
+        item = {
+            'account_name': (
+                f'{entry.branch.name} — {entry.account_name}'
+                if branch_prefix else entry.account_name
+            ),
+            'category': entry.get_category_display(),
+            'amount': entry.amount,
+            'source': 'Entered balance',
+        }
+        account_type = entry.account_type
+        if account_type == 'asset':
+            balance_sheet_assets.append(item)
+        elif account_type == 'liability':
+            balance_sheet_liabilities.append(item)
+        else:
+            balance_sheet_equity.append(item)
+
+    lifetime_injections = zero
+    lifetime_drawings = zero
+    accumulated_operating_surplus = zero
+    for branch in balance_sheet_branches:
+        lifetime_summary = branch_cash_summary(branch, date.min, date_to)
+        lifetime_injections += lifetime_summary['capital_injections']
+        lifetime_drawings += lifetime_summary['drawings']
+        accumulated_operating_surplus += lifetime_summary['operating_profit']
+    if lifetime_injections:
+        balance_sheet_equity.append({
+            'account_name': 'Cumulative capital injections',
+            'category': 'Capital',
+            'amount': lifetime_injections,
+            'source': 'Recorded capital injections',
+        })
+    if lifetime_drawings:
+        balance_sheet_equity.append({
+            'account_name': 'Cumulative drawings',
+            'category': 'Drawings',
+            'amount': -lifetime_drawings,
+            'source': 'Recorded drawings',
+        })
+    if accumulated_operating_surplus:
+        balance_sheet_equity.append({
+            'account_name': 'Accumulated operating surplus (cash basis)',
+            'category': 'Retained earnings',
+            'amount': accumulated_operating_surplus,
+            'source': 'Recorded receipts less expenses',
+        })
+
+    total_assets = sum(
+        (item['amount'] for item in balance_sheet_assets), zero,
+    )
+    total_liabilities = sum(
+        (item['amount'] for item in balance_sheet_liabilities), zero,
+    )
+    total_equity = sum(
+        (item['amount'] for item in balance_sheet_equity), zero,
+    )
+    balance_difference = total_assets - total_liabilities - total_equity
+
+    report_services = scope_queryset(
+        request.user,
+        ServiceType.objects.filter(is_active=True),
+        branch_path='branches',
+    ).distinct()
+    if selected_branch:
+        report_services = report_services.filter(branches=selected_branch)
+    report_services = list(report_services.order_by('name'))
+    selected_service_id = request.GET.get('service', '').strip()
+    selected_service = next(
+        (service for service in report_services if str(service.pk) == selected_service_id),
+        None,
+    )
+    if selected_service_id and not selected_service:
+        messages.error(request, 'The selected service is not available in this workspace.')
+        selected_service_id = ''
+
+    category_choices = [
+        (f'expense:{category.pk}', f'Expense: {category.name}')
+        for category in ExpenseCategory.objects.filter(is_active=True).order_by('name')
+    ]
+    category_choices.extend(
+        (
+            f'income:{value}',
+            f'Capital injection: {label}'
+            if value == 'capital_injection' else f'Other income: {label}',
+        )
+        for value, label in OtherIncome.CATEGORY
+    )
+    category_choices.extend(
+        (f'ledger:{value}', f'Ledger: {label}')
+        for value, label in BranchDailyTransaction.CATEGORY
+    )
+    service_categories = dict(ServiceType.CATEGORY)
+    service_categories.update({
+        service.category: service.get_category_display()
+        for service in report_services
+    })
+    category_choices.extend(
+        (f'service:{value}', f'Service: {label}')
+        for value, label in sorted(service_categories.items(), key=lambda item: item[1].casefold())
+    )
+    category_choices.append(('payment:uncategorized', 'Customer payment: no service'))
+    category_choices.append(('expense:uncategorized', 'Expense: no category'))
+    category_choices.append(('credit:receivable', 'Credit sale: receivable'))
+    category_choices.append(('summary', 'Daily summary'))
+    valid_categories = {value for value, label in category_choices}
+    selected_category = request.GET.get('category', '').strip()
+    if selected_category and selected_category not in valid_categories:
+        messages.error(request, 'The selected category is not available in this report.')
+        selected_category = ''
+
+    method_choices = []
+    method_values = set()
+    for value, label in (
+        Payment.METHOD + Expense.METHOD + BranchDailyTransaction.ACCOUNT
+        + [('external_system', 'External system'), ('credit', 'Credit')]
+    ):
+        if value not in method_values:
+            method_values.add(value)
+            method_choices.append((value, label))
+    selected_method = request.GET.get('method', '').strip()
+    if selected_method and selected_method not in method_values:
+        messages.error(request, 'The selected payment method is not available in this report.')
+        selected_method = ''
+
+    record_type_choices = [
+        ('payment', 'Customer payment'),
+        ('credit', 'Credit sale'),
+        ('income', 'Other income'),
+        ('capital_injection', 'Capital injection'),
+        ('expense', 'Approved expense'),
+        ('drawing', 'Owner drawing'),
+        ('ledger', 'Daily ledger'),
+        ('summary', 'Daily summary'),
+    ]
+    selected_record_type = request.GET.get('record_type', '').strip()
+    if selected_record_type and selected_record_type not in {
+        value for value, label in record_type_choices
+    }:
+        messages.error(request, 'The selected record type is not available in this report.')
+        selected_record_type = ''
+
+    transactions = []
+
+    def user_label(user):
+        if not user:
+            return '—'
+        return user.get_full_name() or user.username
+
+    payment_rows = payments.select_related(
+        'invoice__client', 'invoice__job_card', 'client', 'received_by',
+        'service_type',
+    ).prefetch_related('invoice__job_card__line_items__service_type')
+    for payment in payment_rows:
+        if payment.invoice_id:
+            customer = payment.client.get_display_name() if payment.client_id else 'Customer'
+            description = f'{payment.invoice.invoice_number} — {customer}'
+        else:
+            description = payment.client.get_display_name() if payment.client_id else 'Direct payment'
+        payment_services = {}
+        if payment.service_type_id:
+            payment_services[payment.service_type_id] = payment.service_type
+        if payment.invoice_id and payment.invoice.job_card_id:
+            payment_services.update({
+                line.service_type_id: line.service_type
+                for line in payment.invoice.job_card.line_items.all()
+                if line.service_type_id
+            })
+        payment_services = list(payment_services.values())
+        transactions.append({
+            'date': payment.payment_date,
+            'id': payment.pk,
+            'type': 'Customer payment',
+            'type_key': 'payment',
+            'description': description,
+            'method': payment.get_method_display(),
+            'method_key': payment.method,
+            'reference': payment.reference or '—',
+            'recorded_by': user_label(payment.received_by),
+            'approved_by': '—',
+            'inflow': payment.amount,
+            'outflow': zero,
+            'service_ids': [service.pk for service in payment_services],
+            'service_names': [service.name for service in payment_services],
+            'category_keys': (
+                [f'service:{service.category}' for service in payment_services]
+                if payment_services else ['payment:uncategorized']
+            ),
+        })
+
+    credit_invoices = scope_queryset(
+        request.user,
+        Invoice.objects.filter(
+            is_credit_sale=True,
+            date_issued__range=(date_from, date_to),
+        ).select_related('client', 'service_type', 'created_by'),
+    )
+    if selected_branch:
+        credit_invoices = credit_invoices.filter(branch=selected_branch)
+    elif has_branches:
+        credit_invoices = credit_invoices.filter(branch__in=branches)
+    for invoice in credit_invoices:
+        service_ids = [invoice.service_type_id] if invoice.service_type_id else []
+        service_names = [invoice.service_type.name] if invoice.service_type_id else []
+        transactions.append({
+            'date': invoice.date_issued,
+            'id': invoice.pk,
+            'type': 'Credit sale',
+            'type_key': 'credit',
+            'description': (
+                f'{invoice.invoice_number} — {invoice.client.get_display_name()}'
+            ),
+            'method': 'Credit',
+            'method_key': 'credit',
+            'reference': '—',
+            'recorded_by': user_label(invoice.created_by),
+            'approved_by': '—',
+            'inflow': zero,
+            'outflow': zero,
+            'service_ids': service_ids,
+            'service_names': service_names,
+            'category_keys': (
+                [f'service:{invoice.service_type.category}', 'credit:receivable']
+                if invoice.service_type_id else ['credit:receivable']
+            ),
+        })
+
+    for income in other_income.select_related('recorded_by'):
+        income_type = (
+            'Capital injection'
+            if income.category == 'capital_injection'
+            else 'Other income'
+        )
+        transactions.append({
+            'date': income.income_date,
+            'id': income.pk,
+            'type': income_type,
+            'type_key': (
+                'capital_injection'
+                if income.category == 'capital_injection'
+                else 'income'
+            ),
+            'description': f'{income.source_name} — {income.get_category_display()}',
+            'method': income.get_collection_method_display(),
+            'method_key': income.collection_method,
+            'reference': income.reference or '—',
+            'recorded_by': user_label(income.recorded_by),
+            'approved_by': '—',
+            'inflow': income.amount,
+            'outflow': zero,
+            'service_ids': [],
+            'service_names': [],
+            'category_keys': [f'income:{income.category}'],
+        })
+
+    for expense in expenses.select_related('category', 'paid_by', 'created_by', 'approved_by'):
+        description = expense.description
+        if expense.category_id:
+            description = f'{expense.category.name} — {description}'
+        transactions.append({
+            'date': expense.expense_date,
+            'id': expense.pk,
+            'type': (
+                'Owner drawing'
+                if expense.category and expense.category.name.casefold() == 'drawing'
+                else 'Approved expense'
+            ),
+            'type_key': 'expense',
+            'record_type_keys': (
+                ['expense', 'drawing']
+                if expense.category and expense.category.name.casefold() == 'drawing'
+                else ['expense']
+            ),
+            'description': description,
+            'method': expense.get_payment_method_display(),
+            'method_key': expense.payment_method,
+            'reference': expense.reference or '—',
+            'recorded_by': user_label(expense.paid_by or expense.created_by),
+            'approved_by': user_label(expense.approved_by),
+            'inflow': zero,
+            'outflow': expense.amount,
+            'service_ids': [],
+            'service_names': [],
+            'category_keys': [
+                f'expense:{expense.category_id}' if expense.category_id else 'expense:uncategorized',
+            ],
+        })
+
+    for entry in daily_ledger_entries:
+        entry_type_key = 'ledger'
+        entry_record_types = ['ledger']
+        if entry.category == 'capital_injection':
+            entry_type_key = 'capital_injection'
+            entry_record_types.append('capital_injection')
+        elif entry.category == 'drawing':
+            entry_type_key = 'drawing'
+            entry_record_types.append('drawing')
+        transactions.append({
+            'date': entry.business_date,
+            'id': entry.pk,
+            'type': entry.get_category_display(),
+            'type_key': entry_type_key,
+            'record_type_keys': entry_record_types,
+            'description': f'{entry.branch.name} — {entry.description}',
+            'method': entry.get_account_display(),
+            'method_key': entry.account,
+            'reference': entry.reference or '—',
+            'recorded_by': user_label(entry.entered_by),
+            'approved_by': '—',
+            'inflow': entry.amount if entry.direction == 'inflow' else zero,
+            'outflow': entry.amount if entry.direction == 'outflow' else zero,
+            'service_ids': [],
+            'service_names': [],
+            'category_keys': [f'ledger:{entry.category}'],
+        })
+
+    capital_branches = branches
+    if selected_branch:
+        capital_branches = capital_branches.filter(pk=selected_branch.pk)
+    capital_by_branch = {
+        branch.pk: {
+            'branch': branch,
+            'injections': zero,
+            'drawings': zero,
+        }
+        for branch in capital_branches
+    }
+    for item in OtherIncome.objects.filter(
+        branch__in=capital_branches,
+        category='capital_injection',
+        income_date__range=(date_from, date_to),
+    ).values('branch_id').annotate(total=Sum('amount')):
+        capital_by_branch[item['branch_id']]['injections'] += item['total'] or zero
+    for item in BranchDailyTransaction.objects.filter(
+        branch__in=capital_branches,
+        category='capital_injection',
+        business_date__range=(date_from, date_to),
+    ).values('branch_id').annotate(total=Sum('amount')):
+        capital_by_branch[item['branch_id']]['injections'] += item['total'] or zero
+    for item in Expense.objects.filter(
+        branch__in=capital_branches,
+        category__name__iexact='Drawing',
+        status='approved',
+        expense_date__range=(date_from, date_to),
+    ).values('branch_id').annotate(total=Sum('amount')):
+        capital_by_branch[item['branch_id']]['drawings'] += item['total'] or zero
+    for item in BranchDailyTransaction.objects.filter(
+        branch__in=capital_branches,
+        category='drawing',
+        business_date__range=(date_from, date_to),
+    ).values('branch_id').annotate(total=Sum('amount')):
+        capital_by_branch[item['branch_id']]['drawings'] += item['total'] or zero
+    capital_drawings = sorted(
+        capital_by_branch.values(),
+        key=lambda item: item['branch'].name.casefold(),
+    )
+    capital_injection_total = sum(
+        (item['injections'] for item in capital_drawings), zero,
+    )
+    drawing_total = sum((item['drawings'] for item in capital_drawings), zero)
+    for item in capital_drawings:
+        item['net'] = item['injections'] - item['drawings']
+    capital_net_total = capital_injection_total - drawing_total
+
+    for summary in daily_summaries:
+        if summary.branch.external_reporting and (
+            summary.branch_id, summary.business_date,
+        ) in ledger_dates:
+            continue
+        transactions.append({
+            'date': summary.business_date,
+            'id': summary.pk,
+            'type': 'Branch daily summary',
+            'type_key': 'summary',
+            'description': f'{summary.branch.name} end-of-day summary',
+            'method': 'External system',
+            'method_key': 'external_system',
+            'reference': '—',
+            'recorded_by': user_label(summary.submitted_by),
+            'approved_by': user_label(summary.reviewed_by) if summary.reviewed_by_id else '—',
+            'inflow': summary.cash_inflow,
+            'outflow': summary.cash_outflow,
+            'service_ids': [],
+            'service_names': [],
+            'category_keys': ['summary'],
+        })
+
+    if selected_category:
+        transactions = [
+            item for item in transactions
+            if selected_category in item['category_keys']
+        ]
+    if selected_service:
+        transactions = [
+            item for item in transactions
+            if selected_service.pk in item['service_ids']
+        ]
+    if selected_record_type:
+        transactions = [
+            item for item in transactions
+            if selected_record_type in item.get(
+                'record_type_keys', [item['type_key']],
+            )
+        ]
+    if selected_method:
+        transactions = [
+            item for item in transactions
+            if item['method_key'] == selected_method
+        ]
+
+    transactions.sort(key=lambda item: (item['date'], item['id'], item['type']), reverse=True)
+    transaction_page = Paginator(transactions, 50).get_page(request.GET.get('page'))
+
+    filter_params = request.GET.copy()
+    filter_params.pop('page', None)
+    if not selected_category:
+        filter_params.pop('category', None)
+    if not selected_service_id:
+        filter_params.pop('service', None)
+    if not selected_record_type:
+        filter_params.pop('record_type', None)
+    if not selected_method:
+        filter_params.pop('method', None)
+
+    report_scope_params = request.GET.copy()
+    for key in list(report_scope_params.keys()):
+        if key not in ('branch', 'period', 'from', 'to'):
+            report_scope_params.pop(key, None)
+    if selected_branch:
+        report_scope_params['branch'] = str(selected_branch.pk)
+    else:
+        report_scope_params.pop('branch', None)
+    report_scope_params['period'] = period
+    if period == 'custom':
+        report_scope_params['from'] = date_from.isoformat()
+        report_scope_params['to'] = date_to.isoformat()
+    else:
+        report_scope_params.pop('from', None)
+        report_scope_params.pop('to', None)
+
+    template_name = (
+        'documents/balance_sheet.html'
+        if report_view == 'balance_sheet'
+        else 'documents/financial_reports.html'
+    )
+    if report_view == 'balance_sheet' and balance_sheet_entry_form is None:
+        balance_form_initial = {}
+        if selected_branch:
+            balance_form_initial['branch'] = selected_branch
+        balance_sheet_entry_form = BranchBalanceSheetEntryForm(
+            initial=balance_form_initial, branches=branches,
+        )
+    return render(request, template_name, {
+        'date_from': date_from,
+        'date_to': date_to,
+        'period': period,
+        'period_options': period_options,
+        'customer_receipts': customer_receipts,
+        'other_receipts': other_receipts,
+        'capital_injections': capital_injections,
+        'cash_inflow': cash_inflow,
+        'cash_outflow': cash_outflow,
+        'net_cash_flow': net_cash_flow,
+        'opening_cash': opening_cash,
+        'closing_cash': closing_cash,
+        'invoiced_total': invoiced_total,
+        'collected_total': collected_total,
+        'accounts_receivable': accounts_receivable,
+        'tracked_assets': total_assets,
+        'balance_sheet_assets': balance_sheet_assets,
+        'balance_sheet_liabilities': balance_sheet_liabilities,
+        'balance_sheet_equity': balance_sheet_equity,
+        'total_assets': total_assets,
+        'total_liabilities': total_liabilities,
+        'total_equity': total_equity,
+        'balance_difference': balance_difference,
+        'work_in_progress': work_in_progress,
+        'cash_account_totals': cash_account_totals,
+        'lifetime_injections': lifetime_injections,
+        'lifetime_drawings': lifetime_drawings,
+        'accumulated_operating_surplus': accumulated_operating_surplus,
+        'transactions': transaction_page,
+        'branches': branches,
+        'selected_branch': selected_branch,
+        'branch_comparison': branch_comparison,
+        'capital_drawings': capital_drawings,
+        'capital_injection_total': capital_injection_total,
+        'drawing_total': drawing_total,
+        'capital_net_total': capital_net_total,
+        'balance_sheet_entry_form': balance_sheet_entry_form,
+        'category_choices': category_choices,
+        'selected_category': selected_category,
+        'service_choices': report_services,
+        'selected_service': selected_service,
+        'method_choices': method_choices,
+        'selected_method': selected_method,
+        'record_type_choices': record_type_choices,
+        'selected_record_type': selected_record_type,
+        'filter_query': filter_params.urlencode(),
+        'report_scope_query': report_scope_params.urlencode(),
+        'report_view': report_view,
+    })
+
+
 @login_required
 def audit_books(request):
     today = timezone.now().date()
     year = int(request.GET.get('year', today.year))
     years = list(range(today.year - 3, today.year + 2))
 
-    total_revenue = Invoice.objects.filter(date_issued__year=year).aggregate(s=Sum('grand_total'))['s'] or 0
-    total_collected = Payment.objects.filter(payment_date__year=year).aggregate(s=Sum('amount'))['s'] or 0
+    total_revenue = scope_queryset(request.user, Invoice.objects.filter(date_issued__year=year)).aggregate(s=Sum('grand_total'))['s'] or 0
+    total_collected = scope_queryset(request.user, Payment.objects.filter(payment_date__year=year)).aggregate(s=Sum('amount'))['s'] or 0
     outstanding = total_revenue - total_collected
-    expenses = Expense.objects.filter(expense_date__year=year, status='approved')
+    expenses = scope_queryset(request.user, Expense.objects.filter(expense_date__year=year, status='approved'))
     exp_by_cat = expenses.values('category__name').annotate(total=Sum('amount')).order_by('-total')
     total_expenses = expenses.aggregate(s=Sum('amount'))['s'] or 0
     gross_profit = total_collected - total_expenses

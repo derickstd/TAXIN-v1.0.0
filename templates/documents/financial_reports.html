@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Cash Flow{% endblock %}
+{% block nav_financial_reports %}active{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'documents:financial_reports' %}">Reports</a></li>
+<li class="active">Cash Flow</li>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title"><i class="fas fa-chart-line"></i> Cash Flow Statement</h1>
+  <form method="get" class="d-flex align-items-end gap-2 flex-wrap no-print">
+    {% if branches %}
+    <div>
+      <label class="form-label" for="report-branch">Branch</label>
+      <select id="report-branch" class="form-control" name="branch">
+        <option value="">All accessible branches</option>
+        {% for branch in branches %}<option value="{{ branch.pk }}" {% if selected_branch.pk == branch.pk %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div>
+      <label class="form-label" for="report-period">Reporting period</label>
+      <select id="report-period" class="form-control" name="period">
+        {% for value, label in period_options %}<option value="{{ value }}" {% if period == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label" for="report-category">Category</label>
+      <select id="report-category" class="form-control" name="category">
+        <option value="">All categories</option>
+        {% for value, label in category_choices %}<option value="{{ value }}" {% if selected_category == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label" for="report-service">Service</label>
+      <select id="report-service" class="form-control" name="service">
+        <option value="">All services</option>
+        {% for service in service_choices %}<option value="{{ service.pk }}" {% if selected_service.pk == service.pk %}selected{% endif %}>{{ service.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label" for="report-type">Record type</label>
+      <select id="report-type" class="form-control" name="record_type">
+        <option value="">All records</option>
+        {% for value, label in record_type_choices %}<option value="{{ value }}" {% if selected_record_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label" for="report-method">Method / account</label>
+      <select id="report-method" class="form-control" name="method">
+        <option value="">All methods</option>
+        {% for value, label in method_choices %}<option value="{{ value }}" {% if selected_method == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-primary" type="submit">Run Report</button>
+    <button class="btn btn-outline" type="button" onclick="window.print()">Print</button>
+    <a class="btn btn-outline" href="{% url 'documents:branch_daily_ledger' %}">Daily transaction ledger</a>
+    <a class="btn btn-outline" href="{% url 'documents:branch_daily_summaries' %}?open=summary">Enter daily branch summary</a>
+  </form>
+</div>
+
+<nav class="d-flex gap-2 mb-3 no-print" aria-label="Financial reports">
+  <a class="btn btn-primary" href="{% url 'documents:financial_reports' %}?{{ report_scope_query }}">Cash Flow</a>
+  <a class="btn btn-outline" href="{% url 'documents:balance_sheet_report' %}?{{ report_scope_query }}">Balance Sheet</a>
+</nav>
+
+{% if capital_drawings %}
+<section class="card-box mb-3">
+  <div class="card-head"><i class="fas fa-scale-balanced"></i> Capital Injections &amp; Drawings</div>
+  <div class="card-body">
+    <p class="form-hint">Capital injections increase recorded cash but are excluded from operating receipts and profit. Drawings are cash outflows, not operating expenses.</p>
+  </div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Branch</th><th class="text-r">Capital injections</th><th class="text-r">Drawings</th><th class="text-r">Net capital movement</th></tr></thead>
+      <tbody>
+      {% for row in capital_drawings %}
+        <tr>
+          <td>{{ row.branch.name }}</td>
+          <td class="text-r ugx">{{ row.injections|floatformat:0|intcomma }}</td>
+          <td class="text-r ugx">{{ row.drawings|floatformat:0|intcomma }}</td>
+          <td class="text-r ugx">{{ row.net|floatformat:0|intcomma }}</td>
+        </tr>
+      {% endfor %}
+      <tr class="fw-7">
+        <td>Total</td>
+        <td class="text-r ugx">{{ capital_injection_total|floatformat:0|intcomma }}</td>
+        <td class="text-r ugx">{{ drawing_total|floatformat:0|intcomma }}</td>
+        <td class="text-r ugx">{{ capital_net_total|floatformat:0|intcomma }}</td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if branch_comparison %}
+
+<section class="card-box mb-3">
+  <div class="card-head"><i class="fas fa-code-compare"></i> Branch comparison</div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Branch</th><th>Recording source</th><th class="text-r">Cash in</th><th class="text-r">Cash out</th><th class="text-r">Net flow</th><th class="text-r">Cash remaining</th><th class="text-r">Transactions</th></tr></thead>
+      <tbody>
+      {% for row in branch_comparison %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td>{% if row.external_reporting %}Daily ledger / summary{% else %}System transactions{% endif %}</td>
+          <td class="text-r"><span class="ugx cash-flow-chip cash-flow-chip--in">{{ row.inflow|floatformat:0|intcomma }}</span></td>
+          <td class="text-r"><span class="ugx cash-flow-chip cash-flow-chip--out">{{ row.outflow|floatformat:0|intcomma }}</span></td>
+          <td class="text-r ugx">{{ row.net_cash_flow|floatformat:0|intcomma }}</td>
+          <td class="text-r ugx">{{ row.closing_cash|floatformat:0|intcomma }}</td>
+          <td class="text-r">{{ row.entry_count }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if not branch_comparison %}
+<div class="alert-note">
+  Cash is calculated from recorded customer payments and other income, less approved expenses, using a zero opening balance.
+  All payment methods are included. Unrecorded opening funds and other assets, liabilities, or equity are not included.
+</div>
+{% endif %}
+
+<div class="stats-grid mb-3">
+  <div class="kpi-card green">
+    <div class="kpi-label">Cash In</div>
+    <div class="kpi-value ugx cash-flow-chip cash-flow-chip--in">{{ cash_inflow|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">For selected period</div>
+  </div>
+  <div class="kpi-card red">
+    <div class="kpi-label">Approved Expenses</div>
+    <div class="kpi-value ugx cash-flow-chip cash-flow-chip--out">{{ cash_outflow|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">For selected period</div>
+  </div>
+  <div class="kpi-card {% if net_cash_flow >= 0 %}green{% else %}red{% endif %}">
+    <div class="kpi-label">Net Cash Flow</div>
+    <div class="kpi-value ugx">{{ net_cash_flow|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">For selected period</div>
+  </div>
+  <div class="kpi-card gold">
+    <div class="kpi-label">Remaining Recorded Cash</div>
+    <div class="kpi-value ugx">{{ closing_cash|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">As of {{ date_to|date:"d M Y" }}</div>
+  </div>
+</div>
+
+<section class="card-box mb-3" id="cash-flow">
+  <div class="card-head"><i class="fas fa-right-left"></i> Cash Flow · {{ date_from|date:"d M Y" }} – {{ date_to|date:"d M Y" }}</div>
+  <div class="card-body">
+    <div class="stat-row"><span>Opening recorded balance</span><strong class="ugx">{{ opening_cash|floatformat:0|intcomma }}</strong></div>
+    <div class="stat-row"><span>Customer payments</span><strong class="ugx cash-flow-chip cash-flow-chip--in">+{{ customer_receipts|floatformat:0|intcomma }}</strong></div>
+    <div class="stat-row"><span>Other income</span><strong class="ugx cash-flow-chip cash-flow-chip--in">+{{ other_receipts|floatformat:0|intcomma }}</strong></div>
+    <div class="stat-row"><span>Capital injections</span><strong class="ugx cash-flow-chip cash-flow-chip--in">+{{ capital_injections|floatformat:0|intcomma }}</strong></div>
+    <div class="stat-row"><span>Approved expenses</span><strong class="ugx cash-flow-chip cash-flow-chip--out">−{{ cash_outflow|floatformat:0|intcomma }}</strong></div>
+    <div class="stat-row"><span>Net cash flow</span><strong class="ugx">{{ net_cash_flow|floatformat:0|intcomma }}</strong></div>
+    <div class="stat-row"><span>Closing recorded balance</span><strong class="ugx">{{ closing_cash|floatformat:0|intcomma }}</strong></div>
+  </div>
+</section>
+
+<section class="card-box">
+  <div class="card-head">
+    <span><i class="fas fa-list-check"></i> Cash Accountability</span>
+    <span class="text-muted">{{ transactions.paginator.count }} records</span>
+  </div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Service</th>
+          <th>Method</th>
+          <th>Recorded by</th>
+          <th class="text-r">Cash In</th>
+          <th class="text-r">Cash Out</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in transactions %}
+        <tr>
+          <td>{{ item.date|date:"d M Y" }}</td>
+          <td>{{ item.type }}</td>
+          <td>{{ item.description }}</td>
+          <td>{{ item.service_names|join:", " }}</td>
+          <td>{{ item.method }}{% if item.reference != '—' %}<br><span class="text-muted">{{ item.reference }}</span>{% endif %}</td>
+          <td>{{ item.recorded_by }}{% if item.approved_by != '—' %}<br><span class="text-muted">Approved: {{ item.approved_by }}</span>{% endif %}</td>
+          <td class="text-r">{% if item.inflow %}<span class="ugx cash-flow-chip cash-flow-chip--in">{{ item.inflow|floatformat:0|intcomma }}</span>{% else %}—{% endif %}</td>
+          <td class="text-r">{% if item.outflow %}<span class="ugx cash-flow-chip cash-flow-chip--out">{{ item.outflow|floatformat:0|intcomma }}</span>{% else %}—{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-c text-muted">No records match these filters for the selected period.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if transactions.has_other_pages %}
+  <div class="card-body d-flex align-items-center justify-content-between">
+    <span class="text-muted">Page {{ transactions.number }} of {{ transactions.paginator.num_pages }}</span>
+    <div class="d-flex gap-2">
+      {% if transactions.has_previous %}
+      <a class="btn btn-outline btn-sm" href="?{{ filter_query }}&amp;page={{ transactions.previous_page_number }}">Previous</a>
+      {% endif %}
+      {% if transactions.has_next %}
+      <a class="btn btn-outline btn-sm" href="?{{ filter_query }}&amp;page={{ transactions.next_page_number }}">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  var period = document.getElementById('report-period');
+  if (!period) return;
+  period.addEventListener('change', function(){ period.form.submit(); });
+})();
+</script>
+{% endblock %}

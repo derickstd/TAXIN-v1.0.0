@@ -16,7 +16,7 @@ SYSTEM_MODULE_DEFINITIONS = (
 
 
 def ensure_module_visibility_defaults(company=None):
-    """Create any missing module visibility entries with safe defaults for a tenant/company."""
+    """Create any missing module visibility entries with safe defaults for the company."""
     for key, label, description in SYSTEM_MODULE_DEFINITIONS:
         lookup = {'key': key}
         if company is None:
@@ -30,7 +30,7 @@ def ensure_module_visibility_defaults(company=None):
 
 
 def get_module_visibility_map(company=None):
-    """Return a dictionary of module visibility entries keyed by module name for a tenant/company."""
+    """Return a dictionary of module visibility entries keyed by module name for the company."""
     ensure_module_visibility_defaults(company=company)
     if company is None:
         modules = list(SystemModuleVisibility.objects.filter(company__isnull=True, key__in=[k for k, _, _ in SYSTEM_MODULE_DEFINITIONS]).order_by('order', 'label'))
@@ -49,7 +49,7 @@ def get_module_visibility_map(company=None):
 
 
 def is_module_enabled(key, company=None):
-    """Return True if the given system module is enabled for a tenant/company."""
+    """Return True if the given system module is enabled for the company."""
     module = get_module_visibility_map(company=company).get(key)
     return True if module is None else bool(module.enabled)
 

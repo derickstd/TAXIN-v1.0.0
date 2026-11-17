@@ -4,12 +4,243 @@ from django.utils import timezone
 from datetime import timedelta
 from decimal import Decimal
 
-from core.models import User
+from core.models import Branch, Company, User
 from expenses.models import Expense, ExpenseCategory
-from billing.models import OtherIncome
+from billing.models import BranchDailyTransaction, OtherIncome, Payment
+from clients.models import Client
 
 
 class DashboardViewTests(TestCase):
+    def test_company_dashboard_chart_compares_all_branches_and_workspace_shows_statcards(self):
+        company = Company.objects.create(name='Dashboard Comparison Co', slug='dashboard-comparison')
+        taxman = Branch.objects.create(company=company, name='TAXMAN')
+        prime_focus = Branch.objects.create(
+            company=company, name='PRIME FOCUS', external_reporting=True,
+        )
+        aba_uganda = Branch.objects.create(
+            company=company, name='ABA UGANDA', external_reporting=True,
+        )
+        user = User.objects.create_user(
+            username='comparison-admin', password='pass1234',
+            role='admin', company=company,
+        )
+        client = Client.objects.create(
+            full_name='Dashboard Sales Client', phone_primary='+256700000039',
+            branch=taxman, created_by=user,
+        )
+        today = timezone.localdate()
+        week_start = today - timezone.timedelta(days=today.weekday())
+        month_start = today.replace(day=1)
+        Payment.objects.create(
+            client=client, branch=taxman, amount=Decimal('1000'),
+            payment_date=today, received_by=user,
+        )
+        earlier_this_month = week_start - timezone.timedelta(days=1)
+        has_earlier_month_payment = earlier_this_month >= month_start
+        if has_earlier_month_payment:
+            Payment.objects.create(
+                client=client, branch=taxman, amount=Decimal('100'),
+                payment_date=earlier_this_month, received_by=user,
+            )
+        category = ExpenseCategory.objects.create(name='Dashboard Test Expense')
+        Expense.objects.create(
+            expense_date=today, category=category, description='Rent',
+            amount=Decimal('200'), status='approved', branch=taxman,
+            paid_by=user, created_by=user, approved_by=user,
+        )
+        for branch, inflow, outflow in (
+            (prime_focus, Decimal('300'), Decimal('20')),
+            (aba_uganda, Decimal('500'), Decimal('50')),
+        ):
+            for direction, amount, transaction_category in (
+                ('inflow', inflow, 'service_receipt'),
+                ('outflow', outflow, 'operating_expense'),
+            ):
+                BranchDailyTransaction.objects.create(
+                    branch=branch, business_date=today, direction=direction,
+                    category=transaction_category, description='Daily entry',
+                    account='cash', amount=amount, entered_by=user,
+                )
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('dashboard:index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['period'], 'this_month')
+        self.assertContains(response, 'Reporting period')
+        self.assertEqual(
+            response.context['branch_chart_data']['labels'],
+            ['ABA UGANDA', 'PRIME FOCUS', 'TAXMAN'],
+        )
+        self.assertEqual(
+            response.context['branch_chart_data']['sales'],
+            [500.0, 300.0, 1100.0 if has_earlier_month_payment else 1000.0],
+        )
+        self.assertEqual(
+            response.context['branch_chart_data']['expenses'],
+            [50.0, 20.0, 200.0],
+        )
+        self.assertEqual(
+            response.context['branch_chart_data']['profit'],
+            [450.0, 280.0, 900.0 if has_earlier_month_payment else 800.0],
+        )
+        self.assertEqual(
+            response.context['pie_chart_data'],
+            {
+                'labels': ['ABA UGANDA', 'PRIME FOCUS', 'TAXMAN'],
+                'values': [500.0, 300.0, 1100.0 if has_earlier_month_payment else 1000.0],
+            },
+        )
+        self.assertContains(response, 'branchCashFlowPieChart')
+        self.assertContains(response, 'branchPerformanceChart')
+
+        weekly_response = self.client.get(reverse('dashboard:index'), {
+            'period': 'this_week',
+        })
+        self.assertEqual(weekly_response.context['period'], 'this_week')
+        self.assertEqual(weekly_response.context['period_start'], week_start)
+        self.assertEqual(
+            weekly_response.context['branch_chart_data']['sales'],
+            [500.0, 300.0, 1000.0],
+        )
+
+        self.client.post(reverse('dashboard:switch_branch'), {
+            'branch': taxman.pk,
+            'next': reverse('dashboard:index'),
+        })
+        workspace_response = self.client.get(reverse('dashboard:index'), {
+            'period': 'this_week',
+        })
+
+        self.assertEqual(workspace_response.status_code, 200)
+        self.assertEqual(workspace_response.context['workspace_summary']['inflow'], Decimal('1000'))
+        self.assertEqual(workspace_response.context['workspace_summary']['outflow'], Decimal('200'))
+        self.assertEqual(
+            workspace_response.context['pie_chart_data'],
+            {'labels': ['Cash in', 'Cash out'], 'values': [1000.0, 200.0]},
+        )
+        self.assertContains(workspace_response, 'Cash remaining')
+        self.assertContains(workspace_response, 'Cash flow mix')
+        self.assertContains(
+            workspace_response,
+            f'?period=this_week&amp;branch={taxman.pk}',
+        )
+        self.assertNotContains(workspace_response, 'branchPerformanceChart')
+
+        monthly_workspace_response = self.client.get(reverse('dashboard:index'), {
+            'period': 'this_month',
+        })
+        self.assertEqual(
+            monthly_workspace_response.context['workspace_summary']['inflow'],
+            Decimal('1100') if has_earlier_month_payment else Decimal('1000'),
+        )
+
+    def test_day_transaction_details_respect_active_branch_workspace(self):
+        company = Company.objects.create(name='Transaction Workspace Co', slug='transaction-workspace')
+        taxman = Branch.objects.create(company=company, name='TAXMAN')
+        prime_focus = Branch.objects.create(company=company, name='PRIME FOCUS')
+        user = User.objects.create_user(
+            username='transaction-workspace-admin', password='pass1234',
+            role='admin', company=company,
+        )
+        taxman_client = Client.objects.create(
+            full_name='Taxman Ledger Client', phone_primary='+256700000031', branch=taxman,
+        )
+        prime_client = Client.objects.create(
+            full_name='Prime Ledger Client', phone_primary='+256700000032', branch=prime_focus,
+        )
+        business_date = timezone.localdate()
+        Payment.objects.create(
+            client=taxman_client, branch=taxman, amount=Decimal('9876'),
+            payment_date=business_date, received_by=user,
+        )
+        Payment.objects.create(
+            client=prime_client, branch=prime_focus, amount=Decimal('1234'),
+            payment_date=business_date, received_by=user,
+        )
+        self.client.force_login(user)
+        self.client.post(reverse('dashboard:switch_branch'), {
+            'branch': prime_focus.pk,
+            'next': reverse('dashboard:index'),
+        })
+
+        response = self.client.get(reverse('dashboard:day_transactions'), {
+            'day': business_date.isoformat(),
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '1,234')
+        self.assertNotContains(response, '9,876')
+
+    def test_leadership_can_switch_branch_workspace_and_return_to_company_view(self):
+        company = Company.objects.create(name='Workspace Co', slug='workspace')
+        taxman = Branch.objects.create(company=company, name='TAXMAN')
+        prime_focus = Branch.objects.create(company=company, name='PRIME FOCUS')
+        user = User.objects.create_user(
+            username='workspace-admin', password='pass1234',
+            role='admin', company=company,
+        )
+        Client.objects.create(
+            full_name='Taxman Client', phone_primary='+256700000021', branch=taxman,
+        )
+        Client.objects.create(
+            full_name='Prime Client', phone_primary='+256700000022', branch=prime_focus,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse('dashboard:index'))
+        self.assertEqual(len(response.context['branches']), 2)
+        self.assertContains(response, 'All branches')
+
+        response = self.client.post(reverse('dashboard:switch_branch'), {
+            'branch': prime_focus.pk,
+            'next': reverse('clients:list'),
+        })
+        self.assertRedirects(response, reverse('clients:list'))
+        self.assertEqual(self.client.session['active_branch_id'], prime_focus.pk)
+
+        response = self.client.get(reverse('clients:list'))
+        visible_clients = list(response.context['clients'].object_list)
+        self.assertEqual([client.full_name for client in visible_clients], ['Prime Client'])
+        self.assertContains(response, 'PRIME FOCUS workspace')
+
+        self.client.post(reverse('dashboard:switch_branch'), {
+            'branch': '',
+            'next': reverse('dashboard:index'),
+        })
+        self.assertNotIn('active_branch_id', self.client.session)
+        response = self.client.get(reverse('dashboard:index'))
+        self.assertEqual(len(response.context['branches']), 2)
+
+    def test_branch_user_cannot_switch_into_another_branch_workspace(self):
+        company = Company.objects.create(name='Locked Workspace Co', slug='locked-workspace')
+        assigned_branch = Branch.objects.create(company=company, name='TAXMAN')
+        other_branch = Branch.objects.create(company=company, name='PRIME FOCUS')
+        user = User.objects.create_user(
+            username='workspace-staff', password='pass1234',
+            role='tax_officer', company=company, branch=assigned_branch,
+        )
+        Client.objects.create(
+            full_name='Assigned Client', phone_primary='+256700000023',
+            branch=assigned_branch,
+        )
+        Client.objects.create(
+            full_name='Other Branch Client', phone_primary='+256700000024',
+            branch=other_branch,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(reverse('dashboard:switch_branch'), {
+            'branch': other_branch.pk,
+            'next': reverse('clients:list'),
+        })
+
+        self.assertRedirects(response, reverse('dashboard:index'))
+        self.assertNotIn('active_branch_id', self.client.session)
+        response = self.client.get(reverse('clients:list'))
+        visible_clients = list(response.context['clients'].object_list)
+        self.assertEqual([client.full_name for client in visible_clients], ['Assigned Client'])
+
     def test_dashboard_adds_staff_completion_metrics(self):
         user = User.objects.create_user(
             username='dashboard-user',

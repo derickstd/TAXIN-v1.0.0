@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.urls import reverse
 from django.db.models import Sum, Count
 from django.utils import timezone
 from .models import Expense, ExpenseCategory
@@ -10,6 +11,7 @@ from services.models import JobCard
 from core.decorators import manager_or_admin_required
 import datetime
 from core.utils import paginate_queryset
+from core.branch_access import get_entry_branch, scope_queryset
 
 
 class OptionalModelChoiceField(forms.ModelChoiceField):
@@ -40,19 +42,25 @@ class ExpenseForm(forms.ModelForm):
         widgets = {'expense_date': forms.DateInput(attrs={'type': 'date'}),
                    'description': forms.Textarea(attrs={'rows': 2})}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['expense_date'].initial = datetime.date.today()
         self.fields['category'].queryset = ExpenseCategory.objects.filter(is_active=True).order_by('name')
-        self.fields['client'].queryset = Client.objects.order_by('full_name')
-        self.fields['job_card'].queryset = JobCard.objects.order_by('-created_at')[:100]
+        self.fields['client'].queryset = scope_queryset(
+            user, Client.objects.order_by('full_name'),
+        ) if user else Client.objects.order_by('full_name')
+        self.fields['job_card'].queryset = scope_queryset(
+            user, JobCard.objects.order_by('-created_at'),
+        )[:100] if user else JobCard.objects.order_by('-created_at')[:100]
         for f in ['reference', 'receipt_upload', 'is_billable']:
             self.fields[f].required = False
 
 
 @login_required
 def expense_list(request):
-    expenses = Expense.objects.select_related('category', 'paid_by').order_by('-expense_date')
+    expenses = scope_queryset(
+        request.user, Expense.objects.select_related('category', 'paid_by'),
+    ).order_by('-expense_date')
     cat = request.GET.get('category', '')
     start_date_str = request.GET.get('start_date', '').strip()
     end_date_str = request.GET.get('end_date', '').strip()
@@ -91,19 +99,28 @@ def expense_list(request):
 
 @login_required
 def expense_create(request):
+    branch = get_entry_branch(request.user)
+    if branch and branch.external_reporting:
+        messages.info(request, 'Record external-branch expense totals in Branch Daily Entries.')
+        ledger_url = reverse('documents:branch_daily_expense')
+        return redirect(
+            f'{ledger_url}?branch={branch.pk}&open=transaction'
+            '&direction=outflow&category=operating_expense'
+        )
     if request.method == 'POST':
-        form = ExpenseForm(request.POST, request.FILES)
+        form = ExpenseForm(request.POST, request.FILES, user=request.user)
         if form.is_valid():
             exp = form.save(commit=False)
             exp.paid_by = request.user
             exp.created_by = request.user
             exp.status = 'submitted'
+            exp.branch = branch
             exp.save()
             messages.success(request, 'Expense logged and submitted for approval.')
             return redirect('expenses:list')
         messages.error(request, 'Please fix the errors below.')
     else:
-        form = ExpenseForm()
+        form = ExpenseForm(user=request.user)
     return render(request, 'expenses/expense_form.html', {
         'form': form,
         'today': datetime.date.today().isoformat(),
@@ -112,7 +129,7 @@ def expense_create(request):
 
 @login_required
 def approve_expense(request, pk):
-    exp = get_object_or_404(Expense, pk=pk)
+    exp = get_object_or_404(scope_queryset(request.user, Expense.objects.all()), pk=pk)
     if request.user.is_manager_or_admin():
         exp.status = 'approved'
         exp.approved_by = request.user

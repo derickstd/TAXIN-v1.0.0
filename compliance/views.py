@@ -6,6 +6,7 @@ from .models import ComplianceObligation, ComplianceDeadline
 from billing.models import Invoice, Payment
 from services.models import JobCard, JobCardLineItem
 from credentials.models import ClientCredential
+from core.branch_access import get_entry_branch, scope_queryset
 
 
 @login_required
@@ -14,15 +15,23 @@ def deadline_list(request):
     
     today = timezone.now().date()
     seven_days = today + timezone.timedelta(days=7)
-    ComplianceDeadline.objects.filter(status='upcoming', due_date__lt=today).update(status='overdue')
-    upcoming = ComplianceDeadline.objects.filter(
+    deadlines = scope_queryset(
+        request.user, ComplianceDeadline.objects.all(),
+        branch_path='obligation__client__branch',
+    )
+    deadlines.filter(status='upcoming', due_date__lt=today).update(status='overdue')
+    upcoming = deadlines.filter(
         status='upcoming', due_date__lte=seven_days
     ).select_related('obligation__client', 'obligation__service_type').order_by('due_date')
-    all_deadlines = ComplianceDeadline.objects.select_related(
+    all_deadlines = deadlines.select_related(
         'obligation__client', 'obligation__service_type', 'filed_by', 'invoice'
     ).order_by('due_date')
 
-    credentials = ClientCredential.objects.select_related('client', 'last_accessed_by').order_by('client__full_name')
+    credentials = scope_queryset(
+        request.user,
+        ClientCredential.objects.select_related('client', 'last_accessed_by'),
+        branch_path='client__branch',
+    ).order_by('client__full_name')
     q = request.GET.get('q', '')
     if q:
         from django.db.models import Q
@@ -40,7 +49,13 @@ def deadline_list(request):
 
 @login_required
 def update_status(request, pk, action):
-    deadline = get_object_or_404(ComplianceDeadline, pk=pk)
+    deadline = get_object_or_404(
+        scope_queryset(
+            request.user, ComplianceDeadline.objects.all(),
+            branch_path='obligation__client__branch',
+        ),
+        pk=pk,
+    )
     if request.method != 'POST':
         return redirect('compliance:list')
 
@@ -66,75 +81,79 @@ def update_status(request, pk, action):
         messages.warning(request, f'{service_type.name} for {deadline.period_label} is finalized and cannot be changed.')
         return redirect('compliance:list')
 
+    branch = deadline.obligation.client.branch
+    uses_external_reporting = bool(branch and branch.external_reporting)
+
     if action == 'filed_and_paid':
         deadline.status = 'filed_and_paid'
         deadline.filed_date = timezone.now().date()
         deadline.filed_by = request.user
-        job_card = _get_or_create_job_card(deadline, request.user)
-        if job_card:
-            job_card.status = 'completed'
-            job_card.completed_at = timezone.now()
-            job_card.save(update_fields=['status', 'completed_at'])
-            _update_line_item_status(job_card, service_type, 'handled_paid', deadline.period_label)
-        invoice = _get_or_create_invoice(deadline, request.user)
-        if invoice:
-            # Only set status — Payment creation below will set amount_paid via signal
-            Invoice.objects.filter(pk=invoice.pk).update(payment_method='mixed')
-            _create_payment_if_needed(invoice, request.user)
-            # Reload to get signal-updated status
-            invoice.refresh_from_db()
-        deadline.job_card = job_card
-        deadline.invoice = invoice
+        if not uses_external_reporting:
+            job_card = _get_or_create_job_card(deadline, request.user)
+            if job_card:
+                job_card.status = 'completed'
+                job_card.completed_at = timezone.now()
+                job_card.save(update_fields=['status', 'completed_at'])
+                _update_line_item_status(job_card, service_type, 'handled_paid', deadline.period_label)
+            invoice = _get_or_create_invoice(deadline, request.user)
+            if invoice:
+                Invoice.objects.filter(pk=invoice.pk).update(payment_method='mixed')
+                _create_payment_if_needed(invoice, request.user)
+                invoice.refresh_from_db()
+            deadline.job_card = job_card
+            deadline.invoice = invoice
         messages.success(request, f'{service_type.name} for {deadline.period_label} marked as filed and paid.')
 
     elif action == 'filed_not_paid':
         deadline.status = 'filed_not_paid'
         deadline.filed_date = timezone.now().date()
         deadline.filed_by = request.user
-        job_card = _get_or_create_job_card(deadline, request.user)
-        if job_card:
-            job_card.status = 'completed'
-            job_card.completed_at = timezone.now()
-            job_card.save(update_fields=['status', 'completed_at'])
-            _update_line_item_status(job_card, service_type, 'handled_not_paid', deadline.period_label)
-        invoice = _get_or_create_invoice(deadline, request.user)
-        if invoice and invoice.status == 'draft':
-            Invoice.objects.filter(pk=invoice.pk).update(status='sent')
-        deadline.job_card = job_card
-        deadline.invoice = invoice
+        if not uses_external_reporting:
+            job_card = _get_or_create_job_card(deadline, request.user)
+            if job_card:
+                job_card.status = 'completed'
+                job_card.completed_at = timezone.now()
+                job_card.save(update_fields=['status', 'completed_at'])
+                _update_line_item_status(job_card, service_type, 'handled_not_paid', deadline.period_label)
+            invoice = _get_or_create_invoice(deadline, request.user)
+            if invoice and invoice.status == 'draft':
+                Invoice.objects.filter(pk=invoice.pk).update(status='sent')
+            deadline.job_card = job_card
+            deadline.invoice = invoice
         messages.success(request, f'{service_type.name} for {deadline.period_label} marked as filed (awaiting payment).')
 
     elif action == 'paid_not_filed':
         deadline.status = 'paid_not_filed'
-        job_card = _get_or_create_job_card(deadline, request.user)
-        if job_card:
-            job_card.status = 'pending_payment'
-            job_card.save(update_fields=['status'])
-            _update_line_item_status(job_card, service_type, 'not_handled', deadline.period_label)
-        invoice = _get_or_create_invoice(deadline, request.user)
-        if invoice:
-            Invoice.objects.filter(pk=invoice.pk).update(payment_method='mixed')
-            _create_payment_if_needed(invoice, request.user)
-            invoice.refresh_from_db()
-        deadline.job_card = job_card
-        deadline.invoice = invoice
+        if not uses_external_reporting:
+            job_card = _get_or_create_job_card(deadline, request.user)
+            if job_card:
+                job_card.status = 'pending_payment'
+                job_card.save(update_fields=['status'])
+                _update_line_item_status(job_card, service_type, 'not_handled', deadline.period_label)
+            invoice = _get_or_create_invoice(deadline, request.user)
+            if invoice:
+                Invoice.objects.filter(pk=invoice.pk).update(payment_method='mixed')
+                _create_payment_if_needed(invoice, request.user)
+                invoice.refresh_from_db()
+            deadline.job_card = job_card
+            deadline.invoice = invoice
         messages.success(request, f'Payment recorded for {service_type.name} {deadline.period_label} (pending filing).')
 
     elif action in ('none', 'reset'):
         deadline.status = 'upcoming'
         deadline.filed_date = None
         deadline.filed_by = None
-        job_card = _get_job_card_for_deadline(deadline)
-        if job_card:
-            job_card.status = 'open'
-            job_card.completed_at = None
-            job_card.save(update_fields=['status', 'completed_at'])
-            _update_line_item_status(job_card, service_type, 'not_handled', deadline.period_label)
-        invoice = _get_invoice_for_deadline(deadline)
-        if invoice:
-            # Delete payments first — their deletion signal will recalculate amount_paid
-            invoice.payments.all().delete()
-            Invoice.objects.filter(pk=invoice.pk).update(status='draft', amount_paid=0)
+        if not uses_external_reporting:
+            job_card = _get_job_card_for_deadline(deadline)
+            if job_card:
+                job_card.status = 'open'
+                job_card.completed_at = None
+                job_card.save(update_fields=['status', 'completed_at'])
+                _update_line_item_status(job_card, service_type, 'not_handled', deadline.period_label)
+            invoice = _get_invoice_for_deadline(deadline)
+            if invoice:
+                invoice.payments.all().delete()
+                Invoice.objects.filter(pk=invoice.pk).update(status='draft', amount_paid=0)
         messages.info(request, f'{service_type.name} for {deadline.period_label} reset to upcoming.')
 
     deadline.save()
@@ -153,6 +172,7 @@ def _get_or_create_job_card(deadline, user):
     if not job_card:
         job_card = JobCard.objects.create(
             client=deadline.obligation.client,
+            branch=deadline.obligation.client.branch or get_entry_branch(user),
             period_month=deadline.due_date.month,
             period_year=deadline.due_date.year,
             assigned_to=user,
@@ -203,6 +223,10 @@ def _get_or_create_invoice(deadline, user):
     invoice = Invoice.objects.create(
         client=deadline.obligation.client,
         job_card=job_card,
+        branch=(
+            job_card.branch if job_card and job_card.branch_id
+            else deadline.obligation.client.branch or get_entry_branch(user)
+        ),
         due_date=deadline.due_date,
         subtotal=deadline.obligation.service_type.default_price,
         vat_total=0,
@@ -223,6 +247,7 @@ def _create_payment_if_needed(invoice, user):
         invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
         Payment.objects.create(
             invoice=invoice,
+            branch=invoice.branch,
             amount=invoice.grand_total,
             method='mixed',
             received_by=user,
@@ -234,7 +259,10 @@ def _create_payment_if_needed(invoice, user):
 def mark_credential_handled(request, pk):
     if request.method != 'POST':
         return redirect('compliance:list')
-    credential = get_object_or_404(ClientCredential, pk=pk)
+    credential = get_object_or_404(
+        scope_queryset(request.user, ClientCredential.objects.all(), branch_path='client__branch'),
+        pk=pk,
+    )
     if 'activate' in request.POST:
         credential.status = 'active'
         credential.save(update_fields=['status'])

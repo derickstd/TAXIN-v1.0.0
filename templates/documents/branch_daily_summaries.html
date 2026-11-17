@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Branch Daily Entries{% endblock %}
+{% block nav_branch_summaries %}active{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'documents:financial_reports' %}">Reports</a></li>
+<li class="active">Branch Daily Entries</li>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title"><i class="fas fa-clipboard-check"></i> Branch Daily Entries</h1>
+
+  </div>
+  {% if branches %}
+  <a class="btn btn-outline" href="{% url 'documents:branch_daily_ledger' %}">View transaction ledger</a>
+  <button class="btn btn-primary" type="button" id="openBranchEntryModal">
+    <i class="fas fa-plus"></i> Enter Daily Summary
+  </button>
+  {% endif %}
+</div>
+
+{% if branches %}
+<div class="modal-overlay{% if open_summary_modal %} open{% endif %}" id="branchEntryModal" aria-hidden="{% if open_summary_modal %}false{% else %}true{% endif %}">
+  <div class="modal-box" style="width:min(100%,760px);max-width:760px;max-height:90vh;overflow-y:auto" role="dialog" aria-modal="true" aria-labelledby="branchEntryModalTitle">
+    <div class="modal-hd">
+      <h5 id="branchEntryModalTitle"><i class="fas fa-pen-to-square"></i> End-of-day summary</h5>
+      <button class="modal-close" type="button" data-close-branch-entry aria-label="Close">&times;</button>
+    </div>
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-grid-2">
+        <div>
+          <label class="form-label" for="{{ form.branch.id_for_label }}">Branch</label>
+          {{ form.branch }}
+          {% for error in form.branch.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+          {% if selected_branch and selected_branch.external_reporting %}
+          <div class="form-hint">Opening and daily totals are prefilled from previous balances and ledger entries. Ledger entries drive reports when available; the summary is used as a fallback.</div>
+          {% else %}
+
+          {% endif %}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.business_date.id_for_label }}">Business date</label>
+          {{ form.business_date }}
+          {% for error in form.business_date.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+        </div>
+        <div><label class="form-label" for="{{ form.opening_balance.id_for_label }}">Opening balance (UGX)</label>{{ form.opening_balance }}{% for error in form.opening_balance.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}</div>
+        <div class="cash-flow-field--in"><label class="form-label" for="{{ form.cash_inflow.id_for_label }}">Total cash received (UGX)</label>{{ form.cash_inflow }}{% for error in form.cash_inflow.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}</div>
+        <div class="cash-flow-field--out"><label class="form-label" for="{{ form.cash_outflow.id_for_label }}">Total cash paid out (UGX)</label>{{ form.cash_outflow }}{% for error in form.cash_outflow.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}</div>
+        <div>
+          <label class="form-label" for="{{ form.closing_balance.id_for_label }}">Closing balance (UGX)</label>
+          {{ form.closing_balance }}
+          <div class="form-hint">Calculated as opening + cash received − cash paid out. You can adjust it to match the actual count.</div>
+          {% for error in form.closing_balance.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+        </div>
+      </div>
+      <div class="mt-2"><label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>{{ form.notes }}{% for error in form.notes.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}</div>
+      <div class="form-actions mt-3">
+        <button class="btn btn-primary" type="submit"><i class="fas fa-save"></i> Save daily entry</button>
+        <button class="btn btn-outline" type="button" data-close-branch-entry>Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<section class="card-box">
+  <div class="card-head">
+    <span><i class="fas fa-list"></i> Recent entries</span>
+    <form method="get" class="d-flex gap-2">
+      <select class="form-control" name="branch" aria-label="Filter by branch">
+        <option value="">All accessible branches</option>
+        {% for branch in branches %}<option value="{{ branch.pk }}" {% if selected_branch.pk == branch.pk %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-outline btn-sm" type="submit">Filter</button>
+    </form>
+  </div>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>Date</th><th>Branch</th><th>Opening</th><th>Cash in</th><th>Cash out</th><th>Closing</th><th>Variance</th><th>Entered / Updated by</th><th>Reviewed</th></tr></thead>
+      <tbody>
+      {% for item in summaries %}
+        <tr>
+          <td>{{ item.business_date|date:'d M Y' }}</td>
+          <td>{{ item.branch.name }}</td>
+          <td class="ugx">{{ item.opening_balance|floatformat:0|intcomma }}</td>
+          <td><span class="ugx cash-flow-chip cash-flow-chip--in">{{ item.cash_inflow|floatformat:0|intcomma }}</span></td>
+          <td><span class="ugx cash-flow-chip cash-flow-chip--out">{{ item.cash_outflow|floatformat:0|intcomma }}</span></td>
+          <td class="ugx">{{ item.closing_balance|floatformat:0|intcomma }}</td>
+          <td class="ugx">{{ item.reconciliation_difference|floatformat:0|intcomma }}</td>
+          <td>{{ item.submitted_by.get_full_name|default:item.submitted_by.username }}{% if item.updated_by %}<br><span class="text-muted">Updated: {{ item.updated_by.get_full_name|default:item.updated_by.username }}</span>{% endif %}</td>
+          <td>
+            {% if item.reviewed_at %}{{ item.reviewed_by.get_full_name|default:item.reviewed_by.username }}<br><span class="text-muted">{{ item.reviewed_at|date:'d M Y H:i' }}</span>
+            {% elif user.is_superuser or user.role == 'admin' or user.role == 'ceo' or user.role == 'manager' %}
+              <form method="post" action="{% url 'documents:review_branch_daily_summary' item.pk %}">{% csrf_token %}<button class="btn btn-outline btn-sm" type="submit">Review</button></form>
+            {% else %}<span class="text-muted">Pending</span>{% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="9" class="text-c text-muted">No daily entries recorded yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<div class="alert-note">No branches are assigned to your account. Ask company leadership to set up branches and assign your access.</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+(function(){
+  var overlay = document.getElementById('branchEntryModal');
+  var trigger = document.getElementById('openBranchEntryModal');
+  if (!overlay) return;
+  if (overlay.classList.contains('open')) {
+    document.body.style.overflow = 'hidden';
+    var currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.get('open') === 'summary') {
+      currentUrl.searchParams.delete('open');
+      window.history.replaceState(
+        null, '', currentUrl.pathname + currentUrl.search + currentUrl.hash,
+      );
+    }
+  }
+
+  function closeModal(){
+    overlay.classList.remove('open');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  if (trigger) {
+    trigger.addEventListener('click', function(){
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    });
+  }
+  overlay.addEventListener('click', function(event){
+    if (event.target === overlay || event.target.closest('[data-close-branch-entry]')) {
+      closeModal();
+    }
+  });
+  document.addEventListener('keydown', function(event){
+    if (event.key === 'Escape' && overlay.classList.contains('open')) closeModal();
+  });
+})();
+
+(function(){
+  var opening = document.getElementById('id_opening_balance');
+  var inflow = document.getElementById('id_cash_inflow');
+  var outflow = document.getElementById('id_cash_outflow');
+  var closing = document.getElementById('id_closing_balance');
+  if (!opening || !inflow || !outflow || !closing) return;
+
+  function updateClosingBalance(){
+    var total = (Number(opening.value) || 0)
+      + (Number(inflow.value) || 0)
+      - (Number(outflow.value) || 0);
+    closing.value = total.toFixed(2);
+  }
+
+  [opening, inflow, outflow].forEach(function(field){
+    field.addEventListener('input', updateClosingBalance);
+  });
+
+  var branch = document.getElementById('id_branch');
+  var businessDate = document.getElementById('id_business_date');
+  function refreshPrefill(){
+    var params = new URLSearchParams(window.location.search);
+    if (branch.value) params.set('branch', branch.value);
+    else params.delete('branch');
+    if (businessDate.value) params.set('date', businessDate.value);
+    else params.delete('date');
+    params.set('open', 'summary');
+    window.location.search = params.toString();
+  }
+
+  branch.addEventListener('change', refreshPrefill);
+  businessDate.addEventListener('change', refreshPrefill);
+})();
+</script>
+{% endblock %}

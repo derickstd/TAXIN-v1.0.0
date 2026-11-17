@@ -11,7 +11,6 @@ class Company(models.Model):
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=20, blank=True)
     address = models.TextField(blank=True)
-    db_name = models.CharField(max_length=255, blank=True, help_text='Optional database alias or filename for company-specific DB')
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     owner = models.ForeignKey('core.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='owned_companies')
@@ -37,6 +36,10 @@ class Branch(models.Model):
     address = models.TextField(blank=True)
     phone = models.CharField(max_length=50, blank=True)
     is_active = models.BooleanField(default=True)
+    external_reporting = models.BooleanField(
+        default=False,
+        help_text='Use daily summary entries from an external accounting system.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -44,30 +47,6 @@ class Branch(models.Model):
 
     def __str__(self):
         return f"{self.company.slug} — {self.name}"
-
-
-class Tenant(models.Model):
-    STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('running', 'Running'),
-        ('ready', 'Ready'),
-        ('failed', 'Failed'),
-    ]
-
-    company = models.OneToOneField(Company, on_delete=models.CASCADE, related_name='tenant')
-    db_alias = models.CharField(max_length=100, blank=True)
-    db_path = models.CharField(max_length=1024, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    created_by = models.ForeignKey('core.User', null=True, blank=True, on_delete=models.SET_NULL)
-    last_error = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"Tenant {self.company.slug} ({self.status})"
 
 
 class User(AbstractUser):
@@ -96,9 +75,12 @@ class User(AbstractUser):
                                                   help_text='Receive reminders for incomplete tasks')
     ui_theme          = models.CharField(max_length=20, choices=THEME_CHOICES, default='ocean')
     company           = models.ForeignKey(Company, null=True, blank=True, on_delete=models.SET_NULL, related_name='users')
+    branch            = models.ForeignKey(
+        Branch, null=True, blank=True, on_delete=models.SET_NULL, related_name='assigned_users',
+    )
 
     def is_manager_or_admin(self):
-        return self.is_superuser or self.role in ('manager', 'admin')
+        return self.is_superuser or self.role in ('manager', 'admin', 'ceo')
 
     def get_notify_whatsapp(self):
         """Return WhatsApp number for notifications, falling back to phone_whatsapp."""
@@ -112,7 +94,7 @@ class User(AbstractUser):
 
 
 class SystemModuleVisibility(models.Model):
-    """Admin-controlled per-tenant toggles for major application modules."""
+    """Admin-controlled toggles for major application modules."""
     key = models.SlugField()
     company = models.ForeignKey(Company, null=True, blank=True, on_delete=models.CASCADE, related_name='module_visibilities')
     label = models.CharField(max_length=100)

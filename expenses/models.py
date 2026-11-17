@@ -52,6 +52,9 @@ class Expense(models.Model):
     is_reimbursed = models.BooleanField(default=False)
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_expenses')
     status = models.CharField(max_length=20, choices=STATUS, default='draft')
+    branch = models.ForeignKey(
+        'core.Branch', null=True, blank=True, on_delete=models.SET_NULL, related_name='expenses',
+    )
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_expenses')
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self):

@@ -7,11 +7,12 @@ import calendar as cal
 
 from billing.models import Invoice, Payment
 from clients.models import Client
-from core.models import User
+from core.models import Branch, Company, User
 from core.models import AuditLog
 from core.duplicate_detection import check_duplicate_transaction
 from expenses.models import Expense, ExpenseCategory
 from services.models import JobCard, JobCardLineItem, ServiceType
+from services.forms import ServiceTypeForm
 from services.views import _auto_create_invoice
 
 
@@ -617,6 +618,18 @@ class ServiceCatalogueManagementTests(TestCase):
         self.assertTrue(service.is_recurring)
         self.assertTrue(service.vat_applicable)
         self.assertTrue(service.is_active)
+
+    def test_service_form_defaults_to_managers_branch(self):
+        company = Company.objects.create(name='Service Form Co', slug='service-form')
+        branch = Branch.objects.create(company=company, name='Assigned Branch')
+        manager = User.objects.create_user(
+            username='service_manager', password='pass1234',
+            role='manager', company=company, branch=branch,
+        )
+
+        form = ServiceTypeForm(user=manager)
+
+        self.assertEqual(form['branches'].value(), [branch.pk])
 
     def test_remove_unused_service_deletes_it(self):
         service = ServiceType.objects.create(

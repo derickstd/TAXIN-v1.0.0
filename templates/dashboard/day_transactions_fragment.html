@@ -27,11 +27,13 @@
         {% for payment in payments %}
         <div class="day-detail-item">
           <div class="day-detail-item__top">
-            <span class="day-detail-item__amount">UGX {{ payment.amount|floatformat:0|intcomma }}</span>
+            <span class="day-detail-item__amount cash-flow-chip cash-flow-chip--in">UGX {{ payment.amount|floatformat:0|intcomma }}</span>
             <span class="day-detail-item__meta">{{ payment.method|title }}</span>
           </div>
           {% if payment.invoice and payment.invoice.invoice_number %}
           <div class="day-detail-item__meta">Invoice {{ payment.invoice.invoice_number }}</div>
+          {% elif payment.client %}
+          <div class="day-detail-item__meta">{{ payment.client.get_display_name }}</div>
           {% endif %}
           {% if payment.reference %}
           <div class="day-detail-item__meta">Ref {{ payment.reference }}</div>
@@ -52,7 +54,7 @@
         {% for expense in expenses %}
         <div class="day-detail-item">
           <div class="day-detail-item__top">
-            <span class="day-detail-item__amount">UGX {{ expense.amount|floatformat:0|intcomma }}</span>
+            <span class="day-detail-item__amount cash-flow-chip cash-flow-chip--out">UGX {{ expense.amount|floatformat:0|intcomma }}</span>
             <span class="day-detail-item__meta">{{ expense.category.name|default:'Other' }}</span>
           </div>
           <div class="day-detail-item__meta">{{ expense.description|default:'No description provided' }}</div>
@@ -69,7 +71,7 @@
         {% for income in other_income %}
         <div class="day-detail-item">
           <div class="day-detail-item__top">
-            <span class="day-detail-item__amount">UGX {{ income.amount|floatformat:0|intcomma }}</span>
+            <span class="day-detail-item__amount cash-flow-chip cash-flow-chip--in">UGX {{ income.amount|floatformat:0|intcomma }}</span>
             <span class="day-detail-item__meta">{{ income.category|title }}</span>
           </div>
           <div class="day-detail-item__meta">{{ income.source_name }}</div>
