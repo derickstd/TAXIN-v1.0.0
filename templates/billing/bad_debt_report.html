@@ -3,6 +3,7 @@
 {% block nav_billing %}active{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">Bad Debts Report</li>{% endblock %}
 {% block content %}
+{% include 'components/report_watermark.html' %}
 <div class="page-header">
   <h4 class="page-title"><i class="fas fa-file-medical-alt"></i>Bad Debts Report</h4>
   <button onclick="window.print()" class="btn btn-outline btn-sm no-print"><i class="fas fa-print"></i> Print</button>

@@ -2,6 +2,7 @@
 {% block title %}Statement — {{ client.get_display_name }}{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li><a href="{% url 'clients:detail' client.pk %}">{{ client.client_id }}</a></li><li class="active">Statement</li>{% endblock %}
 {% block content %}
+{% include 'components/report_watermark.html' %}
 <div class="page-header">
   <h4 class="page-title"><i class="fas fa-file-invoice"></i>Account Statement — {{ client.get_display_name }}</h4>
   <div class="d-flex gap-2 no-print">

@@ -3,6 +3,7 @@
 {% block nav_inv %}active{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">{{ invoice.invoice_number }}</li>{% endblock %}
 {% block content %}
+{% include 'components/report_watermark.html' %}
 <div class="page-hdr">
   <div>
     <h4 class="page-title" style="margin-bottom:.1rem">

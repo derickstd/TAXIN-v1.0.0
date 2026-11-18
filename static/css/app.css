@@ -1799,3 +1799,16 @@ body:not([data-theme="dark"]) .dashboard-calendar-cell.neutral .dashboard-calend
 body[data-theme="dark"] .modal-box{box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .client-onboarding-dialog{width:min(100%,960px);max-width:960px}
 .client-onboarding-single-column{grid-template-columns:minmax(0,1fr)}
+.report-watermark{
+  display:none;
+  position:fixed;
+  inset:0;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+}
+.report-watermark img{width:58mm;height:auto;max-height:58mm;object-fit:contain}
+@media print{
+  .report-watermark{position:fixed!important;z-index:9999;display:flex!important;opacity:.09}
+  .report-watermark img{width:58mm;max-height:58mm}
+}

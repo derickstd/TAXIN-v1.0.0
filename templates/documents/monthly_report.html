@@ -5,6 +5,7 @@
 <li class="breadcrumb-item active">Monthly Report</li>
 {% endblock %}
 {% block content %}
+{% include 'components/report_watermark.html' %}
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
   <h4 class="page-title"><i class="fas fa-chart-line me-2 text-gold"></i>Monthly Report — {{ month_name }} {{ year }}</h4>
   <div class="d-flex gap-2 flex-wrap no-print">

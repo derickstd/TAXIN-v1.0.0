@@ -2,6 +2,7 @@
 {% block title %}Audit Books {{ year }}{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'documents:home' %}">Documents</a></li><li class="active">Audit Books</li>{% endblock %}
 {% block content %}
+{% include 'components/report_watermark.html' %}
 <div class="page-header">
   <h4 class="page-title"><i class="fas fa-book"></i>Books of Accounts — FY{{ year }}</h4>
   <div class="d-flex gap-2 no-print">
