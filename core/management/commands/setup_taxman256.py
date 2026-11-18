@@ -1,36 +1,9 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from core.reference_data import EXPENSE_CATEGORIES, SERVICE_TYPES
 
 User = get_user_model()
-
-SERVICE_TYPES = [
-    {'name':'Income Tax Return','category':'ura_filing','default_price':300000,'deadline_type':'annual_dec31','is_recurring':True},
-    {'name':'PAYE Return','category':'ura_filing','default_price':30000,'deadline_type':'monthly_15','is_recurring':True},
-    {'name':'VAT Return','category':'ura_filing','default_price':30000,'deadline_type':'monthly_15','is_recurring':True},
-    {'name':'Excise Duty Return','category':'ura_filing','default_price':30000,'deadline_type':'monthly_15','is_recurring':True},
-    {'name':'Withholding Tax Return','category':'ura_filing','default_price':30000,'deadline_type':'monthly_15','is_recurring':True},
-    {'name':'NSSF Monthly Filing','category':'nssf','default_price':20000,'deadline_type':'monthly_15','is_recurring':True},
-    {'name':'URSB Company Registration','category':'ursb','default_price':500000,'deadline_type':'none','is_recurring':False},
-    {'name':'URSB Business Registration','category':'ursb','default_price':150000,'deadline_type':'none','is_recurring':False},
-    {'name':'URSB Annual Return','category':'ursb','default_price':100000,'deadline_type':'annual_ursb','is_recurring':True},
-    {'name':'URA Assessment Generation','category':'ura_advisory','default_price':10000,'deadline_type':'none','is_recurring':False},
-    {'name':'Passport Application','category':'immigration','default_price':50000,'deadline_type':'none','is_recurring':False},
-    {'name':'Single Window Application (Customs Licence)','category':'customs','default_price':150000,'deadline_type':'none','is_recurring':False},
-    {'name':'ASYCUDA Data Capture','category':'customs','default_price':20000,'deadline_type':'none','is_recurring':False},
-    {'name':'Tax Advisory (Per Hour)','category':'advisory','default_price':50000,'deadline_type':'none','is_recurring':False},
-    {'name':'Tax Investigation Support','category':'ura_advisory','default_price':500000,'deadline_type':'none','is_recurring':False},
-    {'name':'Other (Custom)','category':'miscellaneous','default_price':0,'deadline_type':'none','is_recurring':False},
-]
-
-EXPENSE_CATEGORIES = [
-    'Office Rent','Utilities (Electricity/Water)','Internet & Data',
-    'Staff Salaries','Staff Transport/Fuel','URA Facilitation',
-    'Client Transport','Professional Subscriptions','Printing & Stationery',
-    'Bank Charges','Mobile Money Charges','Equipment & Software',
-    'Marketing & Advertising','Staff Training & CPD',
-    'Meals & Entertainment (Client)','Airtime & Communication','Miscellaneous / Other',
-]
 
 class Command(BaseCommand):
     help = 'Set up Taxin system with initial data'

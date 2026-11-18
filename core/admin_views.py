@@ -18,6 +18,7 @@ from .models import User, Company, AuditLog, Branch, SystemModuleVisibility
 from .utils import get_module_visibility_map, SYSTEM_MODULE_DEFINITIONS
 from clients.models import Client
 from .branch_access import scope_queryset
+from .branch_setup import ensure_business_branches
 
 logger = logging.getLogger(__name__)
 
@@ -333,40 +334,7 @@ def admin_company_branches(request, company_id):
             messages.error(request, 'Only TAXMAN, PRIME FOCUS, and ABA UGANDA are supported branches.')
             return redirect('core:admin_company_branches', company_id=company.pk)
 
-        from services.models import ServiceType
-
-        taxman = company.branches.filter(name__iexact='TAXMAN').first()
-        main_branch = company.branches.filter(name__iexact='Main').first()
-        if not taxman and main_branch:
-            main_branch.name = 'TAXMAN'
-            main_branch.slug = f'{company.slug}-taxman'
-            main_branch.external_reporting = False
-            main_branch.save(update_fields=['name', 'slug', 'external_reporting'])
-            taxman = main_branch
-        if not taxman:
-            taxman = Branch.objects.create(
-                company=company, name='TAXMAN',
-                slug=f'{company.slug}-taxman', external_reporting=False,
-            )
-        prime_focus, _ = Branch.objects.get_or_create(
-            company=company, name='PRIME FOCUS',
-            defaults={'slug': f'{company.slug}-prime-focus', 'external_reporting': True},
-        )
-        aba_uganda, _ = Branch.objects.get_or_create(
-            company=company, name='ABA UGANDA',
-            defaults={'slug': f'{company.slug}-aba-uganda', 'external_reporting': True},
-        )
-        for branch in (prime_focus, aba_uganda):
-            if not branch.external_reporting:
-                branch.external_reporting = True
-                branch.save(update_fields=['external_reporting'])
-        if not company.default_branch_id or company.default_branch_id == getattr(main_branch, 'pk', None):
-            company.default_branch = taxman
-            company.save(update_fields=['default_branch'])
-        for service in ServiceType.objects.filter(branches__isnull=True).distinct():
-            service.branches.add(taxman, prime_focus)
-        for service in ServiceType.objects.filter(branches=taxman).distinct():
-            service.branches.add(prime_focus)
+        ensure_business_branches(company)
         messages.success(request, 'TAXMAN, PRIME FOCUS, and ABA UGANDA are ready.')
         return redirect('core:admin_company_branches', company_id=company.pk)
 
