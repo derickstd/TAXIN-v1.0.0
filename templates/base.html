@@ -296,12 +296,18 @@ body[data-theme="dark"] .floating-expense-button { color:#fff; }
         {% endif %}
         {% if user.is_superuser or user.role == 'admin' or user.role == 'ceo' %}
         <a href="{% url 'core:admin_control_center' %}" class="sb-link {% block nav_control_center %}{% endblock %}" title="System Control Center"><i class="fas fa-sliders-h"></i><span class="sb-lbl">System Controls</span></a>
+        <a href="{% url 'core:admin_companies' %}" class="sb-link" title="Company and branch setup"><i class="fas fa-code-branch"></i><span class="sb-lbl">Company &amp; Branches</span></a>
         {% endif %}
       </div>
     </div>
     {% endif %}
 
     {% if not module_visibility.account and user.is_superuser or not module_visibility.account and user.role == 'admin' or not module_visibility.account and user.role == 'manager' or not module_visibility.account and user.role == 'ceo' %}
+    {% if user.is_superuser or user.role == 'admin' or user.role == 'ceo' %}
+    <a href="{% url 'core:admin_companies' %}" class="sb-link" title="Company and branch setup">
+      <i class="fas fa-code-branch"></i><span class="sb-lbl">Company &amp; Branches</span>
+    </a>
+    {% endif %}
     <a href="{% url 'core:admin_control_center' %}" class="sb-link {% block nav_control_center_fallback %}{% endblock %}" title="System Control Center">
       <i class="fas fa-sliders-h"></i><span class="sb-lbl">System Controls</span>
     </a>

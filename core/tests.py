@@ -146,6 +146,25 @@ class CoreVisibilityTests(TestCase):
         self.assertFalse(branch_admin.has_add_permission(request))
         self.assertFalse(branch_admin.has_delete_permission(request))
 
+    def test_company_admin_has_a_sidebar_link_to_branch_setup(self):
+        company = Company.objects.create(name='TAXMAN', slug='taxman')
+        admin_user = User.objects.create_user(
+            username='branch-link-admin',
+            password='pass1234',
+            role='admin',
+            company=company,
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.get(reverse('core:admin_companies'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Company &amp; Branches')
+        self.assertContains(
+            response,
+            reverse('core:admin_company_branches', args=[company.pk]),
+        )
+
     def test_company_admin_pages_render_without_tenant_workflows(self):
         company = Company.objects.create(name='TAXMAN', slug='taxman')
         Branch.objects.create(company=company, name='TAXMAN')
