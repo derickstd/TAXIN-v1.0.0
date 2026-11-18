@@ -12,8 +12,8 @@
     <div class="form-grid-2">
       <div class="field-span-2">
         <label class="form-label" for="payment-client">Customer</label>
-        <div style="display:flex;align-items:flex-start;gap:.5rem">
-          <select class="form-control" id="payment-client" name="client" style="flex:1;min-width:0">
+        <div class="quick-payment-select-row">
+          <select class="form-control s2" id="payment-client" name="client" data-ph="Search customers…">
             <option value="">Walk-in / anonymous (Walk-in Customers)</option>
             {% for client in clients %}
             <option value="{{ client.pk }}">{{ client.client_id }} — {{ client.get_display_name }}</option>
@@ -27,8 +27,8 @@
       </div>
       <div class="field-span-2">
         <label class="form-label" for="payment-service">Service</label>
-        <div style="display:flex;align-items:flex-start;gap:.5rem">
-          <select class="form-control s2" id="payment-service" name="service_type" style="flex:1;min-width:0">
+        <div class="quick-payment-select-row">
+          <select class="form-control s2" id="payment-service" name="service_type" data-ph="Search services…">
             <option value="">No specific service</option>
             {% for service in services %}
             <option value="{{ service.pk }}">{{ service.name }}</option>

@@ -57,7 +57,7 @@
 </div>
 
 <!-- Status chips -->
-<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.7rem">
+<div class="client-status-chips">
   <a href="?{% if q %}q={{ q }}&{% endif %}per_page={{ page_obj.paginator.per_page }}" class="btn btn-sm {% if not status %}btn-primary{% else %}btn-outline{% endif %}">All</a>
   {% for val,label in status_choices %}
   <a href="?{% if q %}q={{ q }}&{% endif %}status={{ val }}{% if ctype %}&type={{ ctype }}{% endif %}{% if debt_filter %}&debt={{ debt_filter }}{% endif %}&per_page={{ page_obj.paginator.per_page }}"

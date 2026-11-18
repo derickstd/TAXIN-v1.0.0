@@ -1,6 +1,9 @@
 from django import forms
-from .models import Invoice
-from core.branch_access import scope_queryset
+from clients.models import Client
+from core.branch_access import accessible_branches, scope_queryset
+from core.models import Branch
+from services.models import ServiceType
+from .models import Invoice, Payment
 
 
 class InvoiceForm(forms.ModelForm):
@@ -46,4 +49,79 @@ class InvoiceForm(forms.ModelForm):
                 raise forms.ValidationError(
                     'Grand total cannot be less than the amount already paid.'
                 )
+        return cleaned_data
+
+
+class PaymentReceiptFilterForm(forms.Form):
+    search = forms.CharField(
+        required=False,
+        label='Search',
+        max_length=200,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Receipt, customer, invoice, or reference',
+        }),
+    )
+    date_from = forms.DateField(
+        required=False,
+        label='From',
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+    )
+    date_to = forms.DateField(
+        required=False,
+        label='To',
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+    )
+    client = forms.ModelChoiceField(
+        required=False,
+        label='Customer',
+        queryset=Client.objects.none(),
+        empty_label='All customers',
+        widget=forms.Select(attrs={
+            'class': 'form-control s2',
+            'data-ph': 'Search customers…',
+        }),
+    )
+    service_type = forms.ModelChoiceField(
+        required=False,
+        label='Service',
+        queryset=ServiceType.objects.none(),
+        empty_label='All services',
+        widget=forms.Select(attrs={
+            'class': 'form-control s2',
+            'data-ph': 'Search services…',
+        }),
+    )
+    method = forms.ChoiceField(
+        required=False,
+        label='Method',
+        choices=[('', 'All methods')] + Payment.METHOD,
+        widget=forms.Select(attrs={'class': 'form-control'}),
+    )
+    branch = forms.ModelChoiceField(
+        required=False,
+        label='Branch',
+        queryset=Branch.objects.none(),
+        empty_label='All accessible branches',
+        widget=forms.Select(attrs={'class': 'form-control'}),
+    )
+
+    def __init__(self, *args, user, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['client'].queryset = scope_queryset(
+            user, Client.objects.order_by('full_name'),
+        )
+        self.fields['service_type'].queryset = scope_queryset(
+            user,
+            ServiceType.objects.filter(is_active=True),
+            branch_path='branches',
+        ).distinct().order_by('name')
+        self.fields['branch'].queryset = accessible_branches(user).order_by('name')
+
+    def clean(self):
+        cleaned_data = super().clean()
+        date_from = cleaned_data.get('date_from')
+        date_to = cleaned_data.get('date_to')
+        if date_from and date_to and date_from > date_to:
+            self.add_error('date_to', 'The end date must be on or after the start date.')
         return cleaned_data

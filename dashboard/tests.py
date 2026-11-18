@@ -212,6 +212,86 @@ class DashboardViewTests(TestCase):
         response = self.client.get(reverse('dashboard:index'))
         self.assertEqual(len(response.context['branches']), 2)
 
+    def test_branch_dashboard_prioritizes_contextual_actions_and_hides_charts_by_default(self):
+        company = Company.objects.create(name='Minimal Dashboard Co', slug='minimal-dashboard')
+        taxman = Branch.objects.create(company=company, name='TAXMAN')
+        prime_focus = Branch.objects.create(
+            company=company, name='PRIME FOCUS', external_reporting=True,
+        )
+        user = User.objects.create_user(
+            username='minimal-dashboard-admin', password='pass1234',
+            role='admin', company=company,
+        )
+        self.client.force_login(user)
+
+        self.client.post(reverse('dashboard:switch_branch'), {
+            'branch': taxman.pk,
+            'next': reverse('dashboard:index'),
+        })
+        taxman_response = self.client.get(reverse('dashboard:index'))
+
+        self.assertContains(taxman_response, 'New client')
+        self.assertContains(taxman_response, 'New engagement')
+        self.assertContains(taxman_response, 'Payments &amp; receipts')
+        self.assertContains(taxman_response, 'id="cashflow-mix-disclosure"')
+        self.assertNotContains(taxman_response, 'id="branch-performance-disclosure"')
+        self.assertNotContains(taxman_response, 'id="cashflow-mix-disclosure" open')
+
+        self.client.post(reverse('dashboard:switch_branch'), {
+            'branch': prime_focus.pk,
+            'next': reverse('dashboard:index'),
+        })
+        prime_focus_response = self.client.get(reverse('dashboard:index'))
+
+        self.assertContains(prime_focus_response, 'Daily entry')
+        self.assertContains(prime_focus_response, 'End-of-day summary')
+        self.assertContains(prime_focus_response, 'Account statement')
+
+    def test_tax_specific_sidebar_items_are_hidden_in_external_workspaces(self):
+        company = Company.objects.create(name='Navigation Co', slug='navigation')
+        taxman = Branch.objects.create(company=company, name='TAXMAN')
+        prime_focus = Branch.objects.create(
+            company=company, name='PRIME FOCUS', external_reporting=True,
+        )
+        user = User.objects.create_user(
+            username='navigation-admin', password='pass1234',
+            role='admin', company=company,
+        )
+        self.client.force_login(user)
+
+        self.client.post(reverse('dashboard:switch_branch'), {
+            'branch': prime_focus.pk,
+            'next': reverse('dashboard:index'),
+        })
+        response = self.client.get(reverse('dashboard:index'))
+
+        self.assertTrue(response.context['external_reporting_workspace'])
+        for route in (
+            'services:catalogue',
+            'compliance:list',
+            'taxcalendar:list',
+            'credentials:list',
+        ):
+            with self.subTest(route=route):
+                self.assertNotContains(response, reverse(route))
+        self.assertContains(response, reverse('services:list'))
+
+        self.client.post(reverse('dashboard:switch_branch'), {
+            'branch': taxman.pk,
+            'next': reverse('dashboard:index'),
+        })
+        response = self.client.get(reverse('dashboard:index'))
+
+        self.assertFalse(response.context['external_reporting_workspace'])
+        for route in (
+            'services:catalogue',
+            'compliance:list',
+            'taxcalendar:list',
+            'credentials:list',
+        ):
+            with self.subTest(route=route):
+                self.assertContains(response, reverse(route))
+
     def test_branch_user_cannot_switch_into_another_branch_workspace(self):
         company = Company.objects.create(name='Locked Workspace Co', slug='locked-workspace')
         assigned_branch = Branch.objects.create(company=company, name='TAXMAN')

@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Payments & Receipts{% endblock %}
+{% block nav_payments %}active{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'billing:list' %}">Finance</a></li>
+<li class="active">Payments &amp; Receipts</li>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title"><i class="fas fa-receipt"></i>Payments &amp; Receipts</h1>
+    <p class="form-hint mb-0">Search and review customer payment records.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap no-print">
+    <button class="btn btn-outline" type="button" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+    <a class="btn btn-primary" href="{% url 'billing:quick_payment' %}"><i class="fas fa-plus"></i> Record payment</a>
+  </div>
+</div>
+
+<section class="payment-report-summary" aria-label="Filtered payment totals">
+  <div class="payment-report-summary__item">
+    <span>Matching receipts</span>
+    <strong>{{ record_count|intcomma }}</strong>
+  </div>
+  <div class="payment-report-summary__item">
+    <span>Total received</span>
+    <strong>UGX {{ total_amount|floatformat:0|intcomma }}</strong>
+  </div>
+</section>
+
+<section class="card-box payment-report-filter-card no-print">
+  <div class="card-head"><i class="fas fa-filter"></i> Filter receipts</div>
+  <div class="card-body">
+    <form method="get" class="payment-report-filters">
+      <div class="payment-report-search">
+        <label class="form-label" for="{{ filter_form.search.id_for_label }}">Search</label>
+        {{ filter_form.search }}
+        {% for error in filter_form.search.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+      </div>
+      <div>
+        <label class="form-label" for="{{ filter_form.date_from.id_for_label }}">From</label>
+        {{ filter_form.date_from }}
+        {% for error in filter_form.date_from.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+      </div>
+      <div>
+        <label class="form-label" for="{{ filter_form.date_to.id_for_label }}">To</label>
+        {{ filter_form.date_to }}
+        {% for error in filter_form.date_to.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+      </div>
+      <div>
+        <label class="form-label" for="{{ filter_form.client.id_for_label }}">Customer</label>
+        {{ filter_form.client }}
+        {% for error in filter_form.client.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+      </div>
+      <div>
+        <label class="form-label" for="{{ filter_form.service_type.id_for_label }}">Service</label>
+        {{ filter_form.service_type }}
+        {% for error in filter_form.service_type.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+      </div>
+      <div>
+        <label class="form-label" for="{{ filter_form.method.id_for_label }}">Payment method</label>
+        {{ filter_form.method }}
+        {% for error in filter_form.method.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+      </div>
+      <div>
+        <label class="form-label" for="{{ filter_form.branch.id_for_label }}">Branch</label>
+        {{ filter_form.branch }}
+        {% for error in filter_form.branch.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="payment-report-filter-actions">
+        <button class="btn btn-primary" type="submit"><i class="fas fa-search"></i> Apply filters</button>
+        <a class="btn btn-outline" href="{% url 'billing:payments_report' %}">Clear</a>
+      </div>
+    </form>
+  </div>
+</section>
+
+{% if filter_form.errors %}
+<div class="alert alert-danger" role="alert">Correct the highlighted filters to view matching receipts.</div>
+{% endif %}
+
+<section class="card-box card-compact payment-report-results">
+  <div class="card-head">
+    <span>Receipt records</span>
+    <span class="text-muted fs-sm">Showing {{ payments|length }} of {{ record_count }}</span>
+  </div>
+  <div class="card-body">
+    <div class="tbl-wrap payment-records-table">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Receipt</th><th>Date</th><th>Customer</th><th>Service</th>
+            <th>Invoice</th><th>Method</th><th>Reference</th><th>Received by</th><th class="text-r">Amount (UGX)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for payment in payments %}
+          <tr>
+            <td><strong>{{ payment.receipt_number }}</strong></td>
+            <td>{{ payment.payment_date|date:'d M Y' }}</td>
+            <td>{% if payment.client %}{{ payment.client.get_display_name }}{% else %}Unassigned{% endif %}</td>
+            <td>{{ payment.service_type.name|default:'—' }}</td>
+            <td>{% if payment.invoice %}<a href="{% url 'billing:detail' payment.invoice.pk %}">{{ payment.invoice.invoice_number }}</a>{% else %}—{% endif %}</td>
+            <td>{{ payment.get_method_display }}</td>
+            <td>{{ payment.reference|default:'—' }}</td>
+            <td>{{ payment.received_by.get_full_name|default:payment.received_by.username|default:'—' }}</td>
+            <td class="text-r ugx">{{ payment.amount|floatformat:0|intcomma }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="9"><div class="empty-state"><i class="fas fa-receipt"></i><p>No payment records match these filters.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="payment-records-cards">
+      {% for payment in payments %}
+      <article class="payment-record-card">
+        <div class="payment-record-card__head">
+          <div>
+            <strong>{{ payment.receipt_number }}</strong>
+            <span>{{ payment.payment_date|date:'d M Y' }}</span>
+          </div>
+          <strong class="payment-record-card__amount">UGX {{ payment.amount|floatformat:0|intcomma }}</strong>
+        </div>
+        <dl>
+          <div><dt>Customer</dt><dd>{% if payment.client %}{{ payment.client.get_display_name }}{% else %}Unassigned{% endif %}</dd></div>
+          <div><dt>Service</dt><dd>{{ payment.service_type.name|default:'—' }}</dd></div>
+          <div><dt>Method</dt><dd>{{ payment.get_method_display }}</dd></div>
+          <div><dt>Reference</dt><dd>{{ payment.reference|default:'—' }}</dd></div>
+          <div><dt>Invoice</dt><dd>{% if payment.invoice %}<a href="{% url 'billing:detail' payment.invoice.pk %}">{{ payment.invoice.invoice_number }}</a>{% else %}—{% endif %}</dd></div>
+          <div><dt>Received by</dt><dd>{{ payment.received_by.get_full_name|default:payment.received_by.username|default:'—' }}</dd></div>
+        </dl>
+      </article>
+      {% empty %}
+      <div class="empty-state"><i class="fas fa-receipt"></i><p>No payment records match these filters.</p></div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% include "components/pagination_controls.html" %}
+{% endblock %}

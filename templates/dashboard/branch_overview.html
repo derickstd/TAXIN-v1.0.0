@@ -33,8 +33,23 @@
   <a class="btn btn-outline" href="{% url 'core:admin_companies' %}">Manage branches</a>
   {% endif %}
 {% else %}
+{% if active_branch %}
+<nav class="branch-quick-actions" aria-label="Quick actions">
+  {% if active_branch.external_reporting %}
+    <a class="btn btn-primary btn-sm" href="{% url 'documents:branch_daily_expense' %}?branch={{ active_branch.pk }}&amp;open=transaction"><i class="fas fa-plus"></i> Daily entry</a>
+    <a class="btn btn-outline btn-sm" href="{% url 'documents:branch_daily_summaries' %}?branch={{ active_branch.pk }}&amp;open=summary"><i class="fas fa-clipboard-check"></i> End-of-day summary</a>
+    <a class="btn btn-outline btn-sm" href="{% url 'documents:branch_account_statement' %}?branch={{ active_branch.pk }}"><i class="fas fa-book-open"></i> Account statement</a>
+  {% else %}
+    <a class="btn btn-primary btn-sm" href="{% url 'clients:create' %}"><i class="fas fa-user-plus"></i> New client</a>
+    <a class="btn btn-outline btn-sm" href="{% url 'services:create' %}"><i class="fas fa-plus-circle"></i> New engagement</a>
+    <a class="btn btn-outline btn-sm" href="{% url 'billing:payments_report' %}"><i class="fas fa-receipt"></i> Payments &amp; receipts</a>
+  {% endif %}
+</nav>
+{% endif %}
 {% if not active_branch and can_switch_branch and branches %}
-<section class="card-box mb-3">
+<details class="dashboard-disclosure mb-3" id="branch-performance-disclosure">
+  <summary><i class="fas fa-chart-bar"></i> Branch performance trends</summary>
+  <section class="card-box">
   <div class="card-head">
     <span><i class="fas fa-chart-bar"></i> Branch sales, expenses &amp; profit · {{ period_label }}</span>
     <span class="text-muted">{{ period_start|date:'d M Y' }}–{{ today|date:'d M Y' }}</span>
@@ -46,14 +61,14 @@
     </div>
   </div>
 </section>
-{{ branch_chart_data|json_script:"branch-performance-data" }}
+  {{ branch_chart_data|json_script:"branch-performance-data" }}
+</details>
 {% endif %}
 
 {% if active_branch and workspace_summary %}
 <section class="card-box mb-3">
   <div class="card-head">
     <span><i class="fas fa-calendar-week"></i> {{ period_label }} <span class="text-muted">({{ period_start|date:'d M' }}–{{ today|date:'d M Y' }})</span></span>
-    <a class="btn btn-outline btn-sm" href="{% url 'documents:financial_reports' %}?period={{ period }}{% if active_branch %}&amp;branch={{ active_branch.pk }}{% endif %}">Detailed report</a>
   </div>
   <div class="stats-grid card-body">
     <div class="kpi-card"><div class="kpi-label">Cash in</div><div class="kpi-value ugx">{{ workspace_summary.inflow|floatformat:0|intcomma }}</div></div>
@@ -66,7 +81,6 @@
 <section class="card-box mb-3">
   <div class="card-head">
     <span><i class="fas fa-calendar-week"></i> Branch comparison · {{ period_label }} <span class="text-muted">({{ period_start|date:'d M' }}–{{ today|date:'d M Y' }})</span></span>
-    <a class="btn btn-outline btn-sm" href="{% url 'documents:financial_reports' %}?period={{ period }}">Detailed report</a>
   </div>
   <div class="tbl-wrap">
     <table class="tbl">
@@ -91,27 +105,21 @@
 </section>
 {% endif %}
 
-<section class="card-box mb-3">
-  <div class="card-head">
-    <span><i class="fas fa-chart-pie"></i> {% if active_branch %}Cash flow mix{% else %}Cash inflows by branch{% endif %} · {{ period_label }}</span>
-  </div>
-  <div class="card-body">
-    {% if pie_chart_has_data %}
-    <div style="height:320px;position:relative">
-      <canvas id="branchCashFlowPieChart" aria-label="{% if active_branch %}Cash in and cash out proportions for {{ active_branch.name }}{% else %}Cash inflows by branch{% endif %}" role="img"></canvas>
+<details class="dashboard-disclosure mb-3" id="cashflow-mix-disclosure">
+  <summary><i class="fas fa-chart-pie"></i> Cash flow mix · {{ period_label }}</summary>
+  <section class="card-box">
+    <div class="card-body">
+      {% if pie_chart_has_data %}
+      <div style="height:320px;position:relative">
+        <canvas id="branchCashFlowPieChart" aria-label="{% if active_branch %}Cash in and cash out proportions for {{ active_branch.name }}{% else %}Cash inflows by branch{% endif %}" role="img"></canvas>
+      </div>
+      {{ pie_chart_data|json_script:"branch-cashflow-pie-data" }}
+      {% else %}
+      <p class="text-muted mb-0">No cash movements were recorded for this reporting period.</p>
+      {% endif %}
     </div>
-    {{ pie_chart_data|json_script:"branch-cashflow-pie-data" }}
-    {% else %}
-    <p class="text-muted mb-0">No cash movements were recorded for this reporting period.</p>
-    {% endif %}
-  </div>
-</section>
-
-<div class="d-flex gap-2 flex-wrap">
-  <a class="btn btn-outline" href="{% url 'documents:branch_daily_ledger' %}"><i class="fas fa-book"></i> Daily transaction ledger</a>
-  <a class="btn btn-outline" href="{% url 'documents:branch_daily_summaries' %}?open=summary"><i class="fas fa-clipboard-check"></i> Enter end-of-day summary</a>
-  <div class="form-hint align-self-center">Ledger totals feed branch cash-flow reports when available.</div>
-</div>
+  </section>
+</details>
 {% endif %}
 {% endblock %}
 
@@ -128,24 +136,29 @@
 (function(){
   var canvas = document.getElementById('branchPerformanceChart');
   var dataElement = document.getElementById('branch-performance-data');
-  if (!canvas || !dataElement || !window.Chart) return;
-  var data = JSON.parse(dataElement.textContent);
-  new Chart(canvas, {
-    type: 'bar',
-    data: {
-      labels: data.labels,
-      datasets: [
-        {label: 'Operating receipts', data: data.sales, backgroundColor: 'rgba(37, 99, 235, .78)'},
-        {label: 'Expenses', data: data.expenses, backgroundColor: 'rgba(220, 38, 38, .72)'},
-        {label: 'Operating profit', data: data.profit, backgroundColor: 'rgba(22, 163, 74, .78)'}
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {y: {beginAtZero: true, ticks: {callback: function(value){ return 'UGX ' + Number(value).toLocaleString(); }}}},
-      plugins: {tooltip: {callbacks: {label: function(context){ return context.dataset.label + ': UGX ' + Number(context.raw).toLocaleString(); }}}}
-    }
+  var disclosure = document.getElementById('branch-performance-disclosure');
+  if (!canvas || !dataElement || !disclosure || !window.Chart) return;
+  var chart;
+  disclosure.addEventListener('toggle', function(){
+    if (!disclosure.open || chart) return;
+    var data = JSON.parse(dataElement.textContent);
+    chart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: [
+          {label: 'Operating receipts', data: data.sales, backgroundColor: 'rgba(37, 99, 235, .78)'},
+          {label: 'Expenses', data: data.expenses, backgroundColor: 'rgba(220, 38, 38, .72)'},
+          {label: 'Operating profit', data: data.profit, backgroundColor: 'rgba(22, 163, 74, .78)'}
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {y: {beginAtZero: true, ticks: {callback: function(value){ return 'UGX ' + Number(value).toLocaleString(); }}}},
+        plugins: {tooltip: {callbacks: {label: function(context){ return context.dataset.label + ': UGX ' + Number(context.raw).toLocaleString(); }}}}
+      }
+    });
   });
 })();
 </script>
@@ -154,41 +167,46 @@
 (function(){
   var canvas = document.getElementById('branchCashFlowPieChart');
   var dataElement = document.getElementById('branch-cashflow-pie-data');
-  if (!canvas || !dataElement || !window.Chart) return;
-  var data = JSON.parse(dataElement.textContent);
-  var palette = [
-    'rgba(37, 99, 235, .82)',
-    'rgba(22, 163, 74, .82)',
-    'rgba(217, 119, 6, .82)',
-    'rgba(124, 58, 237, .82)',
-    'rgba(8, 145, 178, .82)',
-    'rgba(219, 39, 119, .82)'
-  ];
-  var colors = data.labels.map(function(label, index){
-    if (label === 'Cash in') return 'rgba(22, 163, 74, .82)';
-    if (label === 'Cash out') return 'rgba(220, 38, 38, .78)';
-    return palette[index % palette.length];
-  });
-  new Chart(canvas, {
-    type: 'pie',
-    data: {
-      labels: data.labels,
-      datasets: [{data: data.values, backgroundColor: colors}]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {position: 'bottom'},
-        tooltip: {callbacks: {label: function(context){
-          var total = context.dataset.data.reduce(function(sum, value){
-            return sum + Number(value || 0);
-          }, 0);
-          var percentage = total ? (Number(context.raw) / total * 100).toFixed(1) : '0.0';
-          return context.label + ': UGX ' + Number(context.raw).toLocaleString() + ' (' + percentage + '%)';
-        }}}
+  var disclosure = document.getElementById('cashflow-mix-disclosure');
+  if (!canvas || !dataElement || !disclosure || !window.Chart) return;
+  var chart;
+  disclosure.addEventListener('toggle', function(){
+    if (!disclosure.open || chart) return;
+    var data = JSON.parse(dataElement.textContent);
+    var palette = [
+      'rgba(37, 99, 235, .82)',
+      'rgba(22, 163, 74, .82)',
+      'rgba(217, 119, 6, .82)',
+      'rgba(124, 58, 237, .82)',
+      'rgba(8, 145, 178, .82)',
+      'rgba(219, 39, 119, .82)'
+    ];
+    var colors = data.labels.map(function(label, index){
+      if (label === 'Cash in') return 'rgba(22, 163, 74, .82)';
+      if (label === 'Cash out') return 'rgba(220, 38, 38, .78)';
+      return palette[index % palette.length];
+    });
+    chart = new Chart(canvas, {
+      type: 'pie',
+      data: {
+        labels: data.labels,
+        datasets: [{data: data.values, backgroundColor: colors}]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {position: 'bottom'},
+          tooltip: {callbacks: {label: function(context){
+            var total = context.dataset.data.reduce(function(sum, value){
+              return sum + Number(value || 0);
+            }, 0);
+            var percentage = total ? (Number(context.raw) / total * 100).toFixed(1) : '0.0';
+            return context.label + ': UGX ' + Number(context.raw).toLocaleString() + ' (' + percentage + '%)';
+          }}}
+        }
       }
-    }
+    });
   });
 })();
 </script>

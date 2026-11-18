@@ -8,69 +8,112 @@
 {% endblock %}
 {% block content %}
 {% include 'components/report_watermark.html' %}
-<div class="page-header">
-  <h1 class="page-title"><i class="fas fa-chart-line"></i> Cash Flow Statement</h1>
-  <form method="get" class="d-flex align-items-end gap-2 flex-wrap no-print">
-    {% if branches %}
-    <div>
-      <label class="form-label" for="report-branch">Branch</label>
-      <select id="report-branch" class="form-control" name="branch">
-        <option value="">All accessible branches</option>
-        {% for branch in branches %}<option value="{{ branch.pk }}" {% if selected_branch.pk == branch.pk %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
-      </select>
-    </div>
-    {% endif %}
-    <div>
-      <label class="form-label" for="report-period">Reporting period</label>
-      <select id="report-period" class="form-control" name="period">
-        {% for value, label in period_options %}<option value="{{ value }}" {% if period == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select>
-    </div>
-    <div>
-      <label class="form-label" for="report-category">Category</label>
-      <select id="report-category" class="form-control" name="category">
-        <option value="">All categories</option>
-        {% for value, label in category_choices %}<option value="{{ value }}" {% if selected_category == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select>
-    </div>
-    <div>
-      <label class="form-label" for="report-service">Service</label>
-      <select id="report-service" class="form-control" name="service">
-        <option value="">All services</option>
-        {% for service in service_choices %}<option value="{{ service.pk }}" {% if selected_service.pk == service.pk %}selected{% endif %}>{{ service.name }}</option>{% endfor %}
-      </select>
-    </div>
-    <div>
-      <label class="form-label" for="report-type">Record type</label>
-      <select id="report-type" class="form-control" name="record_type">
-        <option value="">All records</option>
-        {% for value, label in record_type_choices %}<option value="{{ value }}" {% if selected_record_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select>
-    </div>
-    <div>
-      <label class="form-label" for="report-method">Method / account</label>
-      <select id="report-method" class="form-control" name="method">
-        <option value="">All methods</option>
-        {% for value, label in method_choices %}<option value="{{ value }}" {% if selected_method == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select>
-    </div>
-    <button class="btn btn-primary" type="submit">Run Report</button>
-    <button class="btn btn-outline" type="button" onclick="window.print()">Print</button>
-    <a class="btn btn-outline" href="{% url 'documents:branch_daily_ledger' %}">Daily transaction ledger</a>
-    <a class="btn btn-outline" href="{% url 'documents:branch_daily_summaries' %}?open=summary">Enter daily branch summary</a>
-  </form>
+<div class="page-header cashflow-page-header">
+  <div>
+    <h1 class="page-title"><i class="fas fa-chart-line"></i> Cash Flow Statement</h1>
+    <p class="cashflow-page-period">{{ date_from|date:"d M Y" }} – {{ date_to|date:"d M Y" }}</p>
+  </div>
+  <div class="cashflow-page-actions no-print">
+    <button class="btn btn-outline btn-sm" type="button" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+    <a class="btn btn-outline btn-sm" href="{% url 'documents:branch_daily_ledger' %}">Daily ledger</a>
+    <a class="btn btn-outline btn-sm" href="{% url 'documents:branch_daily_summaries' %}?open=summary">Daily summary</a>
+  </div>
 </div>
 
-<nav class="d-flex gap-2 mb-3 no-print" aria-label="Financial reports">
-  <a class="btn btn-primary" href="{% url 'documents:financial_reports' %}?{{ report_scope_query }}">Cash Flow</a>
-  <a class="btn btn-outline" href="{% url 'documents:balance_sheet_report' %}?{{ report_scope_query }}">Balance Sheet</a>
+<section class="card-box card-compact cashflow-filter-panel no-print">
+  <div class="card-head"><span><i class="fas fa-filter"></i> Report filters</span></div>
+  <div class="card-body">
+    <form method="get" class="cashflow-report-filters">
+      {% if branches %}
+      <div>
+        <label class="form-label" for="report-branch">Branch</label>
+        <select id="report-branch" class="form-control" name="branch">
+          <option value="">All accessible branches</option>
+          {% for branch in branches %}<option value="{{ branch.pk }}" {% if selected_branch.pk == branch.pk %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div>
+        <label class="form-label" for="report-period">Reporting period</label>
+        <select id="report-period" class="form-control" name="period">
+          {% for value, label in period_options %}<option value="{{ value }}" {% if period == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="report-category">Category</label>
+        <select id="report-category" class="form-control" name="category">
+          <option value="">All categories</option>
+          {% for value, label in category_choices %}<option value="{{ value }}" {% if selected_category == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="report-service">Service</label>
+        <select id="report-service" class="form-control" name="service">
+          <option value="">All services</option>
+          {% for service in service_choices %}<option value="{{ service.pk }}" {% if selected_service.pk == service.pk %}selected{% endif %}>{{ service.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="report-type">Record type</label>
+        <select id="report-type" class="form-control" name="record_type">
+          <option value="">All records</option>
+          {% for value, label in record_type_choices %}<option value="{{ value }}" {% if selected_record_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="report-method">Method / account</label>
+        <select id="report-method" class="form-control" name="method">
+          <option value="">All methods</option>
+          {% for value, label in method_choices %}<option value="{{ value }}" {% if selected_method == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="cashflow-filter-actions">
+        <button class="btn btn-primary btn-sm" type="submit">Run report</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<nav class="cashflow-report-tabs no-print" aria-label="Financial reports">
+  <a class="cashflow-report-tab" href="{% url 'documents:financial_reports' %}?{{ report_scope_query }}" aria-current="page">Cash Flow</a>
+  <a class="cashflow-report-tab" href="{% url 'documents:balance_sheet_report' %}?{{ report_scope_query }}">Balance Sheet</a>
 </nav>
 
+<div class="stats-grid mb-3 cashflow-kpi-grid">
+  <div class="kpi-card green">
+    <div class="kpi-label">Cash In</div>
+    <div class="kpi-value ugx cash-flow-chip cash-flow-chip--in">{{ cash_inflow|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">For selected period</div>
+  </div>
+  <div class="kpi-card red">
+    <div class="kpi-label">Approved Expenses</div>
+    <div class="kpi-value ugx cash-flow-chip cash-flow-chip--out">{{ cash_outflow|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">For selected period</div>
+  </div>
+  <div class="kpi-card {% if net_cash_flow >= 0 %}green{% else %}red{% endif %}">
+    <div class="kpi-label">Net Cash Flow</div>
+    <div class="kpi-value ugx">{{ net_cash_flow|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">For selected period</div>
+  </div>
+  <div class="kpi-card gold">
+    <div class="kpi-label">Remaining Recorded Cash</div>
+    <div class="kpi-value ugx">{{ closing_cash|floatformat:0|intcomma }}</div>
+    <div class="kpi-sub">As of {{ date_to|date:"d M Y" }}</div>
+  </div>
+</div>
+
+{% if not branch_comparison %}
+<details class="cashflow-method-note">
+  <summary>How cash flow is calculated</summary>
+  <p>Cash is calculated from recorded customer payments and other income, less approved expenses, using a zero opening balance. All payment methods are included. Unrecorded opening funds and other assets, liabilities, or equity are not included.</p>
+</details>
+{% endif %}
+
 {% if capital_drawings %}
-<section class="card-box mb-3">
+<section class="card-box card-compact cashflow-support-panel mb-3">
   <div class="card-head"><i class="fas fa-scale-balanced"></i> Capital Injections &amp; Drawings</div>
-  <div class="card-body">
-    <p class="form-hint">Capital injections increase recorded cash but are excluded from operating receipts and profit. Drawings are cash outflows, not operating expenses.</p>
+  <div class="cashflow-section-note">
+    Capital injections increase recorded cash but are excluded from operating receipts and profit. Drawings are cash outflows, not operating expenses.
   </div>
   <div class="tbl-wrap">
     <table class="tbl">
@@ -98,7 +141,7 @@
 
 {% if branch_comparison %}
 
-<section class="card-box mb-3">
+<section class="card-box card-compact cashflow-support-panel mb-3">
   <div class="card-head"><i class="fas fa-code-compare"></i> Branch comparison</div>
   <div class="tbl-wrap">
     <table class="tbl">
@@ -121,39 +164,9 @@
 </section>
 {% endif %}
 
-{% if not branch_comparison %}
-<div class="alert-note">
-  Cash is calculated from recorded customer payments and other income, less approved expenses, using a zero opening balance.
-  All payment methods are included. Unrecorded opening funds and other assets, liabilities, or equity are not included.
-</div>
-{% endif %}
-
-<div class="stats-grid mb-3">
-  <div class="kpi-card green">
-    <div class="kpi-label">Cash In</div>
-    <div class="kpi-value ugx cash-flow-chip cash-flow-chip--in">{{ cash_inflow|floatformat:0|intcomma }}</div>
-    <div class="kpi-sub">For selected period</div>
-  </div>
-  <div class="kpi-card red">
-    <div class="kpi-label">Approved Expenses</div>
-    <div class="kpi-value ugx cash-flow-chip cash-flow-chip--out">{{ cash_outflow|floatformat:0|intcomma }}</div>
-    <div class="kpi-sub">For selected period</div>
-  </div>
-  <div class="kpi-card {% if net_cash_flow >= 0 %}green{% else %}red{% endif %}">
-    <div class="kpi-label">Net Cash Flow</div>
-    <div class="kpi-value ugx">{{ net_cash_flow|floatformat:0|intcomma }}</div>
-    <div class="kpi-sub">For selected period</div>
-  </div>
-  <div class="kpi-card gold">
-    <div class="kpi-label">Remaining Recorded Cash</div>
-    <div class="kpi-value ugx">{{ closing_cash|floatformat:0|intcomma }}</div>
-    <div class="kpi-sub">As of {{ date_to|date:"d M Y" }}</div>
-  </div>
-</div>
-
-<section class="card-box mb-3" id="cash-flow">
-  <div class="card-head"><i class="fas fa-right-left"></i> Cash Flow · {{ date_from|date:"d M Y" }} – {{ date_to|date:"d M Y" }}</div>
-  <div class="card-body">
+<section class="card-box card-compact cashflow-breakdown-panel mb-3" id="cash-flow">
+  <div class="card-head"><span><i class="fas fa-right-left"></i> Cash flow</span><span class="text-muted fs-sm">{{ date_from|date:"d M Y" }} – {{ date_to|date:"d M Y" }}</span></div>
+  <div class="card-body cashflow-breakdown-grid">
     <div class="stat-row"><span>Opening recorded balance</span><strong class="ugx">{{ opening_cash|floatformat:0|intcomma }}</strong></div>
     <div class="stat-row"><span>Customer payments</span><strong class="ugx cash-flow-chip cash-flow-chip--in">+{{ customer_receipts|floatformat:0|intcomma }}</strong></div>
     <div class="stat-row"><span>Other income</span><strong class="ugx cash-flow-chip cash-flow-chip--in">+{{ other_receipts|floatformat:0|intcomma }}</strong></div>
@@ -164,7 +177,7 @@
   </div>
 </section>
 
-<section class="card-box">
+<section class="card-box card-compact cashflow-accountability">
   <div class="card-head">
     <span><i class="fas fa-list-check"></i> Cash Accountability</span>
     <span class="text-muted">{{ transactions.paginator.count }} records</span>

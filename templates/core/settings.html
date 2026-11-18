@@ -10,10 +10,9 @@
   </div>
 </div>
 
-<form method="post" novalidate>
-  {% csrf_token %}
-  <div class="layout-main-sidebar">
-    <div class="stack">
+<div class="layout-main-sidebar settings-layout">
+  <form method="post" class="stack settings-form" novalidate>
+    {% csrf_token %}
       {% if company_form %}
       <div class="card-box card-compact">
         <div class="card-head"><i class="fas fa-building"></i>Company Information</div>
@@ -78,11 +77,17 @@
 
       {% if can_manage_branches and branch_formset %}
       <div class="card-box card-compact">
-        <div class="card-head"><i class="fas fa-code-branch"></i>Branch Management</div>
+        <div class="card-head">
+          <span><i class="fas fa-code-branch"></i>Branch Management</span>
+          <button type="button" class="btn btn-outline btn-sm" id="addBranchForm"
+                  data-formset-prefix="{{ branch_formset.prefix }}" aria-controls="branchFormRows">
+            <i class="fas fa-plus"></i> Add Branch
+          </button>
+        </div>
         <div class="card-body">
           {{ branch_formset.management_form }}
-          <div class="table-responsive">
-            <table class="table table-striped table-bordered">
+          <div class="table-responsive settings-branch-table-wrap">
+            <table class="table table-striped table-bordered settings-branch-table">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -93,19 +98,29 @@
                   <th>Remove</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="branchFormRows">
                 {% for form in branch_formset.forms %}
                 <tr>
-                  <td>{{ form.name }}</td>
+                  <td>{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}{{ form.name }}</td>
                   <td>{{ form.slug }}</td>
                   <td>{{ form.address }}</td>
                   <td>{{ form.phone }}</td>
                   <td>{{ form.is_active }}</td>
-                  <td>{% if form.instance.pk %}{{ form.DELETE }}{% endif %}</td>
+                  <td>{{ form.DELETE }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
+            <template id="branchFormTemplate">
+              <tr>
+                <td>{% for hidden in branch_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}{{ branch_formset.empty_form.name }}</td>
+                <td>{{ branch_formset.empty_form.slug }}</td>
+                <td>{{ branch_formset.empty_form.address }}</td>
+                <td>{{ branch_formset.empty_form.phone }}</td>
+                <td>{{ branch_formset.empty_form.is_active }}</td>
+                <td>{{ branch_formset.empty_form.DELETE }}</td>
+              </tr>
+            </template>
           </div>
           <div class="form-hint">Add or remove company branches. Only managers and admins can change branch records.</div>
         </div>
@@ -176,9 +191,9 @@
         <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Save Settings</button>
         <a href="{% url 'dashboard:index' %}" class="btn btn-outline btn-lg">Back</a>
       </div>
-    </div>
+  </form>
 
-    <div class="stack">
+  <div class="stack">
       <div class="card-box card-compact">
         <div class="card-head"><i class="fas fa-user-circle"></i>Account Snapshot</div>
         <div class="card-body">
@@ -189,6 +204,55 @@
           <div class="stat-row"><span>Notification Email</span><span>{{ user.get_notify_email|default:"Not set" }}</span></div>
         </div>
       </div>
+
+      <div class="card-box card-compact">
+        <div class="card-head"><i class="fas fa-layer-group"></i>Workspace Settings</div>
+        <div class="card-body">
+          <div class="stat-row">
+            <span>Current workspace</span>
+            <strong>{% if active_branch %}{{ active_branch.name }}{% else %}All branches{% endif %}</strong>
+          </div>
+          <div class="stat-row">
+            <span>Default branch</span>
+            <strong>{% if company.default_branch %}{{ company.default_branch.name }}{% else %}Not set{% endif %}</strong>
+          </div>
+          <div class="stat-row">
+            <span>Available workspaces</span>
+            <strong>{{ workspace_branches|length }}</strong>
+          </div>
+          {% if can_switch_branch %}
+          <form method="post" action="{% url 'dashboard:switch_branch' %}" class="form-stack mt-3">
+            {% csrf_token %}
+            <label class="form-label" for="settingsWorkspaceSelect">Switch workspace</label>
+            <select class="form-control" id="settingsWorkspaceSelect" name="branch">
+              <option value="" {% if not active_branch %}selected{% endif %}>All branches</option>
+              {% for branch in workspace_branches %}
+              <option value="{{ branch.pk }}" {% if active_branch.pk == branch.pk %}selected{% endif %}>{{ branch.name }}</option>
+              {% endfor %}
+            </select>
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="btn btn-outline btn-sm">Open workspace</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if can_add_users %}
+      <div class="card-box card-compact">
+        <div class="card-head"><i class="fas fa-user-plus"></i>Team Access</div>
+        <div class="card-body">
+          <p class="text-muted fs-sm">Create a staff account without leaving Settings.</p>
+          <div class="flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-primary btn-sm" id="openSettingsUserModal"
+                    aria-haspopup="dialog" aria-expanded="{% if open_user_modal %}true{% else %}false{% endif %}"
+                    aria-controls="settingsUserModal">
+              <i class="fas fa-user-plus"></i> Add User
+            </button>
+            <a href="{% url 'core:users' %}" class="btn btn-outline btn-sm">Manage Users</a>
+          </div>
+        </div>
+      </div>
+      {% endif %}
 
       <div class="card-box card-compact">
         <div class="card-head"><i class="fas fa-key"></i>Change Password</div>
@@ -221,9 +285,107 @@
           <div class="alert-note">Each theme is saved to your account, so your preferred look follows you when you sign in again.</div>
         </div>
       </div>
-    </div>
   </div>
-</form>
+</div>
+
+{% if can_add_users and user_add_form %}
+<div class="modal-overlay{% if open_user_modal %} open{% endif %}" id="settingsUserModal"
+     aria-hidden="{% if open_user_modal %}false{% else %}true{% endif %}">
+  <div class="modal-box settings-user-modal" role="dialog" aria-modal="true"
+       aria-labelledby="settingsUserModalTitle">
+    <div class="modal-hd">
+      <h5 id="settingsUserModalTitle"><i class="fas fa-user-plus"></i> Add Staff User</h5>
+      <button type="button" class="modal-close" data-close-settings-user aria-label="Close">&times;</button>
+    </div>
+    <form method="post" action="{% url 'core:settings' %}" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="settings_action" value="add_user">
+      {% if user_add_form.non_field_errors %}
+      <div class="alert alert-danger">{{ user_add_form.non_field_errors }}</div>
+      {% endif %}
+      <div class="settings-user-grid">
+        <div>
+          <label class="form-label" for="settingsNewUserFirstName">First name</label>
+          <input id="settingsNewUserFirstName" class="form-control" type="text" name="{{ user_add_form.first_name.html_name }}" value="{{ user_add_form.first_name.value|default:'' }}">
+          {{ user_add_form.first_name.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="settingsNewUserLastName">Last name</label>
+          <input id="settingsNewUserLastName" class="form-control" type="text" name="{{ user_add_form.last_name.html_name }}" value="{{ user_add_form.last_name.value|default:'' }}">
+          {{ user_add_form.last_name.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="settingsNewUsername">Username *</label>
+          <input id="settingsNewUsername" class="form-control" type="text" name="{{ user_add_form.username.html_name }}" value="{{ user_add_form.username.value|default:'' }}" required>
+          {{ user_add_form.username.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="settingsNewUserRole">Role *</label>
+          <select id="settingsNewUserRole" class="form-control" name="{{ user_add_form.role.html_name }}">
+            {% for value,label in user_add_form.fields.role.choices %}
+            <option value="{{ value }}" {% if user_add_form.role.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {{ user_add_form.role.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="settingsNewUserBranch">Assigned branch</label>
+          <select id="settingsNewUserBranch" class="form-control" name="{{ user_add_form.branch.html_name }}">
+            <option value="">All branches (leadership only)</option>
+            {% for branch in user_add_form.fields.branch.queryset %}
+            <option value="{{ branch.pk }}" {% if user_add_form.branch.value|stringformat:'s' == branch.pk|stringformat:'s' %}selected{% endif %}>{{ branch.name }}</option>
+            {% endfor %}
+          </select>
+          {{ user_add_form.branch.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="settingsNewUserTheme">Theme</label>
+          <select id="settingsNewUserTheme" class="form-control" name="{{ user_add_form.ui_theme.html_name }}">
+            {% for value,label in user_add_form.fields.ui_theme.choices %}
+            <option value="{{ value }}" {% if user_add_form.ui_theme.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {{ user_add_form.ui_theme.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="settingsNewUserEmail">Login email</label>
+          <input id="settingsNewUserEmail" class="form-control" type="email" name="{{ user_add_form.email.html_name }}" value="{{ user_add_form.email.value|default:'' }}">
+          {{ user_add_form.email.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="settingsNewUserNotifyEmail">Notification email</label>
+          <input id="settingsNewUserNotifyEmail" class="form-control" type="email" name="{{ user_add_form.email_notify.html_name }}" value="{{ user_add_form.email_notify.value|default:'' }}">
+          {{ user_add_form.email_notify.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="settingsNewUserPhone">WhatsApp number</label>
+          <input id="settingsNewUserPhone" class="form-control" type="text" name="{{ user_add_form.phone_whatsapp.html_name }}" value="{{ user_add_form.phone_whatsapp.value|default:'' }}">
+          {{ user_add_form.phone_whatsapp.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="settingsNewUserPassword">Password</label>
+          <input id="settingsNewUserPassword" class="form-control" type="password" name="{{ user_add_form.password1.html_name }}" autocomplete="new-password">
+          {{ user_add_form.password1.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="settingsConfirmUserPassword">Confirm password</label>
+          <input id="settingsConfirmUserPassword" class="form-control" type="password" name="{{ user_add_form.password2.html_name }}" autocomplete="new-password">
+          {{ user_add_form.password2.errors }}
+        </div>
+      </div>
+      <div class="form-hint mb-2">Leave both password fields blank to use the temporary default password.</div>
+      <div class="settings-user-options">
+        <label><input type="checkbox" name="{{ user_add_form.receive_debt_alerts.html_name }}" {% if user_add_form.receive_debt_alerts.value %}checked{% endif %}> Receive debt alerts</label>
+        <label><input type="checkbox" name="{{ user_add_form.receive_task_reminders.html_name }}" {% if user_add_form.receive_task_reminders.value %}checked{% endif %}> Receive task reminders</label>
+      </div>
+      <div class="flex gap-2 mt-3">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-user-plus"></i> Create User</button>
+        <button type="button" class="btn btn-outline" data-close-settings-user>Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -240,6 +402,52 @@ $(document).ready(function(){
     $('.theme-card').removeClass('selected');
     $('.theme-card[data-theme-preview="'+value+'"]').addClass('selected');
   });
+
+  var addBranchButton = document.getElementById('addBranchForm');
+  var branchRows = document.getElementById('branchFormRows');
+  var branchTemplate = document.getElementById('branchFormTemplate');
+  if(addBranchButton && branchRows && branchTemplate){
+    addBranchButton.addEventListener('click',function(){
+      var prefix = addBranchButton.getAttribute('data-formset-prefix');
+      var totalForms = document.getElementById('id_'+prefix+'-TOTAL_FORMS');
+      if(!totalForms) return;
+      var index = parseInt(totalForms.value,10);
+      var rowContainer = document.createElement('tbody');
+      rowContainer.innerHTML = branchTemplate.innerHTML.replace(/__prefix__/g,index).trim();
+      var row = rowContainer.firstElementChild;
+      if(!row) return;
+      branchRows.appendChild(row);
+      totalForms.value = String(index+1);
+      var firstField = row.querySelector('input:not([type="hidden"]),textarea');
+      if(firstField) firstField.focus();
+    });
+  }
+
+  var userModal = document.getElementById('settingsUserModal');
+  var openUserModal = document.getElementById('openSettingsUserModal');
+  function closeUserModal(){
+    if(!userModal) return;
+    userModal.classList.remove('open');
+    userModal.setAttribute('aria-hidden','true');
+    if(openUserModal) openUserModal.setAttribute('aria-expanded','false');
+  }
+  if(userModal && openUserModal){
+    openUserModal.addEventListener('click',function(){
+      userModal.classList.add('open');
+      userModal.setAttribute('aria-hidden','false');
+      openUserModal.setAttribute('aria-expanded','true');
+      var firstField = userModal.querySelector('input[name="username"]');
+      if(firstField) firstField.focus();
+    });
+    userModal.addEventListener('click',function(event){
+      if(event.target === userModal || event.target.closest('[data-close-settings-user]')){
+        closeUserModal();
+      }
+    });
+    document.addEventListener('keydown',function(event){
+      if(event.key === 'Escape' && userModal.classList.contains('open')) closeUserModal();
+    });
+  }
 });
 </script>
 {% endblock %}

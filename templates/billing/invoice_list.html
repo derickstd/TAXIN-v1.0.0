@@ -6,6 +6,7 @@
 <div class="page-header">
   <h4 class="page-title"><i class="fas fa-file-invoice-dollar"></i>Invoices</h4>
   <div class="d-flex gap-2">
+    <a href="{% url 'billing:payments_report' %}" class="btn btn-outline btn-sm"><i class="fas fa-receipt"></i> Payments &amp; Receipts</a>
     <a href="{% url 'billing:create' %}" class="btn btn-outline btn-sm"><i class="fas fa-file-medical"></i> Manual</a>
     <a href="{% url 'billing:aging' %}" class="btn btn-outline btn-sm"><i class="fas fa-chart-bar"></i> Aging</a>
     <a href="{% url 'billing:bad_debts' %}" class="btn btn-outline btn-sm"><i class="fas fa-file-medical-alt"></i> Bad Debts</a>

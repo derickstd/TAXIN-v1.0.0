@@ -31,7 +31,10 @@ from datetime import timedelta
 from django.utils import timezone
 
 
-def find_duplicate_clients(client=None, full_name=None, phone=None, whatsapp=None, tin=None, similarity_threshold=80):
+def find_duplicate_clients(
+    client=None, full_name=None, phone=None, whatsapp=None, tin=None,
+    similarity_threshold=80, branch=None,
+):
     """
     Find potential duplicate clients based on similarity.
     
@@ -51,11 +54,14 @@ def find_duplicate_clients(client=None, full_name=None, phone=None, whatsapp=Non
         phone = client.phone_primary
         whatsapp = client.phone_whatsapp
         tin = client.tin
+        branch = client.branch
     
     if not any([full_name, phone, tin]):
         return []
     
-    candidates = Client.objects.all()
+    candidates = Client.objects.filter(branch=branch) if branch else Client.objects.filter(
+        branch__isnull=True,
+    )
     if client:
         candidates = candidates.exclude(pk=client.pk)
     

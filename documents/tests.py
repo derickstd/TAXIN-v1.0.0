@@ -1032,6 +1032,13 @@ class BranchAccountingReportTests(TestCase):
         })
 
         self.assertEqual(statement.status_code, 200)
+        self.assertContains(statement, 'floatingAccountTransferButton')
+        self.assertContains(statement, 'aria-label="Record a payment"')
+        self.assertContains(statement, 'aria-label="Record Bank Deposit"')
+        self.assertContains(statement, "overlay.classList.add('open')")
+        self.assertNotContains(statement, '<span>Record Payment</span>')
+        self.assertNotContains(statement, '<span>Record Expense</span>')
+        self.assertNotContains(statement, '<span>Bank transfer</span>')
         self.assertEqual(statement.context['total_inflow'], Decimal('200'))
         self.assertEqual(statement.context['total_outflow'], Decimal('50'))
         self.assertContains(statement, 'Daily banking')
@@ -1046,6 +1053,51 @@ class BranchAccountingReportTests(TestCase):
         self.assertEqual(ledger.context['total_inflow'], Decimal('150'))
         self.assertEqual(ledger.context['total_outflow'], Decimal('0'))
         self.assertContains(ledger, 'Bank deposit transfer')
+
+    def test_account_transfer_popover_loads_validates_and_records(self):
+        today = timezone.localdate()
+        url = f"{reverse('documents:branch_account_transfer')}?popover=1"
+        form_response = self.client.get(url, {'branch': self.branch.pk})
+
+        self.assertEqual(form_response.status_code, 200)
+        self.assertContains(form_response, 'Record Bank Deposit')
+        self.assertContains(form_response, 'data-branch-transfer-form')
+        self.assertEqual(form_response.context['selected_branch'], self.branch)
+
+        invalid_response = self.client.post(
+            url, {
+                'branch': self.branch.pk,
+                'transfer_date': today.isoformat(),
+                'source_account': 'cash',
+                'amount': '',
+                'description': 'Daily banking',
+                'reference': '',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(invalid_response.status_code, 400)
+        self.assertContains(invalid_response, 'data-branch-transfer-form', status_code=400)
+
+        save_response = self.client.post(
+            url, {
+                'branch': self.branch.pk,
+                'transfer_date': today.isoformat(),
+                'source_account': 'cash',
+                'amount': '25',
+                'description': 'Daily banking',
+                'reference': 'BANK-POPOVER-001',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(save_response.status_code, 200)
+        self.assertEqual(
+            save_response.json()['message'],
+            'Bank deposit recorded.',
+        )
+        self.assertTrue(BranchAccountTransfer.objects.filter(
+            branch=self.branch, reference='BANK-POPOVER-001',
+            amount=Decimal('25'),
+        ).exists())
 
     def test_branch_navigation_shows_relevant_modules_for_each_workspace(self):
         self.user.branch = self.external_branch

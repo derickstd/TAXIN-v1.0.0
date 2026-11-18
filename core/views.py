@@ -68,6 +68,18 @@ class UserForm(forms.ModelForm):
         return cd
 
 
+def _save_new_user(form, actor):
+    user = form.save(commit=False)
+    if not actor.is_superuser and actor.company_id:
+        user.company = actor.company
+    password = form.cleaned_data.get('password1') or 'taxman2025!'
+    user.set_password(password)
+    user.is_active = True
+    user.is_active_staff = True
+    user.save()
+    return user, password
+
+
 class UserSettingsForm(forms.ModelForm):
     class Meta:
         model = User
@@ -147,19 +159,12 @@ def user_create(request):
     if request.method == 'POST':
         form = UserForm(request.POST, actor=request.user)
         if form.is_valid():
-            user = form.save(commit=False)
-            if not request.user.is_superuser and request.user.company_id:
-                user.company = request.user.company
-            p = form.cleaned_data.get('password1') or 'taxman2025!'
-            user.set_password(p)
-            user.is_active = True
-            user.is_active_staff = True
-            user.save()
+            user, password = _save_new_user(form, request.user)
             messages.success(
                 request,
                 f'User "{user.username}" created. '
                 f'Login: username = {user.username}, '
-                f'password = {p}. '
+                f'password = {password}. '
                 f'Ask them to change it after first login.'
             )
     else:
@@ -275,6 +280,7 @@ def user_settings(request):
     ]
     company = getattr(request.user, 'company', None)
     can_manage_branches = company and request.user.is_manager_or_admin()
+    can_add_users = _require_admin(request)
     BranchFormSet = inlineformset_factory(
         Company, Branch, fields=('name', 'slug', 'address', 'phone', 'is_active'),
         extra=1, can_delete=True, widgets={
@@ -282,7 +288,28 @@ def user_settings(request):
         }
     )
 
-    if request.method == 'POST':
+    open_user_modal = False
+    user_add_form = None
+    if request.method == 'POST' and request.POST.get('settings_action') == 'add_user':
+        if not can_add_users:
+            messages.error(request, 'Admin access required.')
+            return redirect('dashboard:index')
+        user_add_form = UserForm(request.POST, actor=request.user)
+        if user_add_form.is_valid():
+            user, password = _save_new_user(user_add_form, request.user)
+            messages.success(
+                request,
+                f'User "{user.username}" created. '
+                f'Login: username = {user.username}, '
+                f'password = {password}. '
+                f'Ask them to change it after first login.'
+            )
+            return redirect('core:settings')
+        open_user_modal = True
+        user_form = UserSettingsForm(instance=request.user)
+        company_form = CompanySettingsForm(instance=company) if company else None
+        branch_formset = BranchFormSet(instance=company) if can_manage_branches else None
+    elif request.method == 'POST':
         user_form = UserSettingsForm(request.POST, instance=request.user)
         company_form = CompanySettingsForm(request.POST, instance=company) if company else None
         branch_formset = BranchFormSet(request.POST, instance=company) if can_manage_branches else None
@@ -299,11 +326,17 @@ def user_settings(request):
         company_form = CompanySettingsForm(instance=company) if company else None
         branch_formset = BranchFormSet(instance=company) if can_manage_branches else None
 
+    if can_add_users and user_add_form is None:
+        user_add_form = UserForm(actor=request.user)
+
     return render(request, 'core/settings.html', {
         'form': user_form,
         'company_form': company_form,
         'branch_formset': branch_formset,
         'can_manage_branches': can_manage_branches,
+        'can_add_users': can_add_users,
+        'user_add_form': user_add_form,
+        'open_user_modal': open_user_modal,
         'theme_guide': theme_guide,
         'company': company,
     })

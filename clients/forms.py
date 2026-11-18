@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Q
 from .models import Client, WalkInIntake
 from core.models import User
-from core.branch_access import scope_queryset
+from core.branch_access import get_entry_branch, scope_queryset
 
 
 class OptionalModelChoiceField(forms.ModelChoiceField):
@@ -36,6 +36,10 @@ class ClientForm(forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.duplicate_branch = self.instance.branch
+        else:
+            self.duplicate_branch = get_entry_branch(user) if user else None
         self.fields['referred_by'].queryset = scope_queryset(
             user, Client.objects.order_by('full_name'),
         ) if user else Client.objects.order_by('full_name')
@@ -52,10 +56,16 @@ class ClientForm(forms.ModelForm):
         self.fields['physical_address'].required = False
         self.fields['notes'].required = False
 
+    def _same_branch_clients(self):
+        clients = Client.objects.all()
+        if self.duplicate_branch:
+            return clients.filter(branch=self.duplicate_branch)
+        return clients.filter(branch__isnull=True)
+
     def clean_tin(self):
         tin = self.cleaned_data.get('tin', '').strip()
         if tin:
-            qs = Client.objects.filter(tin=tin)
+            qs = self._same_branch_clients().filter(tin=tin)
             if self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
@@ -65,7 +75,7 @@ class ClientForm(forms.ModelForm):
     def clean_phone_primary(self):
         phone = self.cleaned_data.get('phone_primary', '').strip()
         if phone:
-            qs = Client.objects.filter(
+            qs = self._same_branch_clients().filter(
                 Q(phone_primary=phone) | Q(phone_whatsapp=phone)
             )
             if self.instance.pk:
@@ -77,7 +87,7 @@ class ClientForm(forms.ModelForm):
     def clean_phone_whatsapp(self):
         whatsapp = self.cleaned_data.get('phone_whatsapp', '').strip()
         if whatsapp:
-            qs = Client.objects.filter(
+            qs = self._same_branch_clients().filter(
                 Q(phone_primary=whatsapp) | Q(phone_whatsapp=whatsapp)
             )
             if self.instance.pk:

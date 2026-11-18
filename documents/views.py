@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.http import JsonResponse
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.db.models import Q, Sum, Count
@@ -697,6 +698,7 @@ def balance_sheet_report(request):
 
 @login_required
 def branch_account_transfer(request):
+    popover_mode = request.GET.get('popover') == '1'
     branches = accessible_branches(request.user)
     if request.user.is_superuser:
         branches = Branch.objects.filter(is_active=True)
@@ -724,6 +726,13 @@ def branch_account_transfer(request):
                     else:
                         transfer.save()
                 if not form.errors:
+                    if (
+                        popover_mode
+                        and request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+                    ):
+                        return JsonResponse({
+                            'message': 'Bank deposit recorded.',
+                        })
                     messages.success(
                         request, 'Bank deposit recorded as an account transfer.',
                     )
@@ -742,11 +751,19 @@ def branch_account_transfer(request):
             initial=initial, branches=branches,
         )
 
-    return render(request, 'documents/branch_account_transfer.html', {
+    context = {
         'form': form,
         'branches': branches,
         'selected_branch': selected_branch,
-    })
+    }
+    if popover_mode:
+        return render(
+            request,
+            'documents/partials/branch_account_transfer_popover.html',
+            context,
+            status=400 if request.method == 'POST' and form.errors else 200,
+        )
+    return render(request, 'documents/branch_account_transfer.html', context)
 
 
 @login_required

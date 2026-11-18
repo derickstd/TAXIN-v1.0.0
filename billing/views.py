@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from .models import (
     BranchDailySummary, BranchDailyTransaction, Invoice, OtherIncome, Payment,
 )
-from .forms import InvoiceForm
+from .forms import InvoiceForm, PaymentReceiptFilterForm
 from clients.models import Client
 from services.models import ServiceType
 from services.forms import service_category_choices
@@ -67,6 +67,70 @@ def invoice_detail(request, pk):
         'firm_address': firm_address,
         'firm_phone': firm_phone,
         'firm_email': firm_email,
+    })
+
+
+@login_required
+def payment_receipts_report(request):
+    filter_form = PaymentReceiptFilterForm(request.GET, user=request.user)
+    payments = scope_queryset(
+        request.user,
+        Payment.objects.select_related(
+            'client', 'invoice', 'service_type', 'branch', 'received_by',
+        ),
+    )
+
+    if filter_form.is_valid():
+        filters = filter_form.cleaned_data
+        if filters['search']:
+            search = filters['search'].strip()
+            search_query = (
+                Q(reference__icontains=search)
+                | Q(client__full_name__icontains=search)
+                | Q(client__client_id__icontains=search)
+                | Q(invoice__invoice_number__icontains=search)
+                | Q(service_type__name__icontains=search)
+            )
+            parts = search.upper().split('-')
+            if (
+                len(parts) == 3 and parts[0] == 'RCT'
+                and len(parts[1]) == 4 and parts[1].isdigit()
+                and parts[2].isdigit()
+                and len(parts[2]) <= 18
+            ):
+                search_query |= Q(
+                    pk=int(parts[2]),
+                    payment_date__year=int(parts[1]),
+                )
+            payments = payments.filter(search_query)
+        if filters['date_from']:
+            payments = payments.filter(payment_date__gte=filters['date_from'])
+        if filters['date_to']:
+            payments = payments.filter(payment_date__lte=filters['date_to'])
+        if filters['client']:
+            payments = payments.filter(client=filters['client'])
+        if filters['service_type']:
+            payments = payments.filter(service_type=filters['service_type'])
+        if filters['method']:
+            payments = payments.filter(method=filters['method'])
+        if filters['branch']:
+            payments = payments.filter(branch=filters['branch'])
+    else:
+        payments = Payment.objects.none()
+
+    totals = payments.aggregate(
+        record_count=Count('pk'),
+        amount=Sum('amount'),
+    )
+    page_obj = paginate_queryset(
+        request, payments.order_by('-payment_date', '-pk'), per_page=30,
+    )
+    return render(request, 'billing/payments_report.html', {
+        'filter_form': filter_form,
+        'payments': page_obj,
+        'page_obj': page_obj,
+        'record_count': totals['record_count'],
+        'total_amount': totals['amount'] or Decimal('0.00'),
     })
 
 

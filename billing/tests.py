@@ -81,6 +81,7 @@ class QuickPaymentTests(TestCase):
         self.assertContains(response, reverse('clients:create'))
         self.assertContains(response, 'Add Customer')
         self.assertContains(response, 'payment-service')
+        self.assertContains(response, 'class="form-control s2" id="payment-client"')
         self.assertContains(response, 'data-open-quick-service')
         self.assertContains(response, 'data-open-quick-category')
         self.assertContains(response, 'quickServiceCategoryInline')
@@ -876,3 +877,119 @@ class InvoiceNumberingTests(TestCase):
         quotation.refresh_from_db()
         self.assertEqual(quotation.document_type, 'invoice')
         self.assertEqual(quotation.invoice_number, f'INV-{year}-0008')
+
+
+class PaymentReceiptReportTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name='Receipts Company',
+            slug='receipts-company',
+        )
+        self.branch = Branch.objects.create(
+            company=self.company,
+            name='TAXMAN',
+        )
+        self.user = User.objects.create_user(
+            username='receiptsadmin',
+            password='pass1234',
+            role='admin',
+            company=self.company,
+        )
+        self.client.force_login(self.user)
+        self.customer = Client.objects.create(
+            full_name='Searchable Customer',
+            phone_primary='+256700555000',
+            created_by=self.user,
+            branch=self.branch,
+        )
+        self.other_customer = Client.objects.create(
+            full_name='Other Customer',
+            phone_primary='+256700555001',
+            created_by=self.user,
+            branch=self.branch,
+        )
+        self.service = ServiceType.objects.create(
+            name='Searchable Service',
+            category='ura_filing',
+        )
+        self.service.branches.add(self.branch)
+        self.payment_date = timezone.localdate()
+        self.payment = Payment.objects.create(
+            client=self.customer,
+            service_type=self.service,
+            branch=self.branch,
+            amount=Decimal('1234.50'),
+            method='cash',
+            payment_date=self.payment_date,
+            reference='receipt-reference-123',
+            received_by=self.user,
+        )
+
+    def test_receipt_report_filters_and_summarizes_matching_payments(self):
+        other_service = ServiceType.objects.create(
+            name='Other Service',
+            category='ura_filing',
+        )
+        other_service.branches.add(self.branch)
+        other_payment = Payment.objects.create(
+            client=self.other_customer,
+            service_type=other_service,
+            branch=self.branch,
+            amount=Decimal('900'),
+            method='bank_transfer',
+            payment_date=self.payment_date,
+            received_by=self.user,
+        )
+
+        response = self.client.get(reverse('billing:payments_report'), {
+            'search': self.payment.receipt_number,
+            'date_from': self.payment_date.isoformat(),
+            'date_to': self.payment_date.isoformat(),
+            'client': self.customer.pk,
+            'service_type': self.service.pk,
+            'method': 'cash',
+            'branch': self.branch.pk,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['record_count'], 1)
+        self.assertEqual(response.context['total_amount'], Decimal('1234.50'))
+        self.assertContains(response, self.payment.receipt_number)
+        self.assertNotContains(response, other_payment.receipt_number)
+        self.assertContains(response, 'Searchable Customer')
+        self.assertContains(response, 'class="form-control s2"')
+
+    def test_invalid_date_range_does_not_show_unfiltered_payments(self):
+        response = self.client.get(reverse('billing:payments_report'), {
+            'date_from': '2026-11-19',
+            'date_to': '2026-11-18',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['record_count'], 0)
+        self.assertContains(response, 'The end date must be on or after the start date.')
+        self.assertNotContains(response, self.payment.receipt_number)
+
+    def test_receipt_report_respects_active_branch_workspace(self):
+        other_branch = Branch.objects.create(
+            company=self.company,
+            name='PRIME FOCUS',
+        )
+        other_payment = Payment.objects.create(
+            client=self.other_customer,
+            branch=other_branch,
+            amount=Decimal('500'),
+            method='cash',
+            payment_date=self.payment_date,
+            received_by=self.user,
+        )
+        session = self.client.session
+        session['active_branch_id'] = str(self.branch.pk)
+        session.save()
+
+        response = self.client.get(reverse('billing:payments_report'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['record_count'], 1)
+        self.assertContains(response, self.payment.receipt_number)
+        self.assertNotContains(response, other_payment.receipt_number)

@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from clients.models import Client, WalkInIntake
 from clients import views
-from core.models import User
+from core.models import Branch, Company, User
 
 
 class ClientOnboardingTests(TestCase):
@@ -91,6 +91,42 @@ class ClientOnboardingTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('phone_primary', response.json()['errors'])
         self.assertFalse(Client.objects.filter(full_name='Duplicate Phone Client').exists())
+
+    def test_clients_in_other_branches_are_not_duplicate_candidates(self):
+        company = Company.objects.create(name='Branch Duplicate Co', slug='branch-duplicate')
+        entry_branch = Branch.objects.create(company=company, name='TAXMAN')
+        other_branch = Branch.objects.create(
+            company=company, name='PRIME FOCUS', external_reporting=True,
+        )
+        branch_user = User.objects.create_user(
+            username='branch-client-creator', password='pass1234',
+            role='tax_officer', company=company, branch=entry_branch,
+        )
+        Client.objects.create(
+            full_name='Branch Shared Client', tin='1234567890',
+            phone_primary='+256700888111', branch=other_branch,
+        )
+        self.client.force_login(branch_user)
+
+        duplicate_check = self.client.get(reverse('clients:check_duplicates'), {
+            'tin': '1234567890',
+            'phone': '+256700888111',
+        })
+        self.assertEqual(duplicate_check.status_code, 200)
+        self.assertEqual(duplicate_check.json()['duplicates'], [])
+
+        response = self.client.post(reverse('clients:quick_create'), {
+            'client_type': 'individual',
+            'full_name': 'Branch Shared Client',
+            'tin': '1234567890',
+            'phone_primary': '+256700888111',
+            'district': 'Kampala',
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200, response.content)
+        created_client = Client.objects.get(pk=response.json()['id'])
+        self.assertEqual(created_client.branch, entry_branch)
+        self.assertEqual(created_client.find_duplicate_candidates(), [])
 
     def test_walkin_route_uses_add_customer_page(self):
         request = self.factory.get(reverse('clients:walkin'))

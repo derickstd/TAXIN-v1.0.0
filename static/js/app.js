@@ -8,9 +8,13 @@
 /* ── Select2 init ── */
 function initSelect2(){
   if(!window.jQuery||!jQuery.fn.select2)return;
-  jQuery('.s2, .select2').filter(function(){
-    return !jQuery(this).hasClass('select2-hidden-accessible');
-  }).select2({theme:'bootstrap-5',allowClear:false,
+  jQuery('select').filter(function(){
+    var select=jQuery(this);
+    return !select.hasClass('select2-hidden-accessible')
+      && (select.is('.s2, .select2, [data-searchable]')
+        || this.options.length>15);
+  }).select2({theme:'bootstrap-5',allowClear:false,width:'100%',
+    minimumResultsForSearch:0,
     placeholder:function(){return jQuery(this).data('ph')||'Search or select…';}});
   // service select: autofill price
   jQuery(document).on('select2:select','.s2-svc',function(e){

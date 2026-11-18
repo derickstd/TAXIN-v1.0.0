@@ -1,0 +1,16 @@
+<div class="bank-deposit-popover">
+  <div class="modal-hd">
+    <h5 id="accountTransferTitle">Record Bank Deposit</h5>
+    <button type="button" class="modal-close" data-close-account-transfer aria-label="Close deposit form">&times;</button>
+  </div>
+  <p class="form-hint">Move cash or mobile money into the bank. This is not an expense.</p>
+  <form method="post" action="{% url 'documents:branch_account_transfer' %}?popover=1" data-branch-transfer-form>
+    {% csrf_token %}
+    {% include 'documents/partials/branch_account_transfer_fields.html' %}
+    <div class="form-actions mt-3">
+      <button class="btn btn-primary" type="submit"><i class="fas fa-building-columns"></i> Record deposit</button>
+      <button class="btn btn-outline" type="button" data-close-account-transfer>Cancel</button>
+    </div>
+    <div data-transfer-status role="status" aria-live="polite"></div>
+  </form>
+</div>

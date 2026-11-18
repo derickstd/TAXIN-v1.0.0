@@ -309,6 +309,7 @@ def client_create(request):
     if request.method == 'POST':
         form = ClientForm(request.POST, user=request.user)
         if form.is_valid():
+            branch = get_entry_branch(request.user)
             # Check for potential duplicate clients before saving
             from core.duplicate_detection import find_duplicate_clients
             dup_candidates = find_duplicate_clients(
@@ -317,6 +318,7 @@ def client_create(request):
                 whatsapp=form.cleaned_data.get('phone_whatsapp'),
                 tin=form.cleaned_data.get('tin'),
                 similarity_threshold=80,
+                branch=branch,
             )
             if dup_candidates:
                 # Present duplicates to the user to choose edit or cancel
@@ -341,7 +343,7 @@ def client_create(request):
             
             client = form.save(commit=False)
             client.created_by = request.user
-            client.branch = get_entry_branch(request.user)
+            client.branch = branch
             # Handle district from POST directly since it's a free select
             client.district = request.POST.get('district', 'Kampala')
             client.save()
@@ -518,6 +520,7 @@ def quick_client_create(request):
             'errors': errors,
         }, status=400)
 
+    branch = get_entry_branch(request.user)
     from core.duplicate_detection import find_duplicate_clients
     duplicates = find_duplicate_clients(
         full_name=form.cleaned_data.get('full_name'),
@@ -525,6 +528,7 @@ def quick_client_create(request):
         whatsapp=form.cleaned_data.get('phone_whatsapp'),
         tin=form.cleaned_data.get('tin'),
         similarity_threshold=80,
+        branch=branch,
     )
     if duplicates:
         names = ', '.join(candidate.get_display_name() for candidate, _, _ in duplicates)
@@ -534,7 +538,7 @@ def quick_client_create(request):
 
     client = form.save(commit=False)
     client.created_by = request.user
-    client.branch = get_entry_branch(request.user)
+    client.branch = branch
     client.district = form.cleaned_data.get('district') or 'Kampala'
     client.save()
     return JsonResponse({
@@ -661,7 +665,12 @@ def check_duplicates(request):
     phone = request.GET.get('phone', '').strip()
     exclude_pk = request.GET.get('exclude', '')
 
+    branch = get_entry_branch(request.user)
     visible_clients = scope_queryset(request.user, Client.objects.all())
+    if branch:
+        visible_clients = visible_clients.filter(branch=branch)
+    else:
+        visible_clients = visible_clients.filter(branch__isnull=True)
     qs = Client.objects.none()
     if tin:
         qs = qs | visible_clients.filter(tin=tin)

@@ -1,5 +1,5 @@
 /* Taxman256 Service Worker */
-const CACHE = 'taxman256-v1';
+const CACHE = 'taxman256-v2';
 const STATIC = [
   '/static/css/app.css',
   '/static/js/app.js',

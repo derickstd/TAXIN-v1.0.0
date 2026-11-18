@@ -189,6 +189,125 @@ class CoreVisibilityTests(TestCase):
                 self.assertNotContains(response, 'Manage Tenants')
 
 
+class SettingsToolsTests(TestCase):
+    def setUp(self):
+                self.company = Company.objects.create(name='Settings Co', slug='settings-co')
+                self.branch = Branch.objects.create(company=self.company, name='Main Branch')
+                self.company.default_branch = self.branch
+                self.company.save(update_fields=['default_branch'])
+                self.admin = User.objects.create_user(
+                    username='settings-admin', password='pass1234',
+                    role='admin', company=self.company,
+                )
+                self.client.force_login(self.admin)
+
+    def test_settings_displays_workspace_branch_and_user_tools(self):
+                response = self.client.get(reverse('core:settings'))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'Workspace Settings')
+                self.assertContains(response, 'Main Branch')
+                self.assertContains(response, 'Add Branch')
+                self.assertContains(response, 'branchFormTemplate')
+                self.assertContains(response, '__prefix__')
+                self.assertContains(response, 'Add User')
+                self.assertContains(response, 'settingsUserModal')
+                self.assertContains(response, reverse('dashboard:switch_branch'))
+                self.assertContains(response, reverse('core:users'))
+
+    def test_settings_add_user_uses_company_and_branch_scope(self):
+                response = self.client.post(reverse('core:settings'), {
+                    'settings_action': 'add_user',
+                    'username': 'quick-staff',
+                    'first_name': 'Quick',
+                    'last_name': 'Staff',
+                    'role': 'tax_officer',
+                    'branch': str(self.branch.pk),
+                    'ui_theme': 'ocean',
+                    'password1': 'temporary-pass-123',
+                    'password2': 'temporary-pass-123',
+                    'receive_debt_alerts': 'on',
+                    'receive_task_reminders': 'on',
+                })
+
+                self.assertRedirects(response, reverse('core:settings'))
+                new_user = User.objects.get(username='quick-staff')
+                self.assertEqual(new_user.company, self.company)
+                self.assertEqual(new_user.branch, self.branch)
+                self.assertTrue(new_user.check_password('temporary-pass-123'))
+                self.assertTrue(new_user.is_active)
+                self.assertTrue(new_user.is_active_staff)
+
+    def test_settings_add_user_rejects_non_admin(self):
+                staff = User.objects.create_user(
+                    username='settings-staff', password='pass1234',
+                    role='tax_officer', company=self.company, branch=self.branch,
+                )
+                self.client.force_login(staff)
+
+                response = self.client.post(reverse('core:settings'), {
+                    'settings_action': 'add_user',
+                    'username': 'unauthorized-staff',
+                    'role': 'tax_officer',
+                    'ui_theme': 'ocean',
+                })
+
+                self.assertRedirects(response, reverse('dashboard:index'))
+                self.assertFalse(User.objects.filter(username='unauthorized-staff').exists())
+
+    def test_settings_formset_adds_branch(self):
+                response = self.client.get(reverse('core:settings'))
+                formset = response.context['branch_formset']
+                prefix = formset.prefix
+                payload = {
+                    'name': self.company.name,
+                    'registration_number': self.company.registration_number,
+                    'tin': self.company.tin,
+                    'email': self.company.email,
+                    'phone': self.company.phone,
+                    'address': self.company.address,
+                    'default_branch': str(self.branch.pk),
+                    'first_name': self.admin.first_name,
+                    'last_name': self.admin.last_name,
+                    'email_notify': self.admin.email_notify,
+                    'phone_whatsapp': self.admin.phone_whatsapp,
+                    'receive_debt_alerts': 'on',
+                    'receive_task_reminders': 'on',
+                    'ui_theme': self.admin.ui_theme,
+                    f'{prefix}-TOTAL_FORMS': str(formset.total_form_count()),
+                    f'{prefix}-INITIAL_FORMS': str(formset.initial_form_count()),
+                    f'{prefix}-MIN_NUM_FORMS': str(formset.min_num),
+                    f'{prefix}-MAX_NUM_FORMS': str(formset.max_num),
+                }
+                for index, branch_form in enumerate(formset.forms):
+                    for hidden in branch_form.hidden_fields():
+                        payload[hidden.html_name] = hidden.value() or ''
+                    if branch_form.instance.pk:
+                        values = {
+                            'name': branch_form.instance.name,
+                            'slug': branch_form.instance.slug,
+                            'address': branch_form.instance.address,
+                            'phone': branch_form.instance.phone,
+                            'is_active': 'on' if branch_form.instance.is_active else '',
+                        }
+                    else:
+                        values = {
+                            'name': 'New Branch',
+                            'slug': 'new-branch',
+                            'address': 'New branch address',
+                            'phone': '0700000000',
+                            'is_active': 'on',
+                        }
+                    for field, value in values.items():
+                        payload[f'{prefix}-{index}-{field}'] = value
+                    payload[f'{prefix}-{index}-DELETE'] = ''
+
+                response = self.client.post(reverse('core:settings'), payload)
+
+                self.assertRedirects(response, reverse('core:settings'))
+                self.assertTrue(self.company.branches.filter(name='New Branch').exists())
+
+
 class BranchAccessTests(TestCase):
     def setUp(self):
         self.company = Company.objects.create(name='Branch Test Co', slug='branch-test')

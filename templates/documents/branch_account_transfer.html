@@ -15,16 +15,7 @@
     <p class="form-hint">A bank deposit moves money between accounts. It is not an expense and will not reduce profit or total cash.</p>
     <form method="post">
       {% csrf_token %}
-      <div class="form-grid-2">
-        {% for field in form %}
-        <div>
-          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-          {{ field }}
-          {% for error in field.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
-        </div>
-        {% endfor %}
-      </div>
-      {% for error in form.non_field_errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+      {% include 'documents/partials/branch_account_transfer_fields.html' %}
       <div class="form-actions mt-3">
         <button class="btn btn-primary" type="submit"><i class="fas fa-save"></i> Record deposit</button>
         <a class="btn btn-outline" href="{% url 'documents:branch_account_statement' %}">Cancel</a>
