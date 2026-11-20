@@ -97,7 +97,6 @@
                   <th>Phone</th>
                   <th>Branch Logo</th>
                   <th>Active</th>
-                  <th>Remove</th>
                 </tr>
               </thead>
               <tbody id="branchFormRows">
@@ -114,7 +113,6 @@
                     {{ form.logo }}{{ form.logo.errors }}
                   </td>
                   <td>{{ form.is_active }}</td>
-                  <td>{{ form.DELETE }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -127,11 +125,10 @@
                 <td>{{ branch_formset.empty_form.phone }}</td>
                 <td>{{ branch_formset.empty_form.logo }}</td>
                 <td>{{ branch_formset.empty_form.is_active }}</td>
-                <td>{{ branch_formset.empty_form.DELETE }}</td>
               </tr>
             </template>
           </div>
-          <div class="form-hint">Add branches or update their details and logo. Uploaded logos must be 5 MB or smaller. Only managers and admins can change branch records.</div>
+          <div class="form-hint">Add branches or update their details and logo. Uploaded logos must be 5 MB or smaller. Branches can be archived from company branch management.</div>
         </div>
       </div>
       {% endif %}

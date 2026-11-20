@@ -8,7 +8,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F, Sum, Q, Count
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from decimal import Decimal, InvalidOperation
 from datetime import date, timedelta
 from uuid import UUID, uuid4
@@ -183,6 +183,10 @@ def payment_receipts_report(request):
         'page_obj': page_obj,
         'record_count': totals['record_count'],
         'total_amount': totals['amount'] or Decimal('0.00'),
+        'can_delete_records': (
+            request.user.is_superuser
+            or request.user.role in ('admin', 'ceo')
+        ),
     })
 
 
@@ -404,7 +408,33 @@ def payment_receipt(request, pk):
         'payment': payment,
         'branch': branch,
         'company': company,
+        'can_delete_records': (
+            request.user.is_superuser
+            or request.user.role in ('admin', 'ceo')
+        ),
     })
+
+
+@login_required
+@require_POST
+def payment_delete(request, pk):
+    if not (request.user.is_superuser or request.user.role in ('admin', 'ceo')):
+        messages.error(request, 'Only CEOs and admins can delete payments.')
+        return redirect('billing:payments_report')
+
+    payments = scope_queryset(
+        request.user,
+        Payment.objects.select_related('invoice', 'client'),
+    )
+    payment = get_object_or_404(payments, pk=pk)
+    receipt_number = payment.receipt_number
+    payment._audit_actor = request.user
+    payment.delete()
+    messages.success(
+        request,
+        f'Payment {receipt_number} deleted and related balances updated.',
+    )
+    return redirect('billing:payments_report')
 
 
 @login_required
@@ -542,6 +572,7 @@ def invoice_delete(request, pk):
         return redirect('billing:detail', pk=pk)
     if request.method == 'POST':
         invoice_number = invoice.invoice_number
+        invoice._audit_actor = request.user
         invoice.delete()
         messages.success(request, f'Invoice {invoice_number} deleted.')
         return redirect('billing:list')

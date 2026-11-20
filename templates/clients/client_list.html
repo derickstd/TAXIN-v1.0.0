@@ -104,7 +104,19 @@
           <td class="{% if client.total_outstanding > 0 %}ugx-red{% else %}ugx-green{% endif %}" style="font-weight:700;font-size:.82rem">
             {{ client.total_outstanding|floatformat:0|intcomma }}
           </td>
-          <td><a href="{% url 'clients:detail' client.pk %}" class="btn btn-outline btn-sm">View</a></td>
+          <td>
+            <a href="{% url 'clients:detail' client.pk %}" class="btn btn-outline btn-sm">View</a>
+            {% if can_archive_clients %}
+              {% if client.status == 'dormant' %}
+              <a href="{% url 'core:admin_client_reactivate' client.pk %}" class="btn btn-outline btn-sm" onclick="return confirm('Restore this archived client?');">Restore</a>
+              {% else %}
+              <form method="post" action="{% url 'clients:archive' client.pk %}" style="display:inline" onsubmit="return confirm('Archive this client? Existing records will be retained.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline btn-sm"><i class="fas fa-box-archive"></i> Archive</button>
+              </form>
+              {% endif %}
+            {% endif %}
+          </td>
         </tr>
         {% empty %}
         <tr id="emptyRow"><td colspan="9" style="text-align:center;color:#aaa;padding:2rem">No clients found.</td></tr>

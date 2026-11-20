@@ -45,6 +45,12 @@
   <div class="d-flex gap-2 flex-wrap receipt-actions">
     <a class="btn btn-outline" href="{% url 'billing:payments_report' %}"><i class="fas fa-arrow-left"></i> Payments</a>
     <a class="btn btn-primary" href="{% url 'billing:payment_receipt' payment.pk %}?format=pdf"><i class="fas fa-download"></i> Download PDF</a>
+    {% if can_delete_records %}
+    <form method="post" action="{% url 'billing:payment_delete' payment.pk %}" onsubmit="return confirm('Delete this payment and update related balances?');">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit"><i class="fas fa-trash"></i> Delete payment</button>
+    </form>
+    {% endif %}
     <button class="btn btn-outline" type="button" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
   </div>
 </div>

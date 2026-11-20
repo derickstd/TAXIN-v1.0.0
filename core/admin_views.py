@@ -14,6 +14,7 @@ from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.db.models import Q, Count
+from django.views.decorators.http import require_POST
 from .models import User, Company, AuditLog, Branch, SystemModuleVisibility
 from .utils import get_module_visibility_map, SYSTEM_MODULE_DEFINITIONS
 from clients.models import Client
@@ -346,6 +347,49 @@ def admin_company_branches(request, company_id):
 
 
 @login_required
+@require_POST
+def admin_branch_archive(request, company_id, branch_id):
+    if not (
+        request.user.is_superuser
+        or request.user.role in ('admin', 'ceo')
+    ):
+        messages.error(request, 'Only CEOs and admins can archive branches.')
+        return redirect('dashboard:index')
+
+    companies = (
+        Company.objects.all()
+        if request.user.is_superuser
+        else Company.objects.filter(pk=request.user.company_id)
+    )
+    company = get_object_or_404(companies, pk=company_id)
+    branch = get_object_or_404(company.branches, pk=branch_id)
+    old_is_active = branch.is_active
+    branch.is_active = not branch.is_active
+    branch.save(update_fields=['is_active'])
+
+    if not branch.is_active and company.default_branch_id == branch.pk:
+        company.default_branch = None
+        company.save(update_fields=['default_branch'])
+
+    action = 'restored' if branch.is_active else 'archived'
+    AuditLog.objects.create(
+        model_name='branch',
+        object_id=str(branch.pk),
+        action='UPDATE',
+        changed_fields={
+            'is_active': {'from': old_is_active, 'to': branch.is_active},
+        },
+        changed_by=request.user,
+        notes=f'Branch {branch.name} {action} by {request.user.username}',
+    )
+    messages.success(
+        request,
+        f'Branch {branch.name} {action}. Existing records were retained.',
+    )
+    return redirect('core:admin_company_branches', company_id=company.pk)
+
+
+@login_required
 def admin_audit_logs(request):
     """View system, transaction, and job activity logs in one feed."""
     if not _require_admin_role(request, 'audit'):
@@ -547,18 +591,19 @@ def admin_client_suspend(request, client_id):
 
 @login_required
 def admin_client_reactivate(request, client_id):
-    """Reactivate a suspended client account."""
+    """Reactivate or restore an archived client account."""
     if not _require_admin_role(request, 'users'):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
 
     client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=client_id)
 
-    if client.status != 'suspended':
-        messages.warning(request, f'Client {client.get_display_name()} is not suspended.')
+    if client.status not in ('suspended', 'dormant'):
+        messages.warning(request, f'Client {client.get_display_name()} is not inactive.')
         return redirect('clients:detail', pk=client.pk)
 
     try:
+        old_status = client.status
         client.status = 'active'
         client.save(update_fields=['status'])
 
@@ -566,7 +611,7 @@ def admin_client_reactivate(request, client_id):
             model_name='client',
             object_id=str(client.pk),
             action='UPDATE',
-            changed_fields={'status': 'suspended → active'},
+            changed_fields={'status': f'{old_status} → active'},
             changed_by=request.user,
             notes=f'Client {client.get_display_name()} reactivated by {request.user.username}'
         )
@@ -582,8 +627,11 @@ def admin_client_reactivate(request, client_id):
 @login_required
 def admin_user_delete(request, user_id):
     """Delete a user account from the system."""
-    if not _require_admin_role(request, 'users'):
-        messages.error(request, 'Admin access required.')
+    if not (
+        request.user.is_superuser
+        or request.user.role in ('admin', 'ceo')
+    ):
+        messages.error(request, 'Only CEOs and admins can delete users.')
         return redirect('dashboard:index')
 
     user = get_object_or_404(_managed_users(request), pk=user_id)

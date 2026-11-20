@@ -11,6 +11,7 @@ urlpatterns = [
     path('<int:pk>/pay/',       views.record_payment,        name='pay'),
     path('client-pay/',         views.record_client_payment, name='client_pay'),
     path('quick-payment/',      views.quick_payment,         name='quick_payment'),
+    path('payments/<int:pk>/delete/', views.payment_delete, name='payment_delete'),
     path('payments/<int:pk>/receipt/', views.payment_receipt, name='payment_receipt'),
     path('payments/',           views.payment_receipts_report, name='payments_report'),
     path('<int:pk>/whatsapp/',  views.send_invoice_whatsapp, name='whatsapp'),

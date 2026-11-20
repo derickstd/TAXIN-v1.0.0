@@ -167,7 +167,45 @@ def user_list(request):
         messages.error(request, 'Admin access required.')
         return redirect('dashboard:index')
     users = _company_users(request).order_by('role', 'first_name')
-    return render(request, 'core/user_list.html', {'users': users})
+    can_delete_users = (
+        request.user.is_superuser or request.user.role in ('admin', 'ceo')
+    )
+    return render(request, 'core/user_list.html', {
+        'users': users,
+        'can_delete_users': can_delete_users,
+    })
+
+
+@login_required
+@require_POST
+def user_delete(request, pk):
+    if not (request.user.is_superuser or request.user.role in ('admin', 'ceo')):
+        messages.error(request, 'Only CEOs and admins can delete users.')
+        return redirect('core:users')
+
+    if request.user.is_superuser:
+        users = User.objects.all()
+    elif request.user.company_id:
+        users = User.objects.filter(company_id=request.user.company_id)
+    else:
+        users = User.objects.none()
+    user = get_object_or_404(users, pk=pk)
+
+    if user == request.user:
+        messages.error(request, 'You cannot delete your own account.')
+        return redirect('core:users')
+
+    username = user.username
+    user.delete()
+    AuditLog.objects.create(
+        model_name='user',
+        object_id=str(pk),
+        action='DELETE',
+        changed_by=request.user,
+        notes=f'User {username} deleted by {request.user.username}',
+    )
+    messages.success(request, f'User {username} has been deleted.')
+    return redirect('core:users')
 
 
 @login_required
@@ -302,7 +340,7 @@ def user_settings(request):
     can_add_users = _require_admin(request)
     BranchFormSet = inlineformset_factory(
         Company, Branch, form=BranchSettingsForm,
-        extra=1, can_delete=True,
+        extra=1, can_delete=False,
     )
 
     open_user_modal = False

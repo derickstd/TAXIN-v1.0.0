@@ -15,7 +15,7 @@ from billing.models import (
     PaymentSubmission,
 )
 from clients.models import Client
-from core.models import Branch, Company, User
+from core.models import AuditLog, Branch, Company, User
 from services.models import ServiceCategory, ServiceType
 from services.forms import ServiceTypeForm, service_category_choices
 
@@ -138,6 +138,39 @@ class QuickPaymentTests(TestCase):
         self.assertContains(response, 'Capital Injection')
         self.assertContains(response, 'Credit')
         self.assertNotContains(response, 'New staff message')
+
+    def test_record_payment_button_is_disabled_in_all_branches_workspace(self):
+        company = Company.objects.create(name='Quick Payment Co', slug='quick-payment')
+        Branch.objects.create(company=company, name='TAXMAN')
+        self.user.company = company
+        self.user.save(update_fields=['company'])
+
+        response = self.client.get(reverse('billing:quick_payment'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="floatingPaymentButton" disabled')
+        self.assertContains(
+            response,
+            'Select a branch workspace before recording a payment',
+        )
+
+    def test_record_payment_button_remains_enabled_in_selected_branch_workspace(self):
+        company = Company.objects.create(
+            name='Selected Branch Payment Co',
+            slug='selected-branch-payment',
+        )
+        branch = Branch.objects.create(company=company, name='TAXMAN')
+        self.user.company = company
+        self.user.save(update_fields=['company'])
+        session = self.client.session
+        session['active_branch_id'] = branch.pk
+        session.save()
+
+        response = self.client.get(reverse('billing:quick_payment'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'title="Record a payment"')
+        self.assertNotContains(response, 'id="floatingPaymentButton" disabled')
 
     def test_repeated_quick_payment_submission_records_payment_once(self):
         token = str(uuid4())
@@ -1096,6 +1129,87 @@ class PaymentReceiptReportTests(TestCase):
             response,
             reverse('billing:payment_receipt', args=[self.payment.pk]),
         )
+
+    def test_admin_can_delete_payment_and_related_balances_are_recalculated(self):
+        invoice = Invoice.objects.create(
+            client=self.customer,
+            branch=self.branch,
+            due_date=self.payment_date,
+            subtotal=Decimal('2000'),
+            grand_total=Decimal('2000'),
+            status='sent',
+            created_by=self.user,
+        )
+        payment = Payment.objects.create(
+            invoice=invoice,
+            branch=self.branch,
+            amount=Decimal('1000'),
+            method='cash',
+            payment_date=self.payment_date,
+            received_by=self.user,
+        )
+
+        page = self.client.get(reverse('billing:payments_report'))
+        self.assertContains(
+            page,
+            reverse('billing:payment_delete', args=[payment.pk]),
+        )
+
+        response = self.client.post(
+            reverse('billing:payment_delete', args=[payment.pk]),
+        )
+
+        self.assertRedirects(response, reverse('billing:payments_report'))
+        self.assertFalse(Payment.objects.filter(pk=payment.pk).exists())
+        invoice.refresh_from_db()
+        self.customer.refresh_from_db()
+        self.assertEqual(invoice.amount_paid, Decimal('0'))
+        self.assertEqual(self.customer.total_outstanding, Decimal('2000'))
+        self.assertTrue(AuditLog.objects.filter(
+            model_name='payment',
+            object_id=str(payment.pk),
+            action='DELETE',
+            changed_by=self.user,
+        ).exists())
+
+    def test_manager_cannot_delete_payment(self):
+        manager = User.objects.create_user(
+            username='receiptsmanager',
+            password='pass1234',
+            role='manager',
+            company=self.company,
+            branch=self.branch,
+        )
+        self.client.force_login(manager)
+
+        response = self.client.post(
+            reverse('billing:payment_delete', args=[self.payment.pk]),
+        )
+
+        self.assertRedirects(response, reverse('billing:payments_report'))
+        self.assertTrue(Payment.objects.filter(pk=self.payment.pk).exists())
+
+    def test_admin_can_delete_unpaid_invoice(self):
+        invoice = Invoice.objects.create(
+            client=self.customer,
+            branch=self.branch,
+            due_date=self.payment_date,
+            subtotal=Decimal('2000'),
+            grand_total=Decimal('2000'),
+            status='sent',
+            created_by=self.user,
+        )
+
+        response = self.client.post(reverse('billing:delete', args=[invoice.pk]))
+
+        self.assertRedirects(response, reverse('billing:list'))
+        self.assertFalse(Invoice.objects.filter(pk=invoice.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(
+            model_name='invoice',
+            object_id=str(invoice.pk),
+            action='DELETE',
+            changed_by=self.user,
+        ).exists())
 
     def test_payment_receipt_can_be_viewed_and_downloaded_with_branch_branding(self):
         logo_content = BytesIO()

@@ -91,7 +91,7 @@
         <thead>
           <tr>
             <th>Receipt</th><th>Date</th><th>Customer</th><th>Service</th>
-            <th>Invoice</th><th>Method</th><th>Reference</th><th>Received by</th><th class="text-r">Amount (UGX)</th><th>Receipt</th>
+            <th>Invoice</th><th>Method</th><th>Reference</th><th>Received by</th><th class="text-r">Amount (UGX)</th><th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -106,7 +106,15 @@
             <td>{{ payment.reference|default:'—' }}</td>
             <td>{{ payment.received_by.get_full_name|default:payment.received_by.username|default:'—' }}</td>
             <td class="text-r ugx">{{ payment.amount|floatformat:0|intcomma }}</td>
-            <td><a class="btn btn-outline btn-sm" href="{% url 'billing:payment_receipt' payment.pk %}"><i class="fas fa-eye"></i> View</a></td>
+            <td>
+              <a class="btn btn-outline btn-sm" href="{% url 'billing:payment_receipt' payment.pk %}"><i class="fas fa-eye"></i> View</a>
+              {% if can_delete_records %}
+              <form method="post" action="{% url 'billing:payment_delete' payment.pk %}" style="display:inline" onsubmit="return confirm('Delete this payment and update related balances?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Delete</button>
+              </form>
+              {% endif %}
+            </td>
           </tr>
           {% empty %}
           <tr><td colspan="10"><div class="empty-state"><i class="fas fa-receipt"></i><p>No payment records match these filters.</p></div></td></tr>
@@ -133,7 +141,15 @@
           <div><dt>Invoice</dt><dd>{% if payment.invoice %}<a href="{% url 'billing:detail' payment.invoice.pk %}">{{ payment.invoice.invoice_number }}</a>{% else %}—{% endif %}</dd></div>
           <div><dt>Received by</dt><dd>{{ payment.received_by.get_full_name|default:payment.received_by.username|default:'—' }}</dd></div>
         </dl>
-        <a class="btn btn-outline btn-sm" href="{% url 'billing:payment_receipt' payment.pk %}"><i class="fas fa-eye"></i> View receipt</a>
+        <div class="d-flex gap-2 flex-wrap">
+          <a class="btn btn-outline btn-sm" href="{% url 'billing:payment_receipt' payment.pk %}"><i class="fas fa-eye"></i> View receipt</a>
+          {% if can_delete_records %}
+          <form method="post" action="{% url 'billing:payment_delete' payment.pk %}" onsubmit="return confirm('Delete this payment and update related balances?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Delete</button>
+          </form>
+          {% endif %}
+        </div>
       </article>
       {% empty %}
       <div class="empty-state"><i class="fas fa-receipt"></i><p>No payment records match these filters.</p></div>

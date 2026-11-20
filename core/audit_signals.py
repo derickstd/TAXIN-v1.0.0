@@ -38,7 +38,11 @@ def _json_value(value):
 
 def _audit(instance, action, *, user=None, notes=''):
     model_name, user_field = AUDITED_MODELS[_model_key(instance)]
-    changed_by = user or _actor(instance, user_field)
+    changed_by = (
+        user
+        or getattr(instance, '_audit_actor', None)
+        or _actor(instance, user_field)
+    )
     old_values = getattr(instance, '_audit_old_values', {})
     new_values = {}
     if action != 'DELETE':

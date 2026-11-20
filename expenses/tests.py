@@ -97,6 +97,27 @@ class ExpenseApprovalTests(TestCase):
         expense = Expense.objects.get(description='Branch workspace expense')
         self.assertEqual(expense.branch, branch)
 
+    def test_invalid_expense_submission_shows_errors_and_preserves_input(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse('expenses:create'), {
+            'expense_date': date.today().isoformat(),
+            'category': self.category.pk,
+            'description': 'Expense that needs correction',
+            'amount': 'not-a-number',
+            'payment_method': 'cash',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Please correct the highlighted fields before saving.')
+        self.assertContains(response, 'Enter a number.')
+        self.assertContains(
+            response,
+            'name="amount" value="not-a-number" class="form-control is-invalid" aria-invalid="true"',
+        )
+        self.assertContains(response, 'Expense that needs correction')
+        self.assertFalse(Expense.objects.exists())
+
     def test_external_branch_expense_entry_opens_daily_total_form(self):
         company = Company.objects.create(name='External Expense Co', slug='external-expense')
         branch = Branch.objects.create(

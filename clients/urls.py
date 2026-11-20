@@ -11,6 +11,7 @@ urlpatterns = [
     path('check-duplicates/', views.check_duplicates, name='check_duplicates'),
     path('walkin/',     views.walkin_create,       name='walkin'),
     path('<int:pk>/',   views.client_detail,      name='detail'),
+    path('<int:pk>/archive/', views.archive_client, name='archive'),
     path('<int:pk>/edit/', views.client_edit,     name='edit'),
     path('<int:pk>/merge/', views.merge_clients,  name='merge'),
     path('<int:pk>/log/', views.communication_log_create, name='log_create'),

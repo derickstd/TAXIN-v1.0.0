@@ -18,6 +18,7 @@ urlpatterns = [
     path('admin/clients/<int:client_id>/reactivate/', admin_views.admin_client_reactivate, name='admin_client_reactivate'),
     path('admin/companies/', admin_views.admin_companies, name='admin_companies'),
     path('admin/companies/<int:company_id>/branches/', admin_views.admin_company_branches, name='admin_company_branches'),
+    path('admin/companies/<int:company_id>/branches/<int:branch_id>/archive/', admin_views.admin_branch_archive, name='admin_branch_archive'),
     path('admin/companies/<int:company_id>/suspend/', admin_views.admin_company_suspend, name='admin_company_suspend'),
     path('admin/companies/<int:company_id>/reactivate/', admin_views.admin_company_reactivate, name='admin_company_reactivate'),
     path('admin/audit-logs/', admin_views.admin_audit_logs, name='admin_audit_logs'),
@@ -28,6 +29,7 @@ urlpatterns = [
     # User Management
     path('users/',              views.user_list,       name='users'),
     path('users/new/',          views.user_create,     name='user_new'),
+    path('users/<int:pk>/delete/', views.user_delete,  name='user_delete'),
     path('users/<int:pk>/',     views.user_edit,       name='user_edit'),
     path('settings/',           views.user_settings,   name='settings'),
     path('settings/theme/',     views.save_ui_theme,   name='save_theme'),

@@ -2,11 +2,19 @@
 {% block title %}Log Expense{% endblock %}
 {% block nav_exp %}active{% endblock %}
 {% block breadcrumbs %}<li><a href="{% url 'expenses:list' %}">Expenses</a></li><li class="active">New Expense</li>{% endblock %}
+{% block extra_css %}
+<style>
+#expenseModal .select2-selection.is-invalid{border-color:var(--red)!important;box-shadow:0 0 0 4px rgba(220,38,38,.12)}
+</style>
+{% endblock %}
 {% block content %}
 <div class="modal-overlay open" id="expenseModal">
   <div class="modal-box" style="width:min(100%,640px);max-width:640px;">
     <div class="modal-hd">
-      <h5><i class="fas fa-receipt"></i>Log New Expense</h5>
+      <div>
+        <h5><i class="fas fa-receipt"></i>Log New Expense</h5>
+        {% if form.errors %}<div class="err-msg" role="alert">Please correct the highlighted fields before saving.</div>{% endif %}
+      </div>
       <a href="{% url 'expenses:list' %}" class="modal-close">&times;</a>
     </div>
     <div class="card-box">
@@ -19,61 +27,72 @@
       </div>
       <div class="card-body">
         <form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
       <div class="form-grid-2">
         <div>
           <label class="form-label">Date <span class="req">*</span></label>
-          <input type="date" name="expense_date" value="{{ today }}" class="form-control" required>
+          <input type="date" name="expense_date" value="{{ form.expense_date.value|default:today }}" class="form-control{% if form.expense_date.errors %} is-invalid{% endif %}" aria-invalid="{% if form.expense_date.errors %}true{% else %}false{% endif %}" required>
+          {% for error in form.expense_date.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
         <div>
           <label class="form-label">Category <span class="req">*</span></label>
-          <select name="category" id="categorySelect" class="form-ctrl s2" data-ph="Search categories..." required>
+          <select name="category" id="categorySelect" class="form-ctrl s2{% if form.category.errors %} is-invalid{% endif %}" aria-invalid="{% if form.category.errors %}true{% else %}false{% endif %}" data-ph="Search categories..." required>
             <option value="">Select category...</option>
             {% for cat in form.fields.category.queryset %}
-            <option value="{{ cat.pk }}">{{ cat.name }}</option>
+            <option value="{{ cat.pk }}"{% if form.category.value|stringformat:"s" == cat.pk|stringformat:"s" %} selected{% endif %}>{{ cat.name }}</option>
             {% endfor %}
           </select>
+          {% for error in form.category.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
           <div class="form-hint"><a href="#" onclick="openCategoryModal();return false;"><i class="fas fa-plus"></i> Add new category</a></div>
         </div>
         <div class="field-span-2">
           <label class="form-label">Description <span class="req">*</span></label>
-          <textarea name="description" class="form-control" rows="2" placeholder="What was this expense for?" required></textarea>
+          <textarea name="description" class="form-control{% if form.description.errors %} is-invalid{% endif %}" aria-invalid="{% if form.description.errors %}true{% else %}false{% endif %}" rows="2" placeholder="What was this expense for?" required>{{ form.description.value|default_if_none:'' }}</textarea>
+          {% for error in form.description.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
         <div>
           <label class="form-label">Amount (UGX) <span class="req">*</span></label>
-          <input type="number" name="amount" class="form-control" placeholder="e.g. 50,000" min="0" required>
+          <input type="number" name="amount" value="{{ form.amount.value|default_if_none:'' }}" class="form-control{% if form.amount.errors %} is-invalid{% endif %}" aria-invalid="{% if form.amount.errors %}true{% else %}false{% endif %}" placeholder="e.g. 50,000" min="0" required>
+          {% for error in form.amount.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
         <div>
           <label class="form-label">Payment Method</label>
-          <select name="payment_method" class="form-ctrl s2" data-ph="Select method">
-            {% for val,label in form.fields.payment_method.choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+          <select name="payment_method" class="form-ctrl s2{% if form.payment_method.errors %} is-invalid{% endif %}" aria-invalid="{% if form.payment_method.errors %}true{% else %}false{% endif %}" data-ph="Select method">
+            {% for val,label in form.fields.payment_method.choices %}<option value="{{ val }}"{% if form.payment_method.value == val %} selected{% endif %}>{{ label }}</option>{% endfor %}
           </select>
+          {% for error in form.payment_method.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
         <div>
           <label class="form-label">Reference / Receipt No.</label>
-          <input type="text" name="reference" class="form-control" placeholder="MM transaction ID, receipt...">
+          <input type="text" name="reference" value="{{ form.reference.value|default_if_none:'' }}" class="form-control{% if form.reference.errors %} is-invalid{% endif %}" aria-invalid="{% if form.reference.errors %}true{% else %}false{% endif %}" placeholder="MM transaction ID, receipt...">
+          {% for error in form.reference.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
         <div>
           <label class="form-label">Receipt Photo</label>
-          <input type="file" name="receipt_upload" class="form-control" accept="image/*,.pdf">
+          <input type="file" name="receipt_upload" class="form-control{% if form.receipt_upload.errors %} is-invalid{% endif %}" aria-invalid="{% if form.receipt_upload.errors %}true{% else %}false{% endif %}" accept="image/*,.pdf">
+          {% for error in form.receipt_upload.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
         <div>
           <label class="form-label">Linked Client <span style="color:#aaa">(optional)</span></label>
-          <select name="client" class="form-ctrl s2" data-ph="Search clients...">
+          <select name="client" class="form-ctrl s2{% if form.client.errors %} is-invalid{% endif %}" aria-invalid="{% if form.client.errors %}true{% else %}false{% endif %}" data-ph="Search clients...">
             <option value="">— None —</option>
-            {% for c in form.fields.client.queryset %}<option value="{{ c.pk }}">{{ c.client_id }} — {{ c.get_display_name }}</option>{% endfor %}
+            {% for c in form.fields.client.queryset %}<option value="{{ c.pk }}"{% if form.client.value|stringformat:"s" == c.pk|stringformat:"s" %} selected{% endif %}>{{ c.client_id }} — {{ c.get_display_name }}</option>{% endfor %}
           </select>
+          {% for error in form.client.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
         <div>
           <label class="form-label">Linked Job Card <span style="color:#aaa">(optional)</span></label>
-          <select name="job_card" class="form-ctrl s2" data-ph="Search job cards...">
+          <select name="job_card" class="form-ctrl s2{% if form.job_card.errors %} is-invalid{% endif %}" aria-invalid="{% if form.job_card.errors %}true{% else %}false{% endif %}" data-ph="Search job cards...">
             <option value="">— None —</option>
-            {% for j in form.fields.job_card.queryset %}<option value="{{ j.pk }}">{{ j.job_number }} — {{ j.client.get_display_name }}</option>{% endfor %}
+            {% for j in form.fields.job_card.queryset %}<option value="{{ j.pk }}"{% if form.job_card.value|stringformat:"s" == j.pk|stringformat:"s" %} selected{% endif %}>{{ j.job_number }} — {{ j.client.get_display_name }}</option>{% endfor %}
           </select>
+          {% for error in form.job_card.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
         <div class="field-span-2">
           <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">
-            <input type="checkbox" name="is_billable"><span>This expense is billable to the client</span>
+            <input type="checkbox" name="is_billable" class="{% if form.is_billable.errors %}is-invalid{% endif %}" aria-invalid="{% if form.is_billable.errors %}true{% else %}false{% endif %}"{% if form.is_billable.value %} checked{% endif %}><span>This expense is billable to the client</span>
           </label>
+          {% for error in form.is_billable.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
       </div>
       <div class="form-actions mt-3">
@@ -122,6 +141,9 @@
 <script>
 $(document).ready(function(){
   $('.s2').select2({theme:'bootstrap-5',allowClear:false,placeholder:function(){return $(this).data('ph')||'Search...';}});
+  $('.s2.is-invalid').each(function(){
+    $(this).next('.select2-container').find('.select2-selection').addClass('is-invalid');
+  });
 });
 
 function openCategoryModal() {

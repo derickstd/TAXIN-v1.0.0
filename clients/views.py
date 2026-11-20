@@ -220,9 +220,15 @@ def client_list(request):
         clients.order_by('-updated_at', '-pk'),
         per_page=per_page,
     )
+    can_archive_clients = (
+        request.user.is_superuser or request.user.role in ('admin', 'ceo')
+    )
 
     if request.headers.get('HX-Request'):
-        return render(request, 'clients/partials/client_rows.html', {'clients': page_obj})
+        return render(request, 'clients/partials/client_rows.html', {
+            'clients': page_obj,
+            'can_archive_clients': can_archive_clients,
+        })
 
     total_outstanding = clients.aggregate(s=Sum('total_outstanding'))['s'] or 0
     return render(request, 'clients/client_list.html', {
@@ -232,7 +238,31 @@ def client_list(request):
         'total_outstanding': total_outstanding,
         'counts': {s: branch_clients.filter(status=s).count() for s, _ in Client.STATUS},
         'per_page_options': [15, 30, 50, 100],
+        'can_archive_clients': can_archive_clients,
     })
+
+
+@login_required
+@require_POST
+def archive_client(request, pk):
+    if not (request.user.is_superuser or request.user.role in ('admin', 'ceo')):
+        messages.error(request, 'Only CEOs and admins can archive clients.')
+        return redirect('clients:list')
+
+    client = get_object_or_404(
+        scope_queryset(request.user, Client.objects.all()),
+        pk=pk,
+    )
+    if client.status == 'dormant':
+        messages.info(request, f'{client.get_display_name()} is already archived.')
+        return redirect('clients:detail', pk=client.pk)
+
+    client.status = 'dormant'
+    client._audit_actor = request.user
+    client.save(update_fields=['status', 'updated_at'])
+    messages.success(request, f'{client.get_display_name()} has been archived.')
+    return redirect('clients:detail', pk=client.pk)
+
 
 @login_required
 def client_detail(request, pk):
@@ -322,6 +352,9 @@ def client_detail(request, pk):
             **({'company_id': request.user.company_id} if request.user.role in ('admin', 'ceo') and request.user.company_id else
                {'branch_id': request.user.branch_id} if request.user.company_id else {}),
         ).order_by('first_name'),
+        'can_archive_clients': (
+            request.user.is_superuser or request.user.role in ('admin', 'ceo')
+        ),
     })
 
 @login_required

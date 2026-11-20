@@ -25,15 +25,17 @@
   <div class="col-lg-8">
     <div class="card-box card-compact" style="margin-bottom:.9rem">
       <div class="card-body" style="padding:.7rem 1rem">
-        <form method="get" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
-          <select name="category" class="form-select s2" style="max-width:240px" data-ph="Filter by category…">
+        <form method="get" class="expense-list-filters">
+          <select name="category" class="form-select s2" data-ph="Filter by category…">
             <option value="">All Categories</option>
             {% for cat in categories %}<option value="{{ cat.pk }}" {% if cat.pk|stringformat:"s" == cat_filter %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}
           </select>
-          <input type="date" name="start_date" value="{{ start_date|default:'' }}" class="form-control" style="max-width:170px" placeholder="From">
-          <input type="date" name="end_date" value="{{ end_date|default:'' }}" class="form-control" style="max-width:170px" placeholder="To">
-          <button class="btn btn-primary btn-sm">Filter</button>
-          <a href="{% url 'expenses:list' %}" class="btn btn-outline btn-sm">Clear</a>
+          <input type="date" name="start_date" value="{{ start_date|default:'' }}" class="form-control" placeholder="From">
+          <input type="date" name="end_date" value="{{ end_date|default:'' }}" class="form-control" placeholder="To">
+          <div class="expense-list-filter-actions">
+            <button class="btn btn-primary btn-sm">Filter</button>
+            <a href="{% url 'expenses:list' %}" class="btn btn-outline btn-sm">Clear</a>
+          </div>
         </form>
       </div>
     </div>

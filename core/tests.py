@@ -405,6 +405,85 @@ class BranchAccessTests(TestCase):
         )
 
 
+class BranchArchiveTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name='Branch Archive Co',
+            slug='branch-archive',
+        )
+        self.branch = Branch.objects.create(
+            company=self.company,
+            name='Archive Branch',
+        )
+        self.company.default_branch = self.branch
+        self.company.save(update_fields=['default_branch'])
+        self.admin = User.objects.create_user(
+            username='branch_archive_admin',
+            password='pass1234',
+            role='admin',
+            company=self.company,
+        )
+        self.payment = Payment.objects.create(
+            branch=self.branch,
+            amount=Decimal('500'),
+            payment_date=date.today(),
+            received_by=self.admin,
+        )
+
+    def test_admin_can_archive_and_restore_branch_without_removing_records(self):
+        self.client.force_login(self.admin)
+        url = reverse(
+            'core:admin_branch_archive',
+            args=[self.company.pk, self.branch.pk],
+        )
+
+        page = self.client.get(
+            reverse('core:admin_company_branches', args=[self.company.pk]),
+        )
+        self.assertContains(page, url)
+
+        response = self.client.post(url)
+
+        self.assertRedirects(
+            response,
+            reverse('core:admin_company_branches', args=[self.company.pk]),
+        )
+        self.branch.refresh_from_db()
+        self.company.refresh_from_db()
+        self.assertFalse(self.branch.is_active)
+        self.assertIsNone(self.company.default_branch)
+        self.assertTrue(Payment.objects.filter(pk=self.payment.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(
+            model_name='branch',
+            object_id=str(self.branch.pk),
+            action='UPDATE',
+            changed_by=self.admin,
+        ).exists())
+
+        self.client.post(url)
+        self.branch.refresh_from_db()
+        self.assertTrue(self.branch.is_active)
+
+    def test_manager_cannot_archive_branch(self):
+        manager = User.objects.create_user(
+            username='branch_archive_manager',
+            password='pass1234',
+            role='manager',
+            company=self.company,
+            branch=self.branch,
+        )
+        self.client.force_login(manager)
+
+        response = self.client.post(reverse(
+            'core:admin_branch_archive',
+            args=[self.company.pk, self.branch.pk],
+        ))
+
+        self.assertRedirects(response, reverse('dashboard:index'))
+        self.branch.refresh_from_db()
+        self.assertTrue(self.branch.is_active)
+
+
 @override_settings(RECEIVABLES_API_KEY='test-receivables-key')
 class ReceivablesSummaryApiTests(TestCase):
     def setUp(self):
@@ -564,6 +643,116 @@ class SchedulerStartupTests(TestCase):
             sys.argv = original_argv
 
         mock_start_scheduler.assert_not_called()
+
+
+class UserDeletionPermissionsTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(name='User Delete Co', slug='user-delete')
+
+    def test_company_admin_and_ceo_can_delete_users_from_user_list(self):
+        for role in ('admin', 'ceo'):
+            with self.subTest(role=role):
+                actor = User.objects.create_user(
+                    username=f'{role}_deleter',
+                    password='pass123',
+                    role=role,
+                    company=self.company,
+                )
+                target = User.objects.create_user(
+                    username=f'{role}_target',
+                    password='pass123',
+                    role='tax_officer',
+                    company=self.company,
+                )
+                self.client.force_login(actor)
+
+                page = self.client.get(reverse('core:users'))
+                self.assertEqual(page.status_code, 200)
+                self.assertContains(
+                    page,
+                    f'action="{reverse("core:user_delete", args=[target.pk])}"',
+                )
+
+                response = self.client.post(
+                    reverse('core:user_delete', args=[target.pk]),
+                )
+
+                self.assertRedirects(response, reverse('core:users'))
+                self.assertFalse(User.objects.filter(pk=target.pk).exists())
+                self.assertTrue(AuditLog.objects.filter(
+                    model_name='user',
+                    object_id=str(target.pk),
+                    action='DELETE',
+                    changed_by=actor,
+                ).exists())
+
+    def test_manager_cannot_delete_users(self):
+        branch = Branch.objects.create(company=self.company, name='Delete Test Branch')
+        manager = User.objects.create_user(
+            username='delete_manager',
+            password='pass123',
+            role='manager',
+            company=self.company,
+            branch=branch,
+        )
+        target = User.objects.create_user(
+            username='manager_delete_target',
+            password='pass123',
+            role='tax_officer',
+            company=self.company,
+            branch=branch,
+        )
+        self.client.force_login(manager)
+
+        page = self.client.get(reverse('core:users'))
+        self.assertEqual(page.status_code, 200)
+        self.assertNotContains(
+            page,
+            reverse('core:user_delete', args=[target.pk]),
+        )
+
+        response = self.client.post(
+            reverse('core:user_delete', args=[target.pk]),
+        )
+
+        self.assertRedirects(response, reverse('core:users'))
+        self.assertTrue(User.objects.filter(pk=target.pk).exists())
+
+        admin_page_response = self.client.post(
+            reverse('core:admin_user_delete', args=[target.pk]),
+        )
+
+        self.assertRedirects(
+            admin_page_response,
+            reverse('dashboard:index'),
+        )
+        self.assertTrue(User.objects.filter(pk=target.pk).exists())
+
+    def test_admin_cannot_delete_user_in_another_company(self):
+        other_company = Company.objects.create(
+            name='Other User Delete Co',
+            slug='other-user-delete',
+        )
+        admin = User.objects.create_user(
+            username='company_admin',
+            password='pass123',
+            role='admin',
+            company=self.company,
+        )
+        target = User.objects.create_user(
+            username='other_company_target',
+            password='pass123',
+            role='tax_officer',
+            company=other_company,
+        )
+        self.client.force_login(admin)
+
+        response = self.client.post(
+            reverse('core:user_delete', args=[target.pk]),
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(User.objects.filter(pk=target.pk).exists())
 
 
 class AdminUserAndClientManagementTests(TestCase):

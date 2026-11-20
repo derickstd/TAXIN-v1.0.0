@@ -28,6 +28,7 @@
               <th style="padding:.9rem 1rem;text-align:left;color:#475569;font-size:.85rem;font-weight:700;">Created</th>
               <th style="padding:.9rem 1rem;text-align:center;color:#475569;font-size:.85rem;font-weight:700;">Active</th>
               <th style="padding:.9rem 1rem;text-align:center;color:#475569;font-size:.85rem;font-weight:700;">Reporting</th>
+              <th style="padding:.9rem 1rem;text-align:center;color:#475569;font-size:.85rem;font-weight:700;">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -40,10 +41,16 @@
               <td style="padding:1rem 1rem;color:#475569;">{{ branch.created_at|date:'M d, Y' }}</td>
               <td style="padding:1rem 1rem;text-align:center;color:#111827;">{% if branch.is_active %}<span style="color:#059669;font-weight:700;">Yes</span>{% else %}<span style="color:#ef4444;font-weight:700;">No</span>{% endif %}</td>
               <td style="padding:1rem 1rem;text-align:center;color:#111827;">{% if branch.external_reporting %}Daily summaries{% else %}System transactions{% endif %}</td>
+              <td style="padding:1rem 1rem;text-align:center;">
+                <form method="post" action="{% url 'core:admin_branch_archive' company.pk branch.pk %}" onsubmit="return confirm('{% if branch.is_active %}Archive{% else %}Restore{% endif %} this branch? Existing records will be retained.');">
+                  {% csrf_token %}
+                  <button class="btn btn-outline btn-sm" type="submit">{% if branch.is_active %}Archive{% else %}Restore{% endif %}</button>
+                </form>
+              </td>
             </tr>
             {% empty %}
             <tr>
-              <td colspan="7" style="padding:2rem;text-align:center;color:#6b7280;">No branches defined for this company yet.</td>
+              <td colspan="8" style="padding:2rem;text-align:center;color:#6b7280;">No branches defined for this company yet.</td>
             </tr>
             {% endfor %}
           </tbody>

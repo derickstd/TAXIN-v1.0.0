@@ -8,8 +8,9 @@
   <h4 class="page-title"><i class="fas fa-chart-bar"></i>Invoice Aging Report</h4>
   <button onclick="window.print()" class="btn btn-outline btn-sm no-print"><i class="fas fa-print"></i> Print</button>
 </div>
+<div class="aging-buckets">
 {% for bucket, invs in buckets.items %}
-<div class="card-box" style="margin-bottom:.9rem;border-left:4px solid {% if bucket == 'Current' %}#27ae60{% elif bucket == '1–30 days' %}#f39c12{% else %}#e74c3c{% endif %}">
+<div class="card-box aging-bucket-card" style="margin-bottom:.9rem;border-left:4px solid {% if bucket == 'Current' %}#27ae60{% elif bucket == '1–30 days' %}#f39c12{% else %}#e74c3c{% endif %}">
   <div class="card-head">
     <span>{{ bucket }}</span>
     <span class="ugx {% if bucket != 'Current' %}ugx-red{% else %}ugx-green{% endif %}" style="font-weight:800">UGX {{ bucket_totals|dictsort:bucket|last|last|floatformat:0|intcomma }}</span>
@@ -37,5 +38,6 @@
   {% endif %}
 </div>
 {% endfor %}
+</div>
 {% endblock %}
 

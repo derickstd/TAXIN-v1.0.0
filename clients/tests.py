@@ -308,3 +308,80 @@ class ClientDetailWorkspaceTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+
+class ClientArchiveTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name='Client Archive Co',
+            slug='client-archive',
+        )
+        self.branch = Branch.objects.create(
+            company=self.company,
+            name='Archive Branch',
+        )
+        self.admin = User.objects.create_user(
+            username='archive_admin',
+            password='pass1234',
+            role='admin',
+            company=self.company,
+        )
+        self.client_record = Client.objects.create(
+            full_name='Archived Client',
+            phone_primary='+256700111222',
+            created_by=self.admin,
+            branch=self.branch,
+        )
+        self.intake = WalkInIntake.objects.create(client=self.client_record)
+
+    def test_admin_can_archive_and_restore_client_without_removing_records(self):
+        self.client.force_login(self.admin)
+
+        page = self.client.get(reverse('clients:list'))
+        self.assertContains(
+            page,
+            reverse('clients:archive', args=[self.client_record.pk]),
+        )
+
+        response = self.client.post(
+            reverse('clients:archive', args=[self.client_record.pk]),
+        )
+
+        self.assertRedirects(
+            response,
+            reverse('clients:detail', args=[self.client_record.pk]),
+        )
+        self.client_record.refresh_from_db()
+        self.assertEqual(self.client_record.status, 'dormant')
+        self.assertTrue(
+            WalkInIntake.objects.filter(pk=self.intake.pk).exists(),
+        )
+
+        restore_response = self.client.get(
+            reverse('core:admin_client_reactivate', args=[self.client_record.pk]),
+        )
+
+        self.assertRedirects(
+            restore_response,
+            reverse('clients:detail', args=[self.client_record.pk]),
+        )
+        self.client_record.refresh_from_db()
+        self.assertEqual(self.client_record.status, 'active')
+
+    def test_non_admin_cannot_archive_client(self):
+        manager = User.objects.create_user(
+            username='archive_manager',
+            password='pass1234',
+            role='manager',
+            company=self.company,
+            branch=self.branch,
+        )
+        self.client.force_login(manager)
+
+        response = self.client.post(
+            reverse('clients:archive', args=[self.client_record.pk]),
+        )
+
+        self.assertRedirects(response, reverse('clients:list'))
+        self.client_record.refresh_from_db()
+        self.assertEqual(self.client_record.status, 'active')

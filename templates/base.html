@@ -38,7 +38,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
-<link rel="stylesheet" href="{% static 'css/app.css' %}?v=24"><style>
+<link rel="stylesheet" href="{% static 'css/app.css' %}?v=28"><style>
 .floating-payment-button {
   position:fixed;
   right:1rem;
@@ -68,6 +68,14 @@
   background:#15803d;
   color:#fff;
 }
+.floating-payment-button:disabled {
+  background:#6b7280;
+  color:#fff;
+  opacity:.55;
+  cursor:not-allowed;
+  box-shadow:none;
+}
+.floating-payment-button:disabled:hover { background:#6b7280; }
 .floating-expense-button {
   position:fixed;
   left:calc(var(--sidebar-w) + 1rem);
@@ -628,10 +636,18 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
 </script>
 {% block extra_js %}{% endblock %}
 
+{% if can_switch_branch and not active_branch %}
+<button type="button" class="floating-payment-button" id="floatingPaymentButton" disabled
+        title="Select a branch workspace before recording a payment"
+        aria-label="Select a branch workspace before recording a payment">
+  <i class="fas fa-money-bill-wave" aria-hidden="true"></i>
+</button>
+{% else %}
 <button type="button" class="floating-payment-button" id="floatingPaymentButton"
         title="Record a payment" aria-label="Record a payment">
   <i class="fas fa-money-bill-wave" aria-hidden="true"></i>
 </button>
+{% endif %}
 {% if active_branch %}
 <a class="floating-expense-button"
    href="{% if active_branch.external_reporting %}{% url 'documents:branch_daily_expense' %}?branch={{ active_branch.pk }}&amp;open=transaction{% else %}{% url 'expenses:create' %}{% endif %}"

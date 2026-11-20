@@ -19,11 +19,21 @@
         <a href="{% url 'clients:edit' client.pk %}"><i class="fas fa-edit"></i> Edit client</a>
         <a href="{% url 'documents:statement' client.pk %}"><i class="fas fa-file-alt"></i> Account statement</a>
         <a href="{% url 'credentials:list' %}?client={{ client.pk }}"><i class="fas fa-key"></i> Credentials ({{ creds_count }})</a>
-        {% if user.is_staff or user.is_superuser %}
+        {% if user.is_staff or user.is_superuser or user.role == 'admin' or user.role == 'ceo' %}
         {% if client.status == 'suspended' %}
         <a href="{% url 'core:admin_client_reactivate' client.pk %}" onclick="return confirm('Reactivate this client account?');"><i class="fas fa-check"></i> Reactivate client</a>
-        {% else %}
+        {% elif client.status != 'dormant' %}
         <a href="{% url 'core:admin_client_suspend' client.pk %}" onclick="return confirm('Suspend this client account?');"><i class="fas fa-pause"></i> Suspend client</a>
+        {% endif %}
+        {% endif %}
+        {% if can_archive_clients %}
+        {% if client.status == 'dormant' %}
+        <a href="{% url 'core:admin_client_reactivate' client.pk %}" onclick="return confirm('Restore this archived client?');"><i class="fas fa-box-open"></i> Restore client</a>
+        {% else %}
+        <form method="post" action="{% url 'clients:archive' client.pk %}" onsubmit="return confirm('Archive this client? Existing records will be retained.');">
+          {% csrf_token %}
+          <button type="submit"><i class="fas fa-box-archive"></i> Archive client</button>
+        </form>
         {% endif %}
         {% endif %}
       </div>
