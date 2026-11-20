@@ -8,9 +8,13 @@
 /* ── Select2 init ── */
 function initSelect2(){
   if(!window.jQuery||!jQuery.fn.select2)return;
-  jQuery('.s2, .select2').filter(function(){
-    return !jQuery(this).hasClass('select2-hidden-accessible');
-  }).select2({theme:'bootstrap-5',allowClear:false,
+  jQuery('select').filter(function(){
+    var select=jQuery(this);
+    return !select.hasClass('select2-hidden-accessible')
+      && (select.is('.s2, .select2, [data-searchable]')
+        || this.options.length>15);
+  }).select2({theme:'bootstrap-5',allowClear:false,width:'100%',
+    minimumResultsForSearch:0,
     placeholder:function(){return jQuery(this).data('ph')||'Search or select…';}});
   // service select: autofill price
   jQuery(document).on('select2:select','.s2-svc',function(e){
@@ -18,14 +22,166 @@ function initSelect2(){
         vat=jQuery(e.params.data.element).data('vat')||false,
         row=jQuery(this).closest('.li-row');
     if(price){
-      row.find('.li-default').val(price);
-      if(!row.find('.li-price').val())row.find('.li-price').val(price);
+      var defaultPrice=row.find('.li-default').val(price)[0];
+      if(window.formatMoneyInput)window.formatMoneyInput(defaultPrice);
+      if(!row.find('.li-price').val()){
+        var negotiatedPrice=row.find('.li-price').val(price)[0];
+        if(window.formatMoneyInput)window.formatMoneyInput(negotiatedPrice);
+      }
       row.find('.li-vat-badge').toggle(!!vat);
     }
     recalcTotal();
   });
   jQuery(document).on('input','.li-price',recalcTotal);
   jQuery(document).on('change','input[type=checkbox][name$="-DELETE"]',recalcTotal);
+}
+
+/* ── Monetary input formatting ── */
+var MONEY_FIELD_NAME = /(?:^|[-_])(?:amount|price|fee|balance|inflow|outflow|subtotal|vat_total|grand_total|total_fee|auto_approve_under_amount|require_receipt_under_amount|outstanding_threshold|penalty_amount)(?:$|[-_])/i;
+
+function isMoneyInput(input){
+  if(!(input instanceof HTMLInputElement))return false;
+  return input.dataset.moneyInput==='true'
+    || (input.type==='number'&&MONEY_FIELD_NAME.test(input.name||input.id||''));
+}
+
+function formatMoneyValue(value){
+  var raw=String(value==null?'':value).trim().replace(/,/g,'');
+  if(!raw)return '';
+  var sign=raw.charAt(0)==='-'?'-':'';
+  raw=raw.replace(/-/g,'').replace(/[^\d.]/g,'');
+  var decimal=raw.indexOf('.');
+  var whole=decimal===-1?raw:raw.slice(0,decimal);
+  var fraction=decimal===-1?'':raw.slice(decimal+1).replace(/\./g,'');
+  if(!whole&&decimal===-1)return '';
+  return sign+whole.replace(/\B(?=(\d{3})+(?!\d))/g,',')
+    +(decimal===-1?'':'.'+fraction);
+}
+
+function formatMoneyInput(input){
+  if(!isMoneyInput(input))return;
+  if(input.dataset.moneyInput!=='true'){
+    input.dataset.moneyInput='true';
+    input.type='text';
+    input.inputMode='decimal';
+  }
+  var cursor=input.selectionStart;
+  var digitsBefore=cursor===null?null:input.value.slice(0,cursor).replace(/,/g,'').length;
+  var formatted=formatMoneyValue(input.value);
+  if(formatted===input.value)return;
+  input.value=formatted;
+  if(digitsBefore!==null&&document.activeElement===input){
+    var newCursor=0;
+    var seen=0;
+    while(newCursor<formatted.length&&seen<digitsBefore){
+      if(formatted.charAt(newCursor)!==',')seen++;
+      newCursor++;
+    }
+    input.setSelectionRange(newCursor,newCursor);
+  }
+}
+
+function initMoneyInputs(root){
+  var fields=[];
+  if(root instanceof HTMLInputElement)fields.push(root);
+  if(root&&root.querySelectorAll){
+    fields=fields.concat(Array.prototype.slice.call(
+      root.querySelectorAll('input[type="number"],input[data-money-input="true"]'),
+    ));
+  }
+  fields.forEach(function(input){
+    if(isMoneyInput(input))formatMoneyInput(input);
+  });
+}
+
+function validateMoneyInput(input){
+  var value=input.value.replace(/,/g,'').trim();
+  var error='';
+  if(value){
+    var numericValue=Number(value);
+    if(!Number.isFinite(numericValue)){
+      error='Enter a valid amount.';
+    }else{
+      var min=input.getAttribute('min');
+      var max=input.getAttribute('max');
+      var step=input.getAttribute('step');
+      if(min!==null&&numericValue<Number(min)){
+        error='Enter an amount of at least '+min+'.';
+      }else if(max!==null&&numericValue>Number(max)){
+        error='Enter an amount no greater than '+max+'.';
+      }else if(step&&step!=='any'&&Number(step)>0){
+        var base=min===null?0:Number(min);
+        var units=(numericValue-base)/Number(step);
+        if(Math.abs(units-Math.round(units))>1e-8){
+          error='Enter an amount using increments of '+step+'.';
+        }
+      }
+    }
+  }
+  input.setCustomValidity(error);
+  return !error;
+}
+
+function normalizeMoneyInputs(form){
+  if(!form||!form.querySelectorAll)return;
+  initMoneyInputs(form);
+  form.querySelectorAll('input[data-money-input="true"]').forEach(function(input){
+    input.value=input.value.replace(/,/g,'').trim();
+  });
+}
+
+function prepareMoneyForm(form){
+  if(!form||!form.querySelectorAll)return true;
+  initMoneyInputs(form);
+  var fields=Array.prototype.slice.call(
+    form.querySelectorAll('input[data-money-input="true"]'),
+  );
+  var firstInvalid=null;
+  fields.forEach(function(input){
+    if(!validateMoneyInput(input)&&!firstInvalid)firstInvalid=input;
+  });
+  if(firstInvalid){
+    firstInvalid.reportValidity();
+    return false;
+  }
+  normalizeMoneyInputs(form);
+  return true;
+}
+
+window.formatMoneyInput=formatMoneyInput;
+window.initMoneyInputs=initMoneyInputs;
+window.normalizeMoneyInputs=normalizeMoneyInputs;
+window.prepareMoneyForm=prepareMoneyForm;
+window.parseMoneyNumber=function(value){
+  return Number(String(value==null?'':value).replace(/,/g,''));
+};
+
+function initMoneyFormatter(){
+  initMoneyInputs(document);
+  document.addEventListener('input',function(event){
+    if(isMoneyInput(event.target)){
+      formatMoneyInput(event.target);
+      validateMoneyInput(event.target);
+    }
+  });
+  document.addEventListener('submit',function(event){
+    if(!prepareMoneyForm(event.target)){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  },true);
+  document.addEventListener('reset',function(event){
+    setTimeout(function(){initMoneyInputs(event.target);},0);
+  },true);
+  if(window.MutationObserver){
+    new MutationObserver(function(records){
+      records.forEach(function(record){
+        record.addedNodes.forEach(function(node){
+          if(node.nodeType===1)initMoneyInputs(node);
+        });
+      });
+    }).observe(document.body,{childList:true,subtree:true});
+  }
 }
 
 /* ── Flatpickr ── */
@@ -49,7 +205,7 @@ function recalcTotal(){
   document.querySelectorAll('.li-row').forEach(function(row){
     var del=row.querySelector('input[type=checkbox][name$="-DELETE"]');
     if(del&&del.checked)return;
-    var v=parseFloat(row.querySelector('.li-price')?.value||0)||0;
+    var v=window.parseMoneyNumber(row.querySelector('.li-price')?.value||0)||0;
     if(v>0){total+=v;count++;}
   });
   var label = count === 1 ? ' service' : ' services';
@@ -291,6 +447,7 @@ function initKeyboardShortcuts(){
 
 /* ── Init all ── */
 document.addEventListener('DOMContentLoaded',function(){
+  initMoneyFormatter();
   initSelect2();
   initDates();
   initAlerts();
