@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}Switch workspace to view client{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'clients:list' %}">Clients</a></li>
+<li class="active">Switch workspace</li>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title"><i class="fas fa-building"></i>Client is in another workspace</h1>
+    <p class="text-muted mb-0">{{ client.get_display_name }} belongs to {{ client.branch.name }}.</p>
+  </div>
+</div>
+<section class="card-box">
+  <div class="card-body">
+    <p class="mb-3">Switch to the client’s branch workspace to view this record. Your current workspace will change.</p>
+    <div class="d-flex gap-2 flex-wrap">
+      <form method="post" action="{% url 'dashboard:switch_branch' %}">
+        {% csrf_token %}
+        <input type="hidden" name="branch" value="{{ client.branch_id }}">
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-arrow-right"></i> Open {{ client.branch.name }} workspace
+        </button>
+      </form>
+      <a href="{% url 'clients:list' %}" class="btn btn-outline">Back to clients</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

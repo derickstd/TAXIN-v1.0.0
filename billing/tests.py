@@ -1,12 +1,18 @@
+from io import BytesIO
+from tempfile import TemporaryDirectory
 from decimal import Decimal
 from unittest.mock import patch
+from uuid import uuid4
 
-from django.test import TestCase
+from django.core.files.base import ContentFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
 from billing.models import (
     BranchDailySummary, BranchDailyTransaction, Invoice, OtherIncome, Payment,
+    PaymentSubmission,
 )
 from clients.models import Client
 from core.models import Branch, Company, User
@@ -46,6 +52,42 @@ class ClientPaymentFlowTests(TestCase):
         self.assertContains(response, 'earliest periods first')
         self.assertContains(response, 'Pending invoices')
         self.assertContains(response, 'name="invoice_ids"')
+        self.assertContains(response, 'name="payment_submission_token"')
+
+    def test_client_detail_groups_secondary_header_actions(self):
+        response = self.client.get(reverse('clients:detail', args=[self.client_obj.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Client actions')
+        self.assertContains(response, 'Edit client')
+        self.assertContains(response, 'Account statement')
+        self.assertContains(response, 'Credentials (0)')
+
+    def test_repeated_client_payment_submission_records_payment_once(self):
+        invoice = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.now().date(),
+            subtotal=Decimal('1000'),
+            grand_total=Decimal('1000'),
+            status='sent',
+            created_by=self.user,
+        )
+        token = str(uuid4())
+        payload = {
+            'payment_submission_token': token,
+            'client': self.client_obj.pk,
+            'amount': '1000',
+            'method': 'cash',
+            'payment_date': timezone.localdate().isoformat(),
+        }
+
+        first = self.client.post(reverse('billing:client_pay'), payload)
+        replay = self.client.post(reverse('billing:client_pay'), payload)
+
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(replay.status_code, 302)
+        self.assertEqual(Payment.objects.filter(invoice=invoice).count(), 1)
+        self.assertEqual(PaymentSubmission.objects.filter(token=token).count(), 1)
 
 
 class QuickPaymentTests(TestCase):
@@ -80,15 +122,53 @@ class QuickPaymentTests(TestCase):
         self.assertContains(response, f'value="{anonymous_client.pk}"')
         self.assertContains(response, reverse('clients:create'))
         self.assertContains(response, 'Add Customer')
+        self.assertContains(response, 'class="quick-payment-form"')
+        self.assertContains(response, 'aria-label="Add customer"')
+        self.assertContains(response, 'aria-label="Add service"')
+        self.assertContains(response, 'Search by name, phone, or TIN')
+        self.assertContains(response, 'Receipt number, mobile money ID, or bank reference')
+        self.assertContains(response, 'Optional: add allocation details, receipt context, or other payment notes')
         self.assertContains(response, 'payment-service')
         self.assertContains(response, 'class="form-control s2" id="payment-client"')
         self.assertContains(response, 'data-open-quick-service')
         self.assertContains(response, 'data-open-quick-category')
         self.assertContains(response, 'quickServiceCategoryInline')
         self.assertContains(response, 'Record Payment')
+        self.assertContains(response, 'name="payment_submission_token"')
         self.assertContains(response, 'Capital Injection')
         self.assertContains(response, 'Credit')
         self.assertNotContains(response, 'New staff message')
+
+    def test_repeated_quick_payment_submission_records_payment_once(self):
+        token = str(uuid4())
+        payload = {
+            'payment_submission_token': token,
+            'client': self.client_obj.pk,
+            'amount': '1500',
+            'method': 'cash',
+            'payment_date': timezone.localdate().isoformat(),
+        }
+
+        first = self.client.post(
+            reverse('billing:quick_payment'),
+            payload,
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        replay = self.client.post(
+            reverse('billing:quick_payment'),
+            payload,
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertTrue(first.json()['success'])
+        self.assertEqual(replay.status_code, 200)
+        self.assertTrue(replay.json()['duplicate'])
+        self.assertEqual(
+            Payment.objects.filter(client=self.client_obj, amount=Decimal('1500')).count(),
+            1,
+        )
+        self.assertEqual(PaymentSubmission.objects.filter(token=token).count(), 1)
 
     def test_credit_sale_requires_a_registered_customer(self):
         service = ServiceType.objects.create(
@@ -579,6 +659,35 @@ class InvoiceNumberingTests(TestCase):
             created_by=self.user,
         )
 
+    def test_invoice_list_groups_related_finance_navigation(self):
+        response = self.client.get(reverse('billing:list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'New invoice')
+        self.assertContains(response, 'Finance reports')
+        self.assertContains(response, 'Payments &amp; Receipts')
+        self.assertContains(response, 'Invoice aging')
+        self.assertContains(response, 'Bad debts')
+
+    def test_invoice_detail_groups_secondary_header_actions(self):
+        invoice = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.localdate(),
+            subtotal=Decimal('1000'),
+            grand_total=Decimal('1000'),
+            status='sent',
+            created_by=self.user,
+        )
+
+        response = self.client.get(reverse('billing:detail', args=[invoice.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'More actions')
+        self.assertContains(response, 'Edit invoice')
+        self.assertContains(response, 'Delete invoice')
+        self.assertContains(response, 'Send WhatsApp')
+        self.assertContains(response, 'Print invoice')
+
     def test_client_lump_sum_payment_clears_oldest_unpaid_invoices(self):
         older = Invoice.objects.create(
             client=self.client_obj,
@@ -730,6 +839,31 @@ class InvoiceNumberingTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(payment.payment_date.isoformat(), '2026-11-17')
         self.assertIn('RCT-2026', send_email.call_args.kwargs['subject'])
+
+    def test_repeated_invoice_payment_submission_records_payment_once(self):
+        invoice = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.localdate(),
+            subtotal=Decimal('1000'),
+            grand_total=Decimal('1000'),
+            status='sent',
+            created_by=self.user,
+        )
+        token = str(uuid4())
+        payload = {
+            'payment_submission_token': token,
+            'amount': '1000',
+            'method': 'cash',
+            'payment_date': timezone.localdate().isoformat(),
+        }
+
+        first = self.client.post(reverse('billing:pay', args=[invoice.pk]), payload)
+        replay = self.client.post(reverse('billing:pay', args=[invoice.pk]), payload)
+
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(replay.status_code, 302)
+        self.assertEqual(Payment.objects.filter(invoice=invoice).count(), 1)
+        self.assertEqual(PaymentSubmission.objects.filter(token=token).count(), 1)
 
     def test_recorded_payment_feeds_the_branch_daily_ledger(self):
         company = Company.objects.create(name='Payment Ledger Co', slug='payment-ledger')
@@ -958,6 +1092,57 @@ class PaymentReceiptReportTests(TestCase):
         self.assertNotContains(response, other_payment.receipt_number)
         self.assertContains(response, 'Searchable Customer')
         self.assertContains(response, 'class="form-control s2"')
+        self.assertContains(
+            response,
+            reverse('billing:payment_receipt', args=[self.payment.pk]),
+        )
+
+    def test_payment_receipt_can_be_viewed_and_downloaded_with_branch_branding(self):
+        logo_content = BytesIO()
+        Image.new('RGB', (32, 24), color='teal').save(logo_content, format='PNG')
+        receipt_url = reverse('billing:payment_receipt', args=[self.payment.pk])
+
+        with TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                self.branch.logo.save(
+                    'branch-logo.png',
+                    ContentFile(logo_content.getvalue()),
+                    save=True,
+                )
+                response = self.client.get(receipt_url)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, self.company.name)
+                self.assertContains(response, self.branch.logo.url)
+                self.assertContains(response, self.payment.receipt_number)
+
+                pdf_response = self.client.get(receipt_url, {'format': 'pdf'})
+                self.assertEqual(pdf_response.status_code, 200)
+                self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
+                self.assertIn(b'%PDF-', pdf_response.content[:10])
+                self.assertIn('attachment;', pdf_response['Content-Disposition'])
+
+    def test_payment_receipt_obeys_active_branch_scope(self):
+        other_branch = Branch.objects.create(
+            company=self.company,
+            name='Other Branch',
+        )
+        other_payment = Payment.objects.create(
+            client=self.other_customer,
+            branch=other_branch,
+            amount=Decimal('500'),
+            method='cash',
+            payment_date=self.payment_date,
+            received_by=self.user,
+        )
+        session = self.client.session
+        session['active_branch_id'] = str(self.branch.pk)
+        session.save()
+
+        response = self.client.get(
+            reverse('billing:payment_receipt', args=[other_payment.pk]),
+        )
+
+        self.assertEqual(response.status_code, 404)
 
     def test_invalid_date_range_does_not_show_unfiltered_payments(self):
         response = self.client.get(reverse('billing:payments_report'), {

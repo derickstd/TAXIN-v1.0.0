@@ -30,6 +30,15 @@ class JobCardCreateTests(TestCase):
             created_by=self.user,
         )
 
+    def test_quick_job_summary_starts_with_total_and_hides_details(self):
+        response = self.client.get(reverse('services:create'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="floatSumGrand"')
+        self.assertContains(response, 'id="floatingSummaryDetails" hidden')
+        self.assertContains(response, 'data-drag-handle')
+        self.assertContains(response, 'aria-expanded="false" aria-controls="floatingSummaryDetails"')
+
     def test_create_jobcard_handles_blank_default_price_for_custom_line_item(self):
         response = self.client.post(reverse('services:create'), {
             'client': self.client_obj.pk,
@@ -539,6 +548,9 @@ class JobCardDetailDuplicateStatusTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['is_duplicate_transaction'])
+        self.assertContains(response, 'id="quickSummaryDetails" hidden')
+        self.assertContains(response, 'Total fee')
+        self.assertContains(response, 'aria-expanded="false" aria-controls="quickSummaryDetails"')
 
     def test_jobcard_list_marks_duplicate_transaction_for_same_period_service(self):
         service = ServiceType.objects.create(

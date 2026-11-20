@@ -35,6 +35,7 @@ class Branch(models.Model):
     slug = models.SlugField(max_length=100, blank=True)
     address = models.TextField(blank=True)
     phone = models.CharField(max_length=50, blank=True)
+    logo = models.ImageField(upload_to='branch_logos/', blank=True)
     is_active = models.BooleanField(default=True)
     external_reporting = models.BooleanField(
         default=False,

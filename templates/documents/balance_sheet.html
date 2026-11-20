@@ -35,6 +35,7 @@
   <a class="btn btn-outline" href="{% url 'documents:financial_reports' %}?{{ report_scope_query }}">Cash Flow</a>
   <a class="btn btn-primary" href="{% url 'documents:balance_sheet_report' %}?{{ report_scope_query }}">Balance Sheet</a>
   <a class="btn btn-outline" href="{% url 'documents:branch_account_statement' %}?branch={{ selected_branch.pk|default:'' }}">Account Statement</a>
+  <a class="btn btn-outline" href="{% url 'documents:branch_bank_statement' %}?branch={{ selected_branch.pk|default:'' }}">Bank Statement</a>
 </nav>
 
 <section class="card-box mb-3">

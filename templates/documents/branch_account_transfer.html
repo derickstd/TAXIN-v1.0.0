@@ -1,23 +1,23 @@
 {% extends 'base.html' %}
-{% block title %}Record Bank Deposit{% endblock %}
+{% block title %}Record Bank Transfer{% endblock %}
 {% block breadcrumbs %}
 <li><a href="{% url 'documents:branch_account_statement' %}">Account Statement</a></li>
-<li class="active">Bank Deposit</li>
+<li class="active">Bank Transfer</li>
 {% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1 class="page-title"><i class="fas fa-building-columns"></i> Record Bank Deposit</h1>
+  <h1 class="page-title"><i class="fas fa-building-columns"></i> Record Bank Transfer</h1>
   <a class="btn btn-outline" href="{% url 'documents:branch_account_statement' %}{% if selected_branch %}?branch={{ selected_branch.pk }}{% endif %}">Back to Account Statement</a>
 </div>
 <section class="card-box">
-  <div class="card-box-header">Cash-to-bank transfer</div>
+  <div class="card-box-header">Cash and bank transfer</div>
   <div class="card-body">
-    <p class="form-hint">A bank deposit moves money between accounts. It is not an expense and will not reduce profit or total cash.</p>
+    <p class="form-hint">Transfers appear as money out of the source account and money into the destination account. They do not change total cash or profit.</p>
     <form method="post">
       {% csrf_token %}
       {% include 'documents/partials/branch_account_transfer_fields.html' %}
       <div class="form-actions mt-3">
-        <button class="btn btn-primary" type="submit"><i class="fas fa-save"></i> Record deposit</button>
+        <button class="btn btn-primary" type="submit"><i class="fas fa-save"></i> Record transfer</button>
         <a class="btn btn-outline" href="{% url 'documents:branch_account_statement' %}">Cancel</a>
       </div>
     </form>

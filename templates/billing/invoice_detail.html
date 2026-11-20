@@ -13,20 +13,25 @@
     </h4>
     <span class="fs-sm text-muted">{{ invoice.client.get_display_name }} &bull; {{ invoice.date_issued }}</span>
   </div>
-  <div class="flex gap-2 flex-wrap no-print">
-    <a href="{% url 'billing:edit' invoice.pk %}" class="btn btn-primary btn-sm"><i class="fas fa-edit"></i> Edit</a>
-    <a href="{% url 'billing:delete' invoice.pk %}" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Delete</a>
-    {% if invoice.document_type != 'invoice' %}
-    <form method="post" action="{% url 'billing:convert' invoice.pk %}">{% csrf_token %}
-      <button class="btn btn-primary btn-sm" data-confirm="Convert to Tax Invoice? This cannot be undone.">
-        <i class="fas fa-exchange-alt"></i> Convert to Invoice
-      </button>
-    </form>
-    {% endif %}
-    <form method="post" action="{% url 'billing:whatsapp' invoice.pk %}">{% csrf_token %}
-      <button class="btn btn-success btn-sm"><i class="fab fa-whatsapp"></i> Send WhatsApp</button>
-    </form>
-    <button onclick="window.print()" class="btn btn-outline btn-sm"><i class="fas fa-print"></i> Print</button>
+  <div class="page-header-actions no-print">
+    <a href="{% url 'billing:edit' invoice.pk %}" class="btn btn-primary btn-sm"><i class="fas fa-edit"></i> Edit invoice</a>
+    <details class="header-action-menu">
+      <summary class="btn btn-outline btn-sm">More actions <i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+      <div class="header-action-menu__items">
+        {% if invoice.document_type != 'invoice' %}
+        <form method="post" action="{% url 'billing:convert' invoice.pk %}">{% csrf_token %}
+          <button type="submit" data-confirm="Convert to Tax Invoice? This cannot be undone.">
+            <i class="fas fa-exchange-alt"></i> Convert to invoice
+          </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'billing:delete' invoice.pk %}"><i class="fas fa-trash"></i> Delete invoice</a>
+        <form method="post" action="{% url 'billing:whatsapp' invoice.pk %}">{% csrf_token %}
+          <button type="submit"><i class="fab fa-whatsapp"></i> Send WhatsApp</button>
+        </form>
+        <button type="button" onclick="window.print()"><i class="fas fa-print"></i> Print invoice</button>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -136,9 +141,10 @@
     <div class="card card-compact mb-3">
       <div class="card-hd"><i class="fas fa-money-bill-wave"></i>Record Payment</div>
       <div class="card-bd">
-        <form method="post" action="{% url 'billing:pay' invoice.pk %}">{% csrf_token %}
+        <form method="post" action="{% url 'billing:pay' invoice.pk %}" data-payment-submit>{% csrf_token %}
+          <input type="hidden" name="payment_submission_token" value="{{ payment_submission_token }}">
           <div class="mb-2"><label class="form-label">Amount (UGX)</label>
-            <input type="number" name="amount" class="form-ctrl" value="{{ invoice.balance_due|floatformat:0 }}"></div>
+            <input type="number" name="amount" class="form-ctrl" value="{{ invoice.balance_due|floatformat:0 }}" placeholder="e.g. 150,000"></div>
           <div class="mb-2"><label class="form-label">Payment date</label>
             <input type="date" name="payment_date" class="form-ctrl" value="{% now 'Y-m-d' %}"></div>
           <div class="mb-2"><label class="form-label">Method</label>
@@ -171,6 +177,7 @@
               <div class="fs-xs fw-7" style="color:{% if balance_after == 0 %}var(--green){% else %}var(--red){% endif %}">
                 Bal: UGX {{ balance_after|floatformat:0|intcomma }}
               </div>
+              <a class="btn btn-outline btn-sm no-print" href="{% url 'billing:payment_receipt' pmt.pk %}"><i class="fas fa-receipt"></i> Receipt</a>
             </div>
           </div>
         </div>

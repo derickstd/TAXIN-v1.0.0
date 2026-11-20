@@ -110,11 +110,13 @@ class BranchBalanceSheetEntry(models.Model):
 
 
 class BranchAccountTransfer(models.Model):
-    SOURCE_ACCOUNT = [
+    ACCOUNT_CHOICES = [
         ('cash', 'Cash at hand'),
         ('petty_cash', 'Petty cash'),
         ('mobile_money', 'Mobile money'),
+        ('bank', 'Bank'),
     ]
+    SOURCE_ACCOUNT = ACCOUNT_CHOICES
 
     branch = models.ForeignKey(
         Branch, on_delete=models.PROTECT, related_name='account_transfers',
@@ -122,13 +124,13 @@ class BranchAccountTransfer(models.Model):
     transfer_date = models.DateField()
     source_account = models.CharField(max_length=20, choices=SOURCE_ACCOUNT)
     destination_account = models.CharField(
-        max_length=20, default='bank', editable=False,
+        max_length=20, choices=ACCOUNT_CHOICES, default='bank',
     )
     amount = models.DecimalField(
         max_digits=15, decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))],
     )
-    description = models.CharField(max_length=255, default='Bank deposit')
+    description = models.CharField(max_length=255, default='Account transfer')
     reference = models.CharField(max_length=100, blank=True)
     entered_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name='account_transfers',
@@ -143,12 +145,34 @@ class BranchAccountTransfer(models.Model):
                 condition=~models.Q(reference=''),
                 name='unique_branch_transfer_reference',
             ),
+            models.CheckConstraint(
+                condition=~models.Q(source_account=models.F('destination_account')),
+                name='branch_transfer_distinct_accounts',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(source_account='bank')
+                    | models.Q(destination_account='bank')
+                ),
+                name='branch_transfer_involves_bank',
+            ),
         ]
         indexes = [models.Index(fields=['branch', 'transfer_date'])]
 
     def clean(self):
         if self.transfer_date and self.transfer_date > timezone.localdate():
             raise ValidationError({'transfer_date': 'A transfer cannot be dated in the future.'})
+        if self.source_account == self.destination_account:
+            raise ValidationError({
+                'destination_account': 'Choose an account different from the source account.',
+            })
+        if 'bank' not in (self.source_account, self.destination_account):
+            raise ValidationError(
+                'An account transfer must move money to or from the bank.',
+            )
 
     def __str__(self):
-        return f'{self.branch.name} — Bank deposit {self.amount:,.2f}'
+        return (
+            f'{self.branch.name} — {self.get_source_account_display()} to '
+            f'{self.get_destination_account_display()}: {self.amount:,.2f}'
+        )

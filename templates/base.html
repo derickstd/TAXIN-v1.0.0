@@ -38,7 +38,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
-<link rel="stylesheet" href="{% static 'css/app.css' %}?v=20"><style>
+<link rel="stylesheet" href="{% static 'css/app.css' %}?v=24"><style>
 .floating-payment-button {
   position:fixed;
   right:1rem;
@@ -297,7 +297,7 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
         <a href="{% url 'expenses:list' %}"   class="sb-link {% block nav_exp %}{% endblock %}" title="Expenses"><i class="fas fa-receipt"></i><span class="sb-lbl">Expenses</span></a>
         {% endif %}
         <a href="{% if active_branch.external_reporting %}{% url 'documents:branch_daily_expense' %}?branch={{ active_branch.pk }}&amp;open=transaction{% else %}{% url 'expenses:create' %}{% endif %}" class="sb-link" title="{% if active_branch.external_reporting %}Branch Daily Entries{% else %}Log Expense{% endif %}"><i class="fas fa-plus"></i><span class="sb-lbl">{% if active_branch.external_reporting %}Branch Daily Entries{% else %}Log Expense{% endif %}</span></a>
-        {% if external_reporting_workspace %}<a href="{% url 'documents:branch_account_transfer' %}?branch={{ active_branch.pk }}" class="sb-link" title="Record bank deposit"><i class="fas fa-building-columns"></i><span class="sb-lbl">Bank Deposit</span></a>{% endif %}
+        {% if external_reporting_workspace %}<a href="{% url 'documents:branch_account_transfer' %}?branch={{ active_branch.pk }}" data-open-account-transfer data-transfer-url="{% url 'documents:branch_account_transfer' %}?popover=1&amp;branch={{ active_branch.pk }}" aria-haspopup="dialog" aria-expanded="false" class="sb-link" title="Record bank transfer"><i class="fas fa-building-columns"></i><span class="sb-lbl">Bank Transfer</span></a>{% endif %}
       </div>
     </div>
 
@@ -313,6 +313,7 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
       <div class="sb-sub" id="sub-reports">
         <a href="{% url 'documents:financial_reports' %}" class="sb-link {% block nav_financial_reports %}{% endblock %}" title="Financial Reports"><i class="fas fa-scale-balanced"></i><span class="sb-lbl">Cash Flow &amp; Balance Sheet</span></a>
         <a href="{% url 'documents:branch_account_statement' %}{% if active_branch %}?branch={{ active_branch.pk }}{% endif %}" class="sb-link" title="Branch Account Statement"><i class="fas fa-book-open"></i><span class="sb-lbl">Account Statement</span></a>
+        <a href="{% url 'documents:branch_bank_statement' %}{% if active_branch %}?branch={{ active_branch.pk }}{% endif %}" class="sb-link" title="Bank Statement"><i class="fas fa-building-columns"></i><span class="sb-lbl">Bank Statement</span></a>
         {% if not active_branch or external_reporting_workspace %}
         <a href="{% url 'documents:branch_daily_ledger' %}" class="sb-link {% block nav_branch_ledger %}{% endblock %}" title="Branch Daily Transaction Ledger"><i class="fas fa-clipboard-check"></i><span class="sb-lbl">Daily Transaction Ledger</span></a>
         <a href="{% url 'documents:branch_daily_summaries' %}" class="sb-link" title="Branch Daily Summaries"><i class="fas fa-calendar-check"></i><span class="sb-lbl">Daily Summaries</span></a>
@@ -515,8 +516,15 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
         <i class="fas fa-sun theme-toggle__icon"></i>
         <span class="theme-toggle__label">Light</span>
       </button>
-      <a href="{% url 'services:create' %}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New Job</a>
-      <a href="{% url 'clients:create' %}"  class="btn btn-outline btn-sm d-xs-none"><i class="fas fa-user-plus"></i> Client</a>
+      <details class="header-action-menu topbar-create-menu">
+        <summary class="btn btn-primary btn-sm" aria-label="Create a new record">
+          <i class="fas fa-plus"></i> Create <i class="fas fa-chevron-down" aria-hidden="true"></i>
+        </summary>
+        <div class="header-action-menu__items">
+          <a href="{% url 'services:create' %}"><i class="fas fa-briefcase"></i> New engagement</a>
+          <a href="{% url 'clients:create' %}"><i class="fas fa-user-plus"></i> New client</a>
+        </div>
+      </details>
       <span class="kb-hint d-xs-none" onclick="window.txShowShortcuts&&window.txShowShortcuts()" title="Keyboard shortcuts">
         <kbd>Alt+/</kbd> Shortcuts
       </span>
@@ -543,7 +551,7 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="{% static 'js/app.js' %}?v=5"></script>
+<script src="{% static 'js/app.js' %}?v=6"></script>
 <script>
 (function(){
   var body = document.body;
@@ -601,6 +609,23 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
   });
 })();
 </script>
+<script>
+(function(){
+  document.addEventListener('click', function(event){
+    document.querySelectorAll('.header-action-menu[open]').forEach(function(menu){
+      if (!menu.contains(event.target)) menu.removeAttribute('open');
+    });
+  });
+  document.addEventListener('keydown', function(event){
+    if (event.key !== 'Escape') return;
+    document.querySelectorAll('.header-action-menu[open]').forEach(function(menu){
+      menu.removeAttribute('open');
+      var summary = menu.querySelector('summary');
+      if (summary) summary.focus();
+    });
+  });
+})();
+</script>
 {% block extra_js %}{% endblock %}
 
 <button type="button" class="floating-payment-button" id="floatingPaymentButton"
@@ -624,14 +649,14 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
 {% if active_branch or can_switch_branch %}
 <button type="button" class="floating-transfer-button" id="floatingAccountTransferButton"
         data-url="{% url 'documents:branch_account_transfer' %}?popover=1{% if active_branch %}&amp;branch={{ active_branch.pk }}{% endif %}"
-        title="Record Bank Deposit" aria-label="Record Bank Deposit"
+        title="Record Bank Transfer" aria-label="Record Bank Transfer"
         aria-haspopup="dialog" aria-expanded="false" aria-controls="accountTransferOverlay">
   <i class="fas fa-building-columns" aria-hidden="true"></i>
 </button>
 <div class="modal-overlay" id="accountTransferOverlay" aria-hidden="true">
   <div class="modal-box" style="max-width:500px" role="dialog" aria-modal="true" aria-labelledby="accountTransferTitle">
     <div id="accountTransferPopoverContent" aria-live="polite">
-      <div class="text-muted">Loading deposit form…</div>
+      <div class="text-muted">Loading transfer form…</div>
     </div>
   </div>
 </div>
@@ -830,8 +855,14 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
   document.addEventListener('submit', function(event){
     var form = event.target.closest('[data-quick-form]');
     if (!form) return;
+    if (form.dataset.submitting === 'true') {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
+    form.dataset.submitting = 'true';
     var kind = form.dataset.quickForm;
+    var keepDisabled = false;
     var statusId = {
       payment:'quickPaymentStatus',
       customer:'quickCustomerStatus',
@@ -854,6 +885,7 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
     }).then(function(data){
       if (kind === 'payment') {
         if (status) status.textContent = data.message || 'Payment recorded. Refreshing…';
+        keepDisabled = true;
         window.location.reload();
         return;
       }
@@ -897,8 +929,23 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
         status.textContent = detail;
       }
     }).finally(function(){
-      if (submit) submit.disabled = false;
+      if (!keepDisabled) {
+        form.dataset.submitting = 'false';
+        if (submit) submit.disabled = false;
+      }
     });
+  });
+
+  document.addEventListener('submit', function(event){
+    var form = event.target.closest('form[data-payment-submit]');
+    if (!form) return;
+    if (form.dataset.submitting === 'true') {
+      event.preventDefault();
+      return;
+    }
+    form.dataset.submitting = 'true';
+    var submit = form.querySelector('[type="submit"]');
+    if (submit) submit.disabled = true;
   });
 })();
 </script>
@@ -913,33 +960,52 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
   function closeTransferPopover(){
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden', 'true');
+    if (activeTransferOpener) activeTransferOpener.setAttribute('aria-expanded', 'false');
     trigger.setAttribute('aria-expanded', 'false');
-    trigger.focus();
+    (activeTransferOpener || trigger).focus();
   }
 
-  function loadTransferForm(){
-    if (content.dataset.loaded === 'true') return Promise.resolve();
-    return fetch(trigger.dataset.url, {credentials: 'same-origin'})
+  var activeTransferOpener = trigger;
+  var loadedTransferUrl = '';
+
+  function loadTransferForm(url){
+    var requestUrl = url || trigger.dataset.url;
+    if (content.dataset.loaded === 'true' && loadedTransferUrl === requestUrl) return Promise.resolve();
+    content.dataset.loaded = 'false';
+    return fetch(requestUrl, {credentials: 'same-origin'})
       .then(function(response){
         if (!response.ok) throw new Error('The transfer form could not be loaded.');
         return response.text();
       })
       .then(function(html){
         content.innerHTML = html;
+        if (window.initMoneyInputs) window.initMoneyInputs(content);
+        loadedTransferUrl = requestUrl;
         content.dataset.loaded = 'true';
         var firstField = content.querySelector('input, select, button');
         if (firstField) firstField.focus();
       })
       .catch(function(){
-        content.innerHTML = '<p class="err-msg">Could not load the deposit form. Please try again.</p>';
+        content.innerHTML = '<p class="err-msg">Could not load the transfer form. Please try again.</p>';
       });
   }
 
-  trigger.addEventListener('click', function(){
+  function openTransferPopover(opener){
+    activeTransferOpener = opener || trigger;
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden', 'false');
+    activeTransferOpener.setAttribute('aria-expanded', 'true');
     trigger.setAttribute('aria-expanded', 'true');
-    loadTransferForm();
+    loadTransferForm(activeTransferOpener.dataset.transferUrl);
+  }
+
+  trigger.addEventListener('click', function(){ openTransferPopover(trigger); });
+
+  document.addEventListener('click', function(event){
+    var opener = event.target.closest('[data-open-account-transfer]');
+    if (!opener) return;
+    event.preventDefault();
+    openTransferPopover(opener);
   });
 
   overlay.addEventListener('click', function(event){

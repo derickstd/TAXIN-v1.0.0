@@ -1,10 +1,11 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.db.models import Q, Sum
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from uuid import uuid4
 from .models import Client, WalkInIntake, CommunicationLog
 from core.utils import paginate_queryset
 from .forms import ClientForm, WalkInIntakeForm
@@ -235,7 +236,25 @@ def client_list(request):
 
 @login_required
 def client_detail(request, pk):
-    client = get_object_or_404(scope_queryset(request.user, Client.objects.all()), pk=pk)
+    client = scope_queryset(request.user, Client.objects.all()).filter(pk=pk).first()
+    if client is None:
+        workspace_branches = getattr(request, 'workspace_branches', None)
+        if getattr(request, 'can_switch_branch', False) and workspace_branches is not None:
+            other_workspace_client = Client.objects.select_related('branch').filter(
+                pk=pk, branch__in=workspace_branches,
+            ).first()
+            if (
+                other_workspace_client
+                and request.active_branch
+                and other_workspace_client.branch_id != request.active_branch.pk
+            ):
+                return render(
+                    request,
+                    'clients/client_workspace_required.html',
+                    {'client': other_workspace_client},
+                )
+        raise Http404('No Client matches the given query.')
+
     job_cards = client.job_cards.prefetch_related('line_items').order_by('-created_at')[:20]
     invoices = client.invoices.order_by('-date_issued')[:20]
     pending_invoices = client.invoices.filter(
@@ -275,6 +294,7 @@ def client_detail(request, pk):
     ]
     return render(request, 'clients/client_detail.html', {
         'client': client, 'job_cards': job_cards, 'invoices': invoices,
+        'payment_submission_token': uuid4(),
         'pending_invoices': pending_invoices,
         'total_invoiced': total_invoiced, 'total_paid': total_paid,
         'total_collected': total_collected, 'client_payments': client_payments,

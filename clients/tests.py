@@ -245,3 +245,66 @@ class ClientOnboardingTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Client.objects.filter(full_name='Import Client').exists())
+
+
+class ClientDetailWorkspaceTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(name='Workspace Co', slug='workspace-co')
+        self.current_branch = Branch.objects.create(
+            company=self.company, name='TAXMAN',
+        )
+        self.client_branch = Branch.objects.create(
+            company=self.company, name='ABA UGANDA',
+        )
+        self.admin = User.objects.create_user(
+            username='workspace_admin',
+            password='pass1234',
+            role='admin',
+            company=self.company,
+            branch=self.current_branch,
+        )
+        self.other_client = Client.objects.create(
+            full_name='ABA Client',
+            phone_primary='+256700111111',
+            branch=self.client_branch,
+            created_by=self.admin,
+        )
+
+    def test_company_admin_can_switch_to_client_workspace_from_detail_link(self):
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session['active_branch_id'] = self.current_branch.pk
+        session.save()
+
+        url = reverse('clients:detail', args=[self.other_client.pk])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'clients/client_workspace_required.html')
+        self.assertContains(response, 'ABA UGANDA workspace')
+
+        switch_response = self.client.post(reverse('dashboard:switch_branch'), {
+            'branch': self.client_branch.pk,
+            'next': url,
+        })
+
+        self.assertRedirects(switch_response, url)
+        detail_response = self.client.get(url)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.context['client'], self.other_client)
+
+    def test_branch_staff_cannot_use_workspace_prompt_to_view_other_branch_client(self):
+        staff = User.objects.create_user(
+            username='workspace_staff',
+            password='pass1234',
+            role='tax_officer',
+            company=self.company,
+            branch=self.current_branch,
+        )
+        self.client.force_login(staff)
+
+        response = self.client.get(
+            reverse('clients:detail', args=[self.other_client.pk]),
+        )
+
+        self.assertEqual(response.status_code, 404)

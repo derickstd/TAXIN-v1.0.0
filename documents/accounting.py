@@ -109,8 +109,11 @@ def branch_cash_account_movements(branch, date_to, *, after_date=None):
         source_account = _METHOD_ACCOUNTS.get(
             transfer.source_account, 'cash_on_hand',
         )
+        destination_account = _METHOD_ACCOUNTS.get(
+            transfer.destination_account, 'bank_deposit',
+        )
         balances[source_account] -= transfer.amount
-        balances['bank_deposit'] += transfer.amount
+        balances[destination_account] += transfer.amount
 
     return balances
 

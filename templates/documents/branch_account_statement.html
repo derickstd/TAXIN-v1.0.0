@@ -1,17 +1,29 @@
 {% extends 'base.html' %}
 {% load humanize %}
-{% block title %}Branch Account Statement{% endblock %}
+{% block title %}{% if bank_only %}Bank Statement{% else %}Branch Account Statement{% endif %}{% endblock %}
 {% block breadcrumbs %}
 <li><a href="{% url 'documents:financial_reports' %}">Reports</a></li>
-<li class="active">Account Statement</li>
+<li class="active">{% if bank_only %}Bank Statement{% else %}Account Statement{% endif %}</li>
 {% endblock %}
 {% block content %}
 {% include 'components/report_watermark.html' %}
 <div class="page-header">
-  <h1 class="page-title"><i class="fas fa-book-open"></i> Branch Account Statement</h1>
+  <h1 class="page-title"><i class="fas {% if bank_only %}fa-building-columns{% else %}fa-book-open{% endif %}"></i> {% if bank_only %}Bank Statement{% else %}Branch Account Statement{% endif %}</h1>
   <div class="d-flex gap-2 no-print">
-    <a class="btn btn-primary" href="{% url 'documents:branch_account_transfer' %}{% if selected_branch %}?branch={{ selected_branch.pk }}{% endif %}">
-      <i class="fas fa-building-columns"></i> Record Bank Deposit
+    {% if bank_only %}
+    <a class="btn btn-outline" href="{% url 'documents:branch_account_statement' %}{% if selected_branch %}?branch={{ selected_branch.pk }}{% endif %}">
+      <i class="fas fa-book-open"></i> All Accounts
+    </a>
+    {% else %}
+    <a class="btn btn-outline" href="{% url 'documents:branch_bank_statement' %}{% if selected_branch %}?branch={{ selected_branch.pk }}{% endif %}">
+      <i class="fas fa-building-columns"></i> Bank Statement
+    </a>
+    {% endif %}
+    <a class="btn btn-primary" href="{% url 'documents:branch_account_transfer' %}{% if selected_branch %}?branch={{ selected_branch.pk }}{% endif %}"
+       data-open-account-transfer
+       data-transfer-url="{% url 'documents:branch_account_transfer' %}?popover=1{% if selected_branch %}&amp;branch={{ selected_branch.pk }}{% endif %}"
+       aria-haspopup="dialog" aria-expanded="false">
+      <i class="fas fa-right-left"></i> Record Bank Transfer
     </a>
     <button class="btn btn-outline" type="button" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
   </div>
@@ -31,6 +43,7 @@
       {% endif %}
       <div><label class="form-label" for="statement-from">From</label><input id="statement-from" class="form-control" type="date" name="from" value="{{ date_from|date:'Y-m-d' }}"></div>
       <div><label class="form-label" for="statement-to">To</label><input id="statement-to" class="form-control" type="date" name="to" value="{{ date_to|date:'Y-m-d' }}"></div>
+      {% if not bank_only %}
       <div>
         <label class="form-label" for="statement-account">Account</label>
         <select id="statement-account" class="form-control" name="account">
@@ -38,6 +51,7 @@
           {% for account in account_options %}<option value="{{ account }}" {% if selected_account == account %}selected{% endif %}>{{ account }}</option>{% endfor %}
         </select>
       </div>
+      {% endif %}
       <button class="btn btn-primary" type="submit">Show Statement</button>
     </form>
   </div>
@@ -45,12 +59,12 @@
 
 <section class="card-box">
   <div class="card-head">
-    Account activity
+    {% if bank_only %}Bank activity{% else %}Account activity{% endif %}
     <span class="text-muted">{{ date_from|date:"d M Y" }} – {{ date_to|date:"d M Y" }}{% if selected_branch %} · {{ selected_branch.name }}{% endif %}</span>
   </div>
   <div class="stat-row"><span>Total money in</span><strong class="ugx cash-flow-chip cash-flow-chip--in">{{ total_inflow|floatformat:0|intcomma }}</strong></div>
   <div class="stat-row"><span>Total money out</span><strong class="ugx cash-flow-chip cash-flow-chip--out">{{ total_outflow|floatformat:0|intcomma }}</strong></div>
-  <div class="form-hint px-3">Bank deposits appear as paired account movements and do not count as expenses or change total cash.</div>
+  <div class="form-hint px-3">{% if bank_only %}This statement shows bank receipts, bank-paid expenses, deposits into the bank, and withdrawals from the bank. Transfers are account movements, not income or expenses.{% else %}Transfers appear as money out of the source account and money into the destination account; they do not change total cash.{% endif %}</div>
   <div class="tbl-wrap">
     <table class="tbl">
       <thead><tr><th>Date</th><th>Branch</th><th>Account</th><th>Entry</th><th>Description</th><th>Reference</th><th>Recorded by</th><th class="text-r">Money in</th><th class="text-r">Money out</th><th class="text-r">Balance snapshot</th></tr></thead>

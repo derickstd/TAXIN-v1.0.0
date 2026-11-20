@@ -341,6 +341,7 @@ def admin_company_branches(request, company_id):
     return render(request, 'core/admin_company_branches.html', {
         'company': company,
         'branches': branches,
+        'can_edit_branch_profiles': request.user.company_id == company.pk,
     })
 
 

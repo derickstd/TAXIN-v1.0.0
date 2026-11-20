@@ -1,14 +1,18 @@
 import sys
 from datetime import date, datetime, timezone as datetime_timezone
 from decimal import Decimal
+from io import BytesIO
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import DatabaseError
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 import core
 
 from billing.models import Invoice
@@ -302,7 +306,19 @@ class SettingsToolsTests(TestCase):
                         payload[f'{prefix}-{index}-{field}'] = value
                     payload[f'{prefix}-{index}-DELETE'] = ''
 
-                response = self.client.post(reverse('core:settings'), payload)
+                logo_content = BytesIO()
+                Image.new('RGB', (16, 16), color='teal').save(logo_content, format='PNG')
+                new_branch_index = formset.total_form_count() - 1
+                payload[f'{prefix}-{new_branch_index}-logo'] = SimpleUploadedFile(
+                    'branch-logo.png',
+                    logo_content.getvalue(),
+                    content_type='image/png',
+                )
+                with TemporaryDirectory() as media_root:
+                    with override_settings(MEDIA_ROOT=media_root):
+                        response = self.client.post(reverse('core:settings'), payload)
+                        new_branch = self.company.branches.get(name='New Branch')
+                        self.assertTrue(new_branch.logo.name.startswith('branch_logos/'))
 
                 self.assertRedirects(response, reverse('core:settings'))
                 self.assertTrue(self.company.branches.filter(name='New Branch').exists())

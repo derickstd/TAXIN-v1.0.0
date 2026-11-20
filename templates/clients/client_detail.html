@@ -4,23 +4,30 @@
 {% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">{{ client.client_id }}</li>{% endblock %}
 {% block content %}
 <div class="page-header">
-  <div>
-    <h4 class="page-title" style="margin-bottom:.1rem"><i class="fas fa-user"></i>{{ client.get_display_name }}</h4>
+  <div class="client-header-identity">
+    <div class="client-header-title">
+      <h4 class="page-title" style="margin-bottom:.1rem"><i class="fas fa-user"></i>{{ client.get_display_name }}</h4>
+      <span class="badge badge-{{ client.status }}">{{ client.get_status_display }}</span>
+    </div>
     <span style="color:#aaa;font-size:.8rem">{{ client.client_id }} &bull; {{ client.get_client_type_display }} &bull; {{ client.district }}</span>
   </div>
-  <div class="d-flex gap-2 flex-wrap">
-    <span class="badge badge-{{ client.status }}" style="padding:.35rem .8rem;font-size:.78rem">{{ client.get_status_display }}</span>
-    <a href="{% url 'clients:edit' client.pk %}" class="btn btn-outline btn-sm"><i class="fas fa-edit"></i> Edit</a>
+  <div class="client-header-actions">
     <a href="{% url 'services:create' %}?client={{ client.pk }}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New Job</a>
-    <a href="{% url 'documents:statement' client.pk %}" class="btn btn-gold btn-sm"><i class="fas fa-file-alt"></i> Statement</a>
-    <a href="{% url 'credentials:list' %}?client={{ client.pk }}" class="btn btn-outline btn-sm"><i class="fas fa-key"></i> Credentials ({{ creds_count }})</a>
-    {% if user.is_staff or user.is_superuser %}
-    {% if client.status == 'suspended' %}
-    <a href="{% url 'core:admin_client_reactivate' client.pk %}" class="btn btn-success btn-sm" onclick="return confirm('Reactivate this client account?');"><i class="fas fa-check"></i> Reactivate</a>
-    {% else %}
-    <a href="{% url 'core:admin_client_suspend' client.pk %}" class="btn btn-danger btn-sm" onclick="return confirm('Suspend this client account?');"><i class="fas fa-pause"></i> Suspend</a>
-    {% endif %}
-    {% endif %}
+    <details class="header-action-menu">
+      <summary class="btn btn-outline btn-sm">Client actions <i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+      <div class="header-action-menu__items">
+        <a href="{% url 'clients:edit' client.pk %}"><i class="fas fa-edit"></i> Edit client</a>
+        <a href="{% url 'documents:statement' client.pk %}"><i class="fas fa-file-alt"></i> Account statement</a>
+        <a href="{% url 'credentials:list' %}?client={{ client.pk }}"><i class="fas fa-key"></i> Credentials ({{ creds_count }})</a>
+        {% if user.is_staff or user.is_superuser %}
+        {% if client.status == 'suspended' %}
+        <a href="{% url 'core:admin_client_reactivate' client.pk %}" onclick="return confirm('Reactivate this client account?');"><i class="fas fa-check"></i> Reactivate client</a>
+        {% else %}
+        <a href="{% url 'core:admin_client_suspend' client.pk %}" onclick="return confirm('Suspend this client account?');"><i class="fas fa-pause"></i> Suspend client</a>
+        {% endif %}
+        {% endif %}
+      </div>
+    </details>
   </div>
 </div>
 
@@ -50,7 +57,8 @@
     <div class="card-box card-compact">
       <div class="card-head"><i class="fas fa-money-bill-wave"></i>Record Lump-Sum Payment</div>
       <div class="card-body">
-        <form method="post" action="{% url 'billing:client_pay' %}">{% csrf_token %}
+        <form method="post" action="{% url 'billing:client_pay' %}" data-payment-submit>{% csrf_token %}
+          <input type="hidden" name="payment_submission_token" value="{{ payment_submission_token }}">
           <input type="hidden" name="client" value="{{ client.pk }}">
           <div class="mb-2">
             <label class="form-label">Amount (UGX)</label>
@@ -525,7 +533,7 @@ function toggleRegPay(chk) {
   document.getElementById('regPayFields').style.display = chk.checked ? 'block' : 'none';
 }
 function submitRegJob() {
-  var price = parseFloat(document.getElementById('regPrice').value) || 0;
+  var price = window.parseMoneyNumber(document.getElementById('regPrice').value) || 0;
   if (price <= 0) {
     document.getElementById('reg-err-price').style.display = 'block';
     document.getElementById('regPrice').style.borderColor = 'var(--red)';
@@ -547,11 +555,15 @@ function submitRegJob() {
         showDuplicateModal(data.matches, form);
         return;
       }
+      window.normalizeMoneyInputs(form);
       form.submit();
-    }).catch(function(){ form.submit(); });
+    }).catch(function(){
+      window.normalizeMoneyInputs(form);
+      form.submit();
+    });
 }
 document.getElementById('regPrice').addEventListener('input', function(){
-  if (parseFloat(this.value) > 0) {
+  if (window.parseMoneyNumber(this.value) > 0) {
     document.getElementById('reg-err-price').style.display = 'none';
     this.style.borderColor = '';
   }
@@ -783,7 +795,7 @@ function submitWalkinJob() {
   var valid = true;
   var priceDiv = document.getElementById('wi-field-price');
   var dueDateDiv = document.getElementById('wi-field-due_date');
-  var price = priceDiv?.style.display !== 'none' ? (parseFloat(document.getElementById('wiPrice').value) || 0) : 1;
+  var price = priceDiv?.style.display !== 'none' ? (window.parseMoneyNumber(document.getElementById('wiPrice').value) || 0) : 1;
   var dueDate = dueDateDiv?.style.display !== 'none' ? document.getElementById('wiDueDate').value : true;
   
   if (priceDiv?.style.display !== 'none' && price <= 0) {
@@ -809,8 +821,12 @@ function submitWalkinJob() {
         showDuplicateModal(data.matches, form);
         return;
       }
+      window.normalizeMoneyInputs(form);
       form.submit();
-    }).catch(function(){ form.submit(); });
+    }).catch(function(){
+      window.normalizeMoneyInputs(form);
+      form.submit();
+    });
 }
 
 // Run duplicate check automatically when the walk-in modal opens
@@ -862,7 +878,7 @@ function showDuplicateModal(matches, form) {
   var actions = document.createElement('div'); actions.className='flex gap-2'; actions.style='display:flex;gap:.6rem;justify-content:flex-end';
   var force = document.createElement('button'); force.className='btn btn-success'; force.type='button'; force.innerHTML='<i class="fas fa-check"></i> Force create';
   force.onclick = function(){
-    var inp = document.createElement('input'); inp.type='hidden'; inp.name='force_create'; inp.value='1'; form.appendChild(inp); modal.remove(); form.submit();
+    var inp = document.createElement('input'); inp.type='hidden'; inp.name='force_create'; inp.value='1'; form.appendChild(inp); modal.remove(); window.normalizeMoneyInputs(form); form.submit();
   };
   var cancel = document.createElement('button'); cancel.className='btn btn-outline'; cancel.type='button'; cancel.textContent='Cancel'; cancel.onclick = function(){ modal.remove(); };
   actions.appendChild(force); actions.appendChild(cancel); bd.appendChild(actions);
@@ -871,7 +887,7 @@ function showDuplicateModal(matches, form) {
 var wiPriceEl = document.getElementById('wiPrice');
 if (wiPriceEl) {
   wiPriceEl.addEventListener('input', function(){
-    if (parseFloat(this.value) > 0) {
+    if (window.parseMoneyNumber(this.value) > 0) {
       document.getElementById('wi-err-price').style.display = 'none';
       this.style.borderColor = '';
     }

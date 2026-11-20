@@ -353,6 +353,7 @@ function openDayDetails(day){
   title.textContent = day;
   content.innerHTML = '<div class="day-detail-empty">Loading details…</div>';
   popup.style.display = 'flex';
+  popup.classList.add('is-open');
 
   fetch('{% url "dashboard:day_transactions" %}?day=' + encodeURIComponent(day), {
     headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -371,7 +372,9 @@ function openDayDetails(day){
 }
 
 function closeDayDetails(){
-  document.getElementById('dayDetailPopup').style.display = 'none';
+  const popup = document.getElementById('dayDetailPopup');
+  popup.classList.remove('is-open');
+  popup.style.display = 'none';
 }
 
 const popoverButtons = document.querySelectorAll('.dashboard-summary-trigger');

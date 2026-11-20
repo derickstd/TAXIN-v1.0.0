@@ -13,6 +13,12 @@ urlpatterns = [
     path('reports/financial/', views.financial_reports, name='financial_reports'),
     path('reports/balance-sheet/', views.balance_sheet_report, name='balance_sheet_report'),
     path('reports/account-statement/', views.branch_account_statement, name='branch_account_statement'),
+    path(
+        'reports/bank-statement/',
+        views.branch_account_statement,
+        {'bank_only': True},
+        name='branch_bank_statement',
+    ),
     path('account-transfer/bank-deposit/', views.branch_account_transfer, name='branch_account_transfer'),
     path('reports/branch-daily-ledger/', views.branch_daily_ledger, name='branch_daily_ledger'),
     path('reports/branch-daily-ledger/expense/', views.branch_daily_expense, name='branch_daily_expense'),

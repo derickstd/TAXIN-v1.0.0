@@ -105,6 +105,25 @@ class CompanySettingsForm(forms.ModelForm):
             self.fields['default_branch'].queryset = Branch.objects.none()
 
 
+class BranchSettingsForm(forms.ModelForm):
+    class Meta:
+        model = Branch
+        fields = ['name', 'slug', 'address', 'phone', 'logo', 'is_active']
+        widgets = {
+            'address': forms.Textarea(attrs={'rows': 2}),
+            'logo': forms.ClearableFileInput(attrs={
+                'class': 'form-control',
+                'accept': 'image/*',
+            }),
+        }
+
+    def clean_logo(self):
+        logo = self.files.get(self.add_prefix('logo'))
+        if logo and logo.size > 5 * 1024 * 1024:
+            raise forms.ValidationError('Branch logos must be 5 MB or smaller.')
+        return self.cleaned_data.get('logo')
+
+
 @never_cache
 def offline(request):
     return render(request, 'core/offline.html')
@@ -282,10 +301,8 @@ def user_settings(request):
     can_manage_branches = company and request.user.is_manager_or_admin()
     can_add_users = _require_admin(request)
     BranchFormSet = inlineformset_factory(
-        Company, Branch, fields=('name', 'slug', 'address', 'phone', 'is_active'),
-        extra=1, can_delete=True, widgets={
-            'address': forms.Textarea(attrs={'rows': 2}),
-        }
+        Company, Branch, form=BranchSettingsForm,
+        extra=1, can_delete=True,
     )
 
     open_user_modal = False
@@ -312,7 +329,9 @@ def user_settings(request):
     elif request.method == 'POST':
         user_form = UserSettingsForm(request.POST, instance=request.user)
         company_form = CompanySettingsForm(request.POST, instance=company) if company else None
-        branch_formset = BranchFormSet(request.POST, instance=company) if can_manage_branches else None
+        branch_formset = BranchFormSet(
+            request.POST, request.FILES, instance=company,
+        ) if can_manage_branches else None
         if user_form.is_valid() and (company_form is None or company_form.is_valid()) and (branch_formset is None or branch_formset.is_valid()):
             user_form.save()
             if company_form:

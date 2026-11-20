@@ -332,7 +332,7 @@ function addServiceField(){
         </div>
         <div class="price-row" style="display:none">
           <label class="form-label fs-xs">Agreed Price (UGX)</label>
-          <input type="number" name="service_price_${serviceCount}" class="form-control service-price-${serviceCount}" style="font-size:.83rem" placeholder="Leave blank to use default price" min="0" step="1000">
+          <input type="number" name="service_price_${serviceCount}" class="form-control service-price-${serviceCount}" style="font-size:.83rem" placeholder="e.g. 100,000 or leave blank for default" min="0" step="1000">
         </div>
         <div class="frequency-row" style="display:none">
           <label class="form-label fs-xs">Frequency</label>
@@ -359,7 +359,8 @@ function addServiceField(){
     var frequency = selectedOption.data('frequency');
     var index = $(this).data('index');
     if(price){
-      $(`.service-price-${index}`).val(price);
+      var priceField = $(`.service-price-${index}`).val(price);
+      window.formatMoneyInput(priceField[0]);
       $(`.service-price-${index}`).attr('placeholder', `Default: UGX ${price.toLocaleString()}`);
     }
     // Show/hide price and frequency based on deadline_type

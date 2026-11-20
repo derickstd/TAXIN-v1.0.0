@@ -7,28 +7,29 @@
     <button type="button" class="modal-close" data-quick-payment-close aria-label="Close">&times;</button>
   </div>
   <div id="quickPaymentStatus" class="text-muted" role="status" style="margin-bottom:.75rem"></div>
-  <form method="post" action="{% url 'billing:quick_payment' %}" data-quick-form="payment">
+  <form method="post" action="{% url 'billing:quick_payment' %}" class="quick-payment-form" data-quick-form="payment">
     {% csrf_token %}
+    <input type="hidden" name="payment_submission_token" value="{{ payment_submission_token }}">
     <div class="form-grid-2">
-      <div class="field-span-2">
+      <div>
         <label class="form-label" for="payment-client">Customer</label>
         <div class="quick-payment-select-row">
-          <select class="form-control s2" id="payment-client" name="client" data-ph="Search customers…">
+          <select class="form-control s2" id="payment-client" name="client" data-ph="Search by name, phone, or TIN…">
             <option value="">Walk-in / anonymous (Walk-in Customers)</option>
             {% for client in clients %}
             <option value="{{ client.pk }}">{{ client.client_id }} — {{ client.get_display_name }}</option>
             {% endfor %}
           </select>
-          <button type="button" class="btn btn-outline" data-open-quick-customer>
-            <i class="fas fa-plus"></i> Add Customer
+          <button type="button" class="btn btn-outline quick-payment-add-button"
+                  data-open-quick-customer title="Add customer" aria-label="Add customer">
+            <i class="fas fa-plus" aria-hidden="true"></i><span class="visually-hidden"></span>
           </button>
         </div>
-
       </div>
-      <div class="field-span-2">
+      <div>
         <label class="form-label" for="payment-service">Service</label>
         <div class="quick-payment-select-row">
-          <select class="form-control s2" id="payment-service" name="service_type" data-ph="Search services…">
+          <select class="form-control s2" id="payment-service" name="service_type" data-ph="Search by service name…">
             <option value="">No specific service</option>
             {% for service in services %}
             <option value="{{ service.pk }}">{{ service.name }}</option>
@@ -36,16 +37,16 @@
             <option value="capital_injection">Capital Injection</option>
           </select>
           {% if can_manage_services %}
-          <button type="button" class="btn btn-outline" data-open-quick-service>
-            <i class="fas fa-plus"></i> Add Service
+          <button type="button" class="btn btn-outline quick-payment-add-button"
+                  data-open-quick-service title="Add service" aria-label="Add service">
+            <i class="fas fa-plus" aria-hidden="true"></i><span class="visually-hidden"></span>
           </button>
           {% endif %}
         </div>
-
       </div>
       <div>
         <label class="form-label" for="payment-amount">Amount (UGX) <span class="req">*</span></label>
-        <input class="form-control" id="payment-amount" type="number" name="amount" min="0.01" step="0.01" required autofocus>
+        <input class="form-control" id="payment-amount" type="number" name="amount" min="0.01" step="0.01" placeholder="e.g. 50,000 UGX" required autofocus>
       </div>
       <div>
         <label class="form-label" for="payment-date">Transaction date</label>
@@ -61,11 +62,11 @@
       </div>
       <div>
         <label class="form-label" for="payment-reference">Reference</label>
-        <input class="form-control" id="payment-reference" type="text" name="reference" maxlength="100" placeholder="Transaction or receipt reference">
+        <input class="form-control" id="payment-reference" type="text" name="reference" maxlength="100" placeholder="Receipt number, mobile money ID, or bank reference">
       </div>
       <div class="field-span-2">
         <label class="form-label" for="payment-notes">Notes</label>
-        <textarea class="form-control" id="payment-notes" name="notes" rows="3"></textarea>
+        <textarea class="form-control" id="payment-notes" name="notes" rows="3" placeholder="Optional: add allocation details, receipt context, or other payment notes"></textarea>
       </div>
     </div>
     <div class="form-actions mt-3">
@@ -119,7 +120,7 @@
       </div>
       <div>
         <label class="form-label" for="quick-service-price">Default price (UGX)</label>
-        <input class="form-control" id="quick-service-price" name="default_price" type="number" min="0" step="1000" value="0">
+        <input class="form-control" id="quick-service-price" name="default_price" type="number" min="0" step="1000" value="0" placeholder="e.g. 100,000">
       </div>
       <div>
         <label class="form-label" for="quick-service-branches">Available to branches <span class="req">*</span></label>

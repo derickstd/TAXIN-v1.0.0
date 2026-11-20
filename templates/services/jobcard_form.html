@@ -18,21 +18,21 @@
     </div>
   </div>
 </div>
-<div id="floatingSummary" class="card card-compact floating-summary">
-  <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
-    <span><i class="fas fa-chart-pie"></i>Quick Job Summary</span>
-    <button type="button" class="btn btn-sm btn-outline" id="summaryToggleBtn" onclick="toggleFloatingSummary()">View more</button>
+<div id="floatingSummary" class="card card-compact quick-job-summary floating-summary">
+  <div class="card-hd" data-drag-handle tabindex="0" role="group" aria-label="Move Quick Job Summary with drag or arrow keys" title="Drag to move the Quick Job Summary" style="display:flex;justify-content:space-between;align-items:center">
+    <span class="floating-summary__title"><i class="fas fa-grip-vertical" aria-hidden="true"></i><i class="fas fa-chart-pie" aria-hidden="true"></i>Quick Job Summary</span>
+    <button type="button" class="btn btn-sm btn-outline" id="summaryToggleBtn" onclick="toggleFloatingSummary()" aria-expanded="false" aria-controls="floatingSummaryDetails">Details</button>
   </div>
   <div class="card-bd">
-    <div style="font-size:.82rem;color:#666">Services <span style="font-weight:700;margin-left:.6rem" id="floatSumCount">0 services</span></div>
-    <div style="font-size:.82rem;color:#666;margin-top:.2rem">Subtotal <span style="font-weight:700;margin-left:.6rem" id="floatSumTotal">UGX 0</span></div>
-    <div style="margin-top:.4rem;padding-top:.4rem;border-top:1px solid var(--border);width:100%;display:flex;justify-content:space-between;align-items:center">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem">
       <span style="font-weight:800;color:var(--blue)">Total</span>
       <span class="ugx fw-8" id="floatSumGrand" style="font-size:1.05rem;color:var(--blue)">UGX 0</span>
     </div>
-    <div class="form-hint mt-2" style="margin-top:.4rem;font-size:.78rem" id="floatSummaryInvoiceNote"></div>
-    <div class="form-hint mt-2 text-danger" style="margin-top:.3rem;font-size:.78rem;display:none" id="floatClientHistoryNote"></div>
-    <div id="floatingSummaryDetails" style="display:none;margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border);font-size:.8rem;color:#444;">
+    <div id="floatingSummaryDetails" hidden style="margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border);font-size:.8rem;color:#444;">
+      <div style="font-size:.82rem;color:#666">Services <span style="font-weight:700;margin-left:.6rem" id="floatSumCount">0 services</span></div>
+      <div style="font-size:.82rem;color:#666;margin-top:.2rem">Subtotal <span style="font-weight:700;margin-left:.6rem" id="floatSumTotal">UGX 0</span></div>
+      <div class="form-hint mt-2" style="margin-top:.4rem;font-size:.78rem" id="floatSummaryInvoiceNote"></div>
+      <div class="form-hint mt-2 text-danger" style="margin-top:.3rem;font-size:.78rem;display:none" id="floatClientHistoryNote"></div>
       <p style="margin:0 .1rem .6rem 0">View more details about the current job summary, including how the invoice is handled and whether the selected services are ready for billing.</p>
       <div id="clientInvoiceSummary" style="margin-bottom:.85rem;font-size:.85rem;color:#333;">
         <div><strong>Client invoices:</strong> <span id="clientInvoiceCount">0</span> issued, <span id="clientUnpaidCount">0</span> unpaid</div>
@@ -214,7 +214,7 @@
                 </label>
                 <input type="number" name="{{ f.negotiated_price.html_name }}"
                   value="{{ f.negotiated_price.value|default:'' }}"
-                  class="form-ctrl li-price" style="font-size:.85rem" placeholder="0" min="0" step="1000">
+                  class="form-ctrl li-price" style="font-size:.85rem" placeholder="e.g. 100,000" min="0" step="1000">
               </div>
               <div>
                 <label class="form-label fs-xs">Default / List Price</label>
@@ -301,39 +301,119 @@
 .floating-summary{
   display:block;
   position:fixed;
-  top:calc(var(--topbar-h) + 1rem);
-  right:1rem;
-  width:320px;
-  max-width:calc(100vw - 2rem);
+  top:calc(var(--topbar-h) + .75rem);
+  right:.75rem;
+  width:220px;
+  max-width:calc(100vw - 1rem);
+  max-height:calc(100vh - 1.5rem);
+  overflow:hidden;
   z-index:1050;
-  box-shadow:0 18px 38px rgba(15,34,80,.16);
+  box-shadow:0 12px 28px rgba(15,34,80,.14);
 }
-.floating-summary .card-bd{padding:1rem;}
-.floating-summary .card-hd{font-size:1rem;}
+.floating-summary .card-bd{padding:.55rem .65rem;max-height:min(48vh,360px);overflow-y:auto;}
+.floating-summary .card-hd{font-size:.82rem;padding:.4rem .5rem;gap:.3rem;}
+.floating-summary .card-hd .btn-sm{padding:.18rem .35rem;font-size:.68rem;white-space:nowrap;}
+.floating-summary__title{display:flex;align-items:center;gap:.3rem;white-space:nowrap;font-size:.75rem;}
+.floating-summary .card-hd[data-drag-handle]{cursor:grab;touch-action:none;user-select:none;}
+.floating-summary.is-dragging .card-hd[data-drag-handle]{cursor:grabbing;}
+.floating-summary .card-hd[data-drag-handle]:focus-visible{outline:2px solid var(--blue);outline-offset:-2px;}
 @media(max-width:900px){
   .floating-summary{
     top:auto;
-    bottom:1rem;
+    bottom:.75rem;
     right:.75rem;
-    left:.75rem;
-    width:auto;
+    left:auto;
+    width:215px;
     max-width:calc(100vw - 1.5rem);
   }
 }
 @media(max-width:520px){
   .floating-summary{
     right:.5rem;
-    left:.5rem;
+    bottom:calc(.5rem + env(safe-area-inset-bottom));
+    width:205px;
+    max-width:calc(100vw - 1rem);
   }
-  .floating-summary .card-bd{padding:.75rem;}
-}
-@media(max-width:600px){
-  .floating-summary{display:none!important;}
+  .floating-summary .card-bd{padding:.5rem .6rem;}
 }
 </style>
 {% endblock %}
 {% block extra_js %}
 <script>
+(function(){
+  var panel = document.getElementById('floatingSummary');
+  var handle = panel && panel.querySelector('[data-drag-handle]');
+  if (!panel || !handle) return;
+
+  var activePointer = null;
+  var offsetX = 0;
+  var offsetY = 0;
+
+  function placePanel(left, top){
+    var maxLeft = Math.max(0, window.innerWidth - panel.offsetWidth);
+    var maxTop = Math.max(0, window.innerHeight - panel.offsetHeight);
+    panel.style.left = Math.max(0, Math.min(left, maxLeft)) + 'px';
+    panel.style.top = Math.max(0, Math.min(top, maxTop)) + 'px';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+  }
+
+  function keepPanelInViewport(){
+    var rect = panel.getBoundingClientRect();
+    placePanel(rect.left, rect.top);
+  }
+
+  handle.addEventListener('pointerdown', function(event){
+    if (event.target.closest('button, a')) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    var rect = panel.getBoundingClientRect();
+    offsetX = event.clientX - rect.left;
+    offsetY = event.clientY - rect.top;
+    activePointer = event.pointerId;
+    placePanel(rect.left, rect.top);
+    panel.classList.add('is-dragging');
+    handle.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  handle.addEventListener('pointermove', function(event){
+    if (event.pointerId !== activePointer) return;
+    placePanel(event.clientX - offsetX, event.clientY - offsetY);
+  });
+
+  handle.addEventListener('keydown', function(event){
+    if (event.target !== handle) return;
+    var steps = event.shiftKey ? 30 : 10;
+    var rect = panel.getBoundingClientRect();
+    var left = rect.left;
+    var top = rect.top;
+    if (event.key === 'ArrowLeft') left -= steps;
+    else if (event.key === 'ArrowRight') left += steps;
+    else if (event.key === 'ArrowUp') top -= steps;
+    else if (event.key === 'ArrowDown') top += steps;
+    else return;
+    event.preventDefault();
+    placePanel(left, top);
+  });
+
+  function stopDragging(event){
+    if (event.pointerId !== activePointer) return;
+    activePointer = null;
+    panel.classList.remove('is-dragging');
+    if (handle.hasPointerCapture(event.pointerId)) {
+      handle.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  handle.addEventListener('pointerup', stopDragging);
+  handle.addEventListener('pointercancel', stopDragging);
+  window.addEventListener('resize', keepPanelInViewport);
+  var toggle = document.getElementById('summaryToggleBtn');
+  if (toggle) toggle.addEventListener('click', function(){
+    window.requestAnimationFrame(keepPanelInViewport);
+  });
+})();
+
 $(document).ready(function(){
   // Client select2 + auto-show info strip
   $('#clientSelect').select2({theme:'bootstrap-5',allowClear:false,placeholder:'Type name, TIN or client ID…'});
@@ -380,7 +460,7 @@ $(document).ready(function(){
     $('.li-row').each(function(){
       var del=$(this).find('input[type=checkbox][name$="-DELETE"]');
       if(del.length && del.is(':checked')) return;
-      var v=parseFloat($(this).find('.li-price').val()||0)||0;
+      var v=window.parseMoneyNumber($(this).find('.li-price').val()||0)||0;
       if(v>0){total+=v;count++;}
     });
     var label = count === 1 ? ' service' : ' services';
@@ -415,10 +495,12 @@ $(document).ready(function(){
     var vat = $(opt).data('vat');
     var deadline = $(opt).data('deadlinetype') || '';
     if(price){
-      row.find('.li-default').val(price);
+      var defaultPrice=row.find('.li-default').val(price)[0];
+      if(window.formatMoneyInput)window.formatMoneyInput(defaultPrice);
       var negotiated = row.find('.li-price');
-      if(!negotiated.val() || parseFloat(negotiated.val()) === 0){
+      if(!negotiated.val() || window.parseMoneyNumber(negotiated.val()) === 0){
         negotiated.val(price);
+        if(window.formatMoneyInput)window.formatMoneyInput(negotiated[0]);
       }
     }
     row.find('.li-vat-badge').toggle(!!vat);
@@ -539,9 +621,10 @@ $(document).ready(function(){
     var details = document.getElementById('floatingSummaryDetails');
     var btn = document.getElementById('summaryToggleBtn');
     if (!details || !btn) return;
-    var expanded = details.style.display === 'block';
-    details.style.display = expanded ? 'none' : 'block';
-    btn.textContent = expanded ? 'View more' : 'View less';
+    details.hidden = !details.hidden;
+    btn.setAttribute('aria-expanded', String(!details.hidden));
+    btn.setAttribute('aria-label', details.hidden ? 'Show summary details' : 'Hide summary details');
+    btn.textContent = details.hidden ? 'Details' : 'Hide';
   };
 
   // Confirmation popup
@@ -557,7 +640,9 @@ $(document).ready(function(){
     document.getElementById('confirmModal').classList.add('open');
     document.getElementById('confirmYes').onclick = function(){
       document.getElementById('confirmModal').classList.remove('open');
-      document.getElementById('jcForm').submit();
+      var form = document.getElementById('jcForm');
+      window.normalizeMoneyInputs(form);
+      form.submit();
     };
   };
 

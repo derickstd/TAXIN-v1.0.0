@@ -483,6 +483,9 @@ class ExternalBranchReportTests(TestCase):
         self.assertFalse(response.context['open_summary_modal'])
         self.assertEqual(response.context['form']['branch'].value(), self.branch.pk)
         self.assertContains(response, 'id="branchEntryModal"')
+        self.assertContains(response, 'Branch reports')
+        self.assertContains(response, 'Transaction ledger')
+        self.assertContains(response, 'Bank deposit')
 
         response = self.client.get(
             reverse('documents:branch_daily_summaries'),
@@ -1009,6 +1012,7 @@ class BranchAccountingReportTests(TestCase):
                 'branch': self.branch.pk,
                 'transfer_date': today.isoformat(),
                 'source_account': 'cash',
+                'destination_account': 'bank',
                 'amount': '50',
                 'description': 'Daily banking',
                 'reference': 'BANK-001',
@@ -1034,7 +1038,7 @@ class BranchAccountingReportTests(TestCase):
         self.assertEqual(statement.status_code, 200)
         self.assertContains(statement, 'floatingAccountTransferButton')
         self.assertContains(statement, 'aria-label="Record a payment"')
-        self.assertContains(statement, 'aria-label="Record Bank Deposit"')
+        self.assertContains(statement, 'aria-label="Record Bank Transfer"')
         self.assertContains(statement, "overlay.classList.add('open')")
         self.assertNotContains(statement, '<span>Record Payment</span>')
         self.assertNotContains(statement, '<span>Record Expense</span>')
@@ -1053,6 +1057,19 @@ class BranchAccountingReportTests(TestCase):
         self.assertEqual(ledger.context['total_inflow'], Decimal('150'))
         self.assertEqual(ledger.context['total_outflow'], Decimal('0'))
         self.assertContains(ledger, 'Bank deposit transfer')
+        transfer_rows = [
+            row for row in ledger.context['transactions']
+            if row['type'] == 'Bank deposit transfer'
+        ]
+        self.assertEqual(len(transfer_rows), 2)
+        self.assertEqual(
+            sum(row['inflow'] for row in transfer_rows),
+            Decimal('50'),
+        )
+        self.assertEqual(
+            sum(row['outflow'] for row in transfer_rows),
+            Decimal('50'),
+        )
 
     def test_account_transfer_popover_loads_validates_and_records(self):
         today = timezone.localdate()
@@ -1060,7 +1077,7 @@ class BranchAccountingReportTests(TestCase):
         form_response = self.client.get(url, {'branch': self.branch.pk})
 
         self.assertEqual(form_response.status_code, 200)
-        self.assertContains(form_response, 'Record Bank Deposit')
+        self.assertContains(form_response, 'Record Bank Transfer')
         self.assertContains(form_response, 'data-branch-transfer-form')
         self.assertEqual(form_response.context['selected_branch'], self.branch)
 
@@ -1069,6 +1086,7 @@ class BranchAccountingReportTests(TestCase):
                 'branch': self.branch.pk,
                 'transfer_date': today.isoformat(),
                 'source_account': 'cash',
+                'destination_account': 'bank',
                 'amount': '',
                 'description': 'Daily banking',
                 'reference': '',
@@ -1078,11 +1096,31 @@ class BranchAccountingReportTests(TestCase):
         self.assertEqual(invalid_response.status_code, 400)
         self.assertContains(invalid_response, 'data-branch-transfer-form', status_code=400)
 
+        same_account_response = self.client.post(
+            url, {
+                'branch': self.branch.pk,
+                'transfer_date': today.isoformat(),
+                'source_account': 'cash',
+                'destination_account': 'cash',
+                'amount': '25',
+                'description': 'Invalid transfer',
+                'reference': '',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(same_account_response.status_code, 400)
+        self.assertContains(
+            same_account_response,
+            'Choose an account different from the source account.',
+            status_code=400,
+        )
+
         save_response = self.client.post(
             url, {
                 'branch': self.branch.pk,
                 'transfer_date': today.isoformat(),
                 'source_account': 'cash',
+                'destination_account': 'bank',
                 'amount': '25',
                 'description': 'Daily banking',
                 'reference': 'BANK-POPOVER-001',
@@ -1098,6 +1136,106 @@ class BranchAccountingReportTests(TestCase):
             branch=self.branch, reference='BANK-POPOVER-001',
             amount=Decimal('25'),
         ).exists())
+
+    def test_bank_statement_and_cash_flow_show_both_sides_of_transfers(self):
+        today = timezone.localdate()
+        for source, destination, amount, reference in (
+            ('cash', 'bank', '50', 'BANK-IN-001'),
+            ('bank', 'cash', '20', 'BANK-OUT-001'),
+        ):
+            response = self.client.post(
+                reverse('documents:branch_account_transfer'),
+                {
+                    'branch': self.branch.pk,
+                    'transfer_date': today.isoformat(),
+                    'source_account': source,
+                    'destination_account': destination,
+                    'amount': amount,
+                    'description': 'Test account movement',
+                    'reference': reference,
+                },
+            )
+            self.assertEqual(response.status_code, 302)
+
+        Payment.objects.create(
+            amount=Decimal('30'), payment_date=today, method='bank_transfer',
+            received_by=self.user, branch=self.branch,
+        )
+        Payment.objects.create(
+            amount=Decimal('150'), payment_date=today, method='cash',
+            received_by=self.user, branch=self.branch,
+        )
+        Expense.objects.create(
+            expense_date=today,
+            description='Bank-paid expense',
+            amount=Decimal('10'),
+            status='approved',
+            payment_method='bank_transfer',
+            paid_by=self.user,
+            created_by=self.user,
+            approved_by=self.user,
+            branch=self.branch,
+        )
+
+        params = {
+            'branch': self.branch.pk,
+            'from': today.isoformat(),
+            'to': today.isoformat(),
+        }
+        bank_statement = self.client.get(
+            reverse('documents:branch_bank_statement'), params,
+        )
+        cash_flow = self.client.get(
+            reverse('documents:financial_reports'),
+            {**params, 'record_type': 'transfer'},
+        )
+        ledger = self.client.get(
+            reverse('documents:branch_daily_ledger'),
+            {'branch': self.branch.pk, 'date': today.isoformat()},
+        )
+        balance_sheet = self.client.get(
+            reverse('documents:balance_sheet_report'), params,
+        )
+
+        self.assertEqual(bank_statement.status_code, 200)
+        self.assertEqual(bank_statement.context['total_inflow'], Decimal('80'))
+        self.assertEqual(bank_statement.context['total_outflow'], Decimal('30'))
+        self.assertContains(bank_statement, 'Bank Statement')
+        self.assertContains(bank_statement, 'Bank-paid expense')
+        self.assertEqual(cash_flow.context['transactions'].paginator.count, 4)
+        self.assertEqual(cash_flow.context['cash_inflow'], Decimal('180'))
+        self.assertEqual(cash_flow.context['cash_outflow'], Decimal('10'))
+        self.assertEqual(
+            sum(row['inflow'] for row in cash_flow.context['transactions']),
+            Decimal('70'),
+        )
+        ledger_transfers = [
+            row for row in ledger.context['transactions']
+            if row['type'] in (
+                'Bank deposit transfer', 'Bank withdrawal transfer',
+            )
+        ]
+        self.assertEqual(len(ledger_transfers), 4)
+        self.assertEqual(
+            sum(row['inflow'] for row in ledger_transfers),
+            Decimal('70'),
+        )
+        self.assertEqual(
+            sum(row['outflow'] for row in ledger_transfers),
+            Decimal('70'),
+        )
+        self.assertEqual(
+            sum(row['outflow'] for row in cash_flow.context['transactions']),
+            Decimal('70'),
+        )
+        self.assertEqual(
+            balance_sheet.context['cash_account_totals']['cash_on_hand'],
+            Decimal('120'),
+        )
+        self.assertEqual(
+            balance_sheet.context['cash_account_totals']['bank_deposit'],
+            Decimal('50'),
+        )
 
     def test_branch_navigation_shows_relevant_modules_for_each_workspace(self):
         self.user.branch = self.external_branch

@@ -183,7 +183,9 @@ class ServiceTypeForm(forms.ModelForm):
             'is_recurring', 'vat_applicable', 'description', 'branches',
         ]
         widgets = {
-            'default_price': forms.NumberInput(attrs={'min': 0, 'step': 1000}),
+            'default_price': forms.NumberInput(attrs={
+                'min': 0, 'step': 1000, 'placeholder': 'e.g. 100,000',
+            }),
             'description': forms.Textarea(attrs={'rows': 3}),
         }
 

@@ -12,7 +12,10 @@
     <div class="card-box">
       <div class="card-head">
         <span><i class="fas fa-receipt"></i>Expense Details</span>
-        <a class="btn btn-outline btn-sm" href="{% url 'documents:branch_account_transfer' %}{% if active_branch %}?branch={{ active_branch.pk }}{% endif %}"><i class="fas fa-building-columns"></i> Record bank deposit</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'documents:branch_account_transfer' %}{% if active_branch %}?branch={{ active_branch.pk }}{% endif %}"
+           data-open-account-transfer
+           data-transfer-url="{% url 'documents:branch_account_transfer' %}?popover=1{% if active_branch %}&amp;branch={{ active_branch.pk }}{% endif %}"
+           aria-haspopup="dialog" aria-expanded="false"><i class="fas fa-building-columns"></i> Record bank transfer</a>
       </div>
       <div class="card-body">
         <form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
@@ -37,7 +40,7 @@
         </div>
         <div>
           <label class="form-label">Amount (UGX) <span class="req">*</span></label>
-          <input type="number" name="amount" class="form-control" placeholder="e.g. 50000" min="0" required>
+          <input type="number" name="amount" class="form-control" placeholder="e.g. 50,000" min="0" required>
         </div>
         <div>
           <label class="form-label">Payment Method</label>

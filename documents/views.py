@@ -562,21 +562,39 @@ def _branch_daily_ledger(request, expense_only=False):
     for transfer in BranchAccountTransfer.objects.filter(
         branch__in=selected_branches, transfer_date=business_date,
     ).select_related('branch', 'entered_by'):
-        source_label = dict(BranchAccountTransfer.SOURCE_ACCOUNT)[
-            transfer.source_account
-        ]
+        account_labels = dict(BranchAccountTransfer.ACCOUNT_CHOICES)
+        source_label = account_labels[transfer.source_account]
+        destination_label = account_labels[transfer.destination_account]
+        transfer_type = (
+            'Bank deposit transfer'
+            if transfer.destination_account == 'bank'
+            else 'Bank withdrawal transfer'
+        )
+        common = {
+            'branch': transfer.branch,
+            'created_at': transfer.created_at,
+            'pk': transfer.pk,
+            'entry_type': transfer_type,
+            'method': 'Internal transfer',
+            'reference': transfer.reference,
+            'recorded_by': user_label(transfer.entered_by),
+            'counts_in_totals': False,
+        }
         append_transaction(
-            branch=transfer.branch,
-            created_at=transfer.created_at,
-            pk=transfer.pk,
-            entry_type='Bank deposit transfer',
-            description=f'{source_label} → Bank — {transfer.description}',
-            method='Internal transfer',
-            reference=transfer.reference,
-            recorded_by=user_label(transfer.entered_by),
-            inflow=transfer.amount,
+            **common,
+            description=(
+                f'{source_label} out to {destination_label} — '
+                f'{transfer.description}'
+            ),
             outflow=transfer.amount,
-            counts_in_totals=False,
+        )
+        append_transaction(
+            **common,
+            description=(
+                f'{destination_label} in from {source_label} — '
+                f'{transfer.description}'
+            ),
+            inflow=transfer.amount,
         )
 
     external_entry_branches = {entry.branch_id for entry in external_entries}
@@ -726,15 +744,21 @@ def branch_account_transfer(request):
                     else:
                         transfer.save()
                 if not form.errors:
+                    transfer_label = (
+                        'Bank deposit'
+                        if transfer.destination_account == 'bank'
+                        else 'Bank withdrawal'
+                    )
                     if (
                         popover_mode
                         and request.headers.get('X-Requested-With') == 'XMLHttpRequest'
                     ):
                         return JsonResponse({
-                            'message': 'Bank deposit recorded.',
+                            'message': f'{transfer_label} recorded.',
                         })
                     messages.success(
-                        request, 'Bank deposit recorded as an account transfer.',
+                        request,
+                        f'{transfer_label} recorded as an account transfer.',
                     )
                     return redirect(
                         f"{reverse('documents:branch_account_statement')}?"
@@ -767,7 +791,7 @@ def branch_account_transfer(request):
 
 
 @login_required
-def branch_account_statement(request):
+def branch_account_statement(request, bank_only=False):
     today = timezone.localdate()
     month_start = date(today.year, today.month, 1)
     try:
@@ -833,7 +857,10 @@ def branch_account_statement(request):
         append_row(
             branch=payment.branch,
             transaction_date=payment.payment_date,
-            account=payment.get_payment_method_display(),
+            account=(
+                'Bank' if payment.method == 'bank_transfer'
+                else payment.get_payment_method_display()
+            ),
             description=(
                 payment.client.get_display_name()
                 if payment.client_id else 'Customer payment'
@@ -855,7 +882,10 @@ def branch_account_statement(request):
         append_row(
             branch=income.branch,
             transaction_date=income.income_date,
-            account=income.get_collection_method_display(),
+            account=(
+                'Bank' if income.collection_method == 'bank_transfer'
+                else income.get_collection_method_display()
+            ),
             description=income.source_name,
             reference=income.reference,
             recorded_by=(
@@ -875,7 +905,10 @@ def branch_account_statement(request):
         append_row(
             branch=expense.branch,
             transaction_date=expense.expense_date,
-            account=expense.get_payment_method_display(),
+            account=(
+                'Bank' if expense.payment_method == 'bank_transfer'
+                else expense.get_payment_method_display()
+            ),
             description=(
                 f'{expense.category.name} — {expense.description}'
                 if expense.category_id else expense.description
@@ -930,11 +963,15 @@ def branch_account_statement(request):
         transfer_date__range=(date_from, date_to),
     ).select_related('branch', 'entered_by'):
         actor = transfer.entered_by.get_full_name() or transfer.entered_by.username
+        account_labels = dict(BranchAccountTransfer.ACCOUNT_CHOICES)
         append_row(
             branch=transfer.branch,
             transaction_date=transfer.transfer_date,
-            account=dict(BranchAccountTransfer.SOURCE_ACCOUNT)[transfer.source_account],
-            description=f'{transfer.description} → Bank',
+            account=account_labels[transfer.source_account],
+            description=(
+                f'Transfer to {account_labels[transfer.destination_account]} — '
+                f'{transfer.description}'
+            ),
             reference=transfer.reference,
             recorded_by=actor,
             outflow=transfer.amount,
@@ -943,8 +980,11 @@ def branch_account_statement(request):
         append_row(
             branch=transfer.branch,
             transaction_date=transfer.transfer_date,
-            account='Bank',
-            description=f'{transfer.description} from {dict(BranchAccountTransfer.SOURCE_ACCOUNT)[transfer.source_account]}',
+            account=account_labels[transfer.destination_account],
+            description=(
+                f'Transfer from {account_labels[transfer.source_account]} — '
+                f'{transfer.description}'
+            ),
             reference=transfer.reference,
             recorded_by=actor,
             inflow=transfer.amount,
@@ -958,7 +998,10 @@ def branch_account_statement(request):
         append_row(
             branch=entry.branch,
             transaction_date=entry.as_of_date,
-            account=entry.get_category_display(),
+            account=(
+                'Bank' if entry.category == 'bank_deposit'
+                else entry.get_category_display()
+            ),
             description=f'{entry.account_name} balance',
             reference='',
             recorded_by=(
@@ -973,7 +1016,9 @@ def branch_account_statement(request):
         {row['account'] for row in rows},
         key=str.casefold,
     )
-    selected_account = request.GET.get('account', '').strip()
+    selected_account = (
+        'Bank' if bank_only else request.GET.get('account', '').strip()
+    )
     if selected_account:
         rows = [row for row in rows if row['account'].casefold() == selected_account.casefold()]
     rows.sort(key=lambda row: (row['date'], row['branch'].name, row['description']), reverse=True)
@@ -988,6 +1033,7 @@ def branch_account_statement(request):
         'date_to': date_to,
         'transactions': transaction_page,
         'selected_account': selected_account,
+        'bank_only': bank_only,
         'account_options': account_options,
         'filter_query': filter_params.urlencode(),
         'total_inflow': sum((row['inflow'] for row in rows), Decimal('0')),
@@ -1351,7 +1397,11 @@ def _financial_report(request, report_view, balance_sheet_entry_form=None):
     method_values = set()
     for value, label in (
         Payment.METHOD + Expense.METHOD + BranchDailyTransaction.ACCOUNT
-        + [('external_system', 'External system'), ('credit', 'Credit')]
+        + [
+            ('external_system', 'External system'),
+            ('credit', 'Credit'),
+            ('internal_transfer', 'Internal transfer'),
+        ]
     ):
         if value not in method_values:
             method_values.add(value)
@@ -1368,6 +1418,7 @@ def _financial_report(request, report_view, balance_sheet_entry_form=None):
         ('capital_injection', 'Capital injection'),
         ('expense', 'Approved expense'),
         ('drawing', 'Owner drawing'),
+        ('transfer', 'Account transfer'),
         ('ledger', 'Daily ledger'),
         ('summary', 'Daily summary'),
     ]
@@ -1551,6 +1602,56 @@ def _financial_report(request, report_view, balance_sheet_entry_form=None):
             'service_names': [],
             'category_keys': [f'ledger:{entry.category}'],
         })
+
+    transfer_branches = branches
+    if selected_branch:
+        transfer_branches = transfer_branches.filter(pk=selected_branch.pk)
+    account_labels = dict(BranchAccountTransfer.ACCOUNT_CHOICES)
+    for transfer in BranchAccountTransfer.objects.filter(
+        branch__in=transfer_branches,
+        transfer_date__range=(date_from, date_to),
+    ).select_related('branch', 'entered_by'):
+        source_label = account_labels[transfer.source_account]
+        destination_label = account_labels[transfer.destination_account]
+        transfer_description = transfer.description
+        transactions.extend([
+            {
+                'date': transfer.transfer_date,
+                'id': transfer.pk,
+                'type': 'Account transfer',
+                'type_key': 'transfer',
+                'record_type_keys': ['transfer'],
+                'description': f'Transfer to {destination_label} — {transfer_description}',
+                'method': 'Internal transfer',
+                'method_key': 'internal_transfer',
+                'reference': transfer.reference or '—',
+                'recorded_by': user_label(transfer.entered_by),
+                'approved_by': '—',
+                'inflow': zero,
+                'outflow': transfer.amount,
+                'service_ids': [],
+                'service_names': [],
+                'category_keys': ['transfer'],
+            },
+            {
+                'date': transfer.transfer_date,
+                'id': transfer.pk,
+                'type': 'Account transfer',
+                'type_key': 'transfer',
+                'record_type_keys': ['transfer'],
+                'description': f'Transfer from {source_label} — {transfer_description}',
+                'method': 'Internal transfer',
+                'method_key': 'internal_transfer',
+                'reference': transfer.reference or '—',
+                'recorded_by': user_label(transfer.entered_by),
+                'approved_by': '—',
+                'inflow': transfer.amount,
+                'outflow': zero,
+                'service_ids': [],
+                'service_names': [],
+                'category_keys': ['transfer'],
+            },
+        ])
 
     capital_branches = branches
     if selected_branch:

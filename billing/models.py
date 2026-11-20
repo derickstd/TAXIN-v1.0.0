@@ -202,6 +202,17 @@ class Payment(models.Model):
         return f"UGX {self.amount:,.0f} → {customer}"
 
 
+class PaymentSubmission(models.Model):
+    token = models.UUIDField(unique=True, editable=False)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='payment_submissions',
+    )
+    action = models.CharField(max_length=32)
+    message = models.TextField(blank=True)
+    redirect_url = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class OtherIncome(models.Model):
     """
     Track external income/revenue sources outside the company invoicing system.

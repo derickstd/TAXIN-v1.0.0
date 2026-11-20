@@ -15,8 +15,13 @@
   </div>
   <div class="cashflow-page-actions no-print">
     <button class="btn btn-outline btn-sm" type="button" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
-    <a class="btn btn-outline btn-sm" href="{% url 'documents:branch_daily_ledger' %}">Daily ledger</a>
-    <a class="btn btn-outline btn-sm" href="{% url 'documents:branch_daily_summaries' %}?open=summary">Daily summary</a>
+    <details class="header-action-menu">
+      <summary class="btn btn-outline btn-sm">Branch activity <i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+      <div class="header-action-menu__items">
+        <a href="{% url 'documents:branch_daily_ledger' %}"><i class="fas fa-book"></i> Daily ledger</a>
+        <a href="{% url 'documents:branch_daily_summaries' %}?open=summary"><i class="fas fa-clipboard-check"></i> Daily summary</a>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -77,6 +82,7 @@
 <nav class="cashflow-report-tabs no-print" aria-label="Financial reports">
   <a class="cashflow-report-tab" href="{% url 'documents:financial_reports' %}?{{ report_scope_query }}" aria-current="page">Cash Flow</a>
   <a class="cashflow-report-tab" href="{% url 'documents:balance_sheet_report' %}?{{ report_scope_query }}">Balance Sheet</a>
+  <a class="cashflow-report-tab" href="{% url 'documents:branch_bank_statement' %}?branch={{ selected_branch.pk|default:'' }}&amp;from={{ date_from|date:'Y-m-d' }}&amp;to={{ date_to|date:'Y-m-d' }}">Bank Statement</a>
 </nav>
 
 <div class="stats-grid mb-3 cashflow-kpi-grid">
@@ -180,7 +186,7 @@
 <section class="card-box card-compact cashflow-accountability">
   <div class="card-head">
     <span><i class="fas fa-list-check"></i> Cash Accountability</span>
-    <span class="text-muted">{{ transactions.paginator.count }} records</span>
+    <span class="text-muted">{{ transactions.paginator.count }} records · internal transfers appear on both sides and do not change net cash flow</span>
   </div>
   <div class="tbl-wrap">
     <table class="tbl">

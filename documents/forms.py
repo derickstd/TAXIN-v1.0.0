@@ -14,10 +14,18 @@ class BranchDailySummaryForm(forms.ModelForm):
         ]
         widgets = {
             'business_date': forms.DateInput(attrs={'type': 'date'}),
-            'opening_balance': forms.NumberInput(attrs={'min': '0', 'step': '0.01'}),
-            'cash_inflow': forms.NumberInput(attrs={'min': '0', 'step': '0.01'}),
-            'cash_outflow': forms.NumberInput(attrs={'min': '0', 'step': '0.01'}),
-            'closing_balance': forms.NumberInput(attrs={'min': '0', 'step': '0.01'}),
+            'opening_balance': forms.NumberInput(attrs={
+                'min': '0', 'step': '0.01', 'placeholder': 'e.g. 1,000,000',
+            }),
+            'cash_inflow': forms.NumberInput(attrs={
+                'min': '0', 'step': '0.01', 'placeholder': 'e.g. 250,000',
+            }),
+            'cash_outflow': forms.NumberInput(attrs={
+                'min': '0', 'step': '0.01', 'placeholder': 'e.g. 50,000',
+            }),
+            'closing_balance': forms.NumberInput(attrs={
+                'min': '0', 'step': '0.01', 'placeholder': 'e.g. 1,200,000',
+            }),
             'notes': forms.Textarea(attrs={'rows': 3}),
         }
 
@@ -60,7 +68,7 @@ class BranchDailyTransactionForm(forms.ModelForm):
             'amount': forms.NumberInput(attrs={
                 'min': '0.01',
                 'step': '0.01',
-                'placeholder': 'Enter amount in UGX',
+                'placeholder': 'e.g. 50,000 UGX',
             }),
             'reference': forms.TextInput(attrs={
                 'maxlength': '100',
@@ -111,7 +119,9 @@ class BranchBalanceSheetEntryForm(forms.ModelForm):
         widgets = {
             'as_of_date': forms.DateInput(attrs={'type': 'date'}),
             'account_name': forms.TextInput(attrs={'maxlength': '120'}),
-            'amount': forms.NumberInput(attrs={'min': '0', 'step': '0.01'}),
+            'amount': forms.NumberInput(attrs={
+                'min': '0', 'step': '0.01', 'placeholder': 'e.g. 1,000,000',
+            }),
             'notes': forms.Textarea(attrs={'rows': 2}),
         }
 
@@ -139,12 +149,14 @@ class BranchAccountTransferForm(forms.ModelForm):
     class Meta:
         model = BranchAccountTransfer
         fields = [
-            'branch', 'transfer_date', 'source_account', 'amount',
-            'description', 'reference',
+            'branch', 'transfer_date', 'source_account', 'destination_account',
+            'amount', 'description', 'reference',
         ]
         widgets = {
             'transfer_date': forms.DateInput(attrs={'type': 'date'}),
-            'amount': forms.NumberInput(attrs={'min': '0.01', 'step': '0.01'}),
+            'amount': forms.NumberInput(attrs={
+                'min': '0.01', 'step': '0.01', 'placeholder': 'e.g. 500,000',
+            }),
             'description': forms.TextInput(attrs={'maxlength': '255'}),
             'reference': forms.TextInput(attrs={'maxlength': '100'}),
         }
@@ -156,3 +168,19 @@ class BranchAccountTransferForm(forms.ModelForm):
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'
         self.fields['reference'].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        source_account = cleaned_data.get('source_account')
+        destination_account = cleaned_data.get('destination_account')
+        if source_account and destination_account:
+            if source_account == destination_account:
+                self.add_error(
+                    'destination_account',
+                    'Choose an account different from the source account.',
+                )
+            elif 'bank' not in (source_account, destination_account):
+                raise forms.ValidationError(
+                    'An account transfer must move money to or from the bank.',
+                )
+        return cleaned_data
