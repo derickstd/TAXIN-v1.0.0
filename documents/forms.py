@@ -1,7 +1,12 @@
+from decimal import Decimal
+
 from django import forms
 from django.utils import timezone
 
-from billing.models import BranchDailySummary, BranchDailyTransaction
+from billing.models import (
+    BranchDailySummary, BranchDailyTransaction, OtherIncome, Payment,
+)
+from expenses.models import Expense, ExpenseCategory
 from .models import BranchAccountTransfer, BranchBalanceSheetEntry
 
 
@@ -82,6 +87,15 @@ class BranchDailyTransactionForm(forms.ModelForm):
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'
         self.fields['branch'].queryset = branches.filter(external_reporting=True)
+        if expense_only:
+            self.fields['category'].widget.attrs.update({
+                'class': 'form-control s2',
+                'data-ph': 'Search categories…',
+            })
+            self.fields['account'].widget.attrs.update({
+                'class': 'form-control s2',
+                'data-ph': 'Search accounts…',
+            })
         categories = list(self.fields['category'].choices)
         if expense_only:
             categories = [
@@ -110,6 +124,91 @@ class BranchDailyTransactionForm(forms.ModelForm):
         if self.expense_only and direction != 'outflow':
             raise forms.ValidationError('Expense entries must record money out.')
         return direction
+
+
+class LedgerPaymentEditForm(forms.ModelForm):
+    amount = forms.DecimalField(
+        min_value=Decimal('0.01'), max_digits=15, decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'min': '0.01', 'step': '0.01', 'placeholder': 'e.g. 50,000',
+        }),
+    )
+
+    class Meta:
+        model = Payment
+        fields = ['amount', 'payment_date', 'method', 'reference', 'notes']
+        widgets = {
+            'amount': forms.NumberInput(attrs={
+                'min': '0.01', 'step': '0.01', 'placeholder': 'e.g. 50,000',
+            }),
+            'payment_date': forms.DateInput(attrs={'type': 'date'}),
+            'reference': forms.TextInput(attrs={'maxlength': '100'}),
+            'notes': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs['class'] = 'form-control'
+
+
+class LedgerOtherIncomeEditForm(forms.ModelForm):
+    amount = forms.DecimalField(
+        min_value=Decimal('0.01'), max_digits=15, decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'min': '0.01', 'step': '0.01', 'placeholder': 'e.g. 50,000',
+        }),
+    )
+
+    class Meta:
+        model = OtherIncome
+        fields = [
+            'source_name', 'category', 'amount', 'income_date',
+            'collection_method', 'reference', 'description',
+        ]
+        widgets = {
+            'amount': forms.NumberInput(attrs={
+                'min': '0.01', 'step': '0.01', 'placeholder': 'e.g. 50,000',
+            }),
+            'income_date': forms.DateInput(attrs={'type': 'date'}),
+            'reference': forms.TextInput(attrs={'maxlength': '100'}),
+            'description': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs['class'] = 'form-control'
+
+
+class LedgerExpenseEditForm(forms.ModelForm):
+    amount = forms.DecimalField(
+        min_value=Decimal('0.01'), max_digits=12, decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'min': '0.01', 'step': '0.01', 'placeholder': 'e.g. 50,000',
+        }),
+    )
+
+    class Meta:
+        model = Expense
+        fields = [
+            'expense_date', 'category', 'description', 'amount',
+            'payment_method', 'reference',
+        ]
+        widgets = {
+            'expense_date': forms.DateInput(attrs={'type': 'date'}),
+            'amount': forms.NumberInput(attrs={
+                'min': '0.01', 'step': '0.01', 'placeholder': 'e.g. 50,000',
+            }),
+            'description': forms.Textarea(attrs={'rows': 3}),
+            'reference': forms.TextInput(attrs={'maxlength': '100'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['category'].queryset = ExpenseCategory.objects.order_by('name')
+        for field in self.fields.values():
+            field.widget.attrs['class'] = 'form-control'
 
 
 class BranchBalanceSheetEntryForm(forms.ModelForm):
@@ -199,3 +298,27 @@ class BranchAccountTransferForm(forms.ModelForm):
                     'An account transfer must move money to or from the bank.',
                 )
         return cleaned_data
+
+
+class BranchAccountTransferEditForm(forms.ModelForm):
+    class Meta:
+        model = BranchAccountTransfer
+        fields = [
+            'branch', 'transfer_date', 'source_account', 'destination_account',
+            'amount', 'description', 'reference',
+        ]
+        widgets = {
+            'transfer_date': forms.DateInput(attrs={'type': 'date'}),
+            'amount': forms.NumberInput(attrs={
+                'min': '0.01', 'step': '0.01', 'placeholder': 'e.g. 500,000',
+            }),
+            'description': forms.TextInput(attrs={'maxlength': '255'}),
+            'reference': forms.TextInput(attrs={'maxlength': '100'}),
+        }
+
+    def __init__(self, *args, branches, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['branch'].queryset = branches
+        for field in self.fields.values():
+            field.widget.attrs['class'] = 'form-control'
+        self.fields['reference'].required = False

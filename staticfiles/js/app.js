@@ -36,6 +36,27 @@ function initSelect2(){
   jQuery(document).on('change','input[type=checkbox][name$="-DELETE"]',recalcTotal);
 }
 
+function initRecordFilterToolbars(){
+  document.querySelectorAll('[data-auto-submit]').forEach(function(control){
+    var form=control.form;
+    if(!form||!form.matches('[data-filter-toolbar]'))return;
+    control.addEventListener('change',function(){
+      if(typeof form.requestSubmit==='function')form.requestSubmit();
+      else form.submit();
+    });
+  });
+  document.querySelectorAll('[data-filter-toolbar]').forEach(function(form){
+    form.addEventListener('submit',function(){
+      form.setAttribute('aria-busy','true');
+      var button=form.querySelector('[data-filter-submit]');
+      if(button){
+        button.disabled=true;
+        button.innerHTML='<i class="fas fa-spinner" aria-hidden="true"></i><span>Applying</span>';
+      }
+    });
+  });
+}
+
 /* ── Monetary input formatting ── */
 var MONEY_FIELD_NAME = /(?:^|[-_])(?:amount|price|fee|balance|inflow|outflow|subtotal|vat_total|grand_total|total_fee|auto_approve_under_amount|require_receipt_under_amount|outstanding_threshold|penalty_amount)(?:$|[-_])/i;
 
@@ -449,6 +470,7 @@ function initKeyboardShortcuts(){
 document.addEventListener('DOMContentLoaded',function(){
   initMoneyFormatter();
   initSelect2();
+  initRecordFilterToolbars();
   initDates();
   initAlerts();
   initConfirm();

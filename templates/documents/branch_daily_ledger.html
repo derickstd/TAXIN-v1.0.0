@@ -62,7 +62,7 @@
       <button class="modal-close" type="button" data-close-ledger-entry aria-label="Close">&times;</button>
     </div>
     {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-    <form method="post">
+    <form method="post"{% if expense_only %} class="branch-expense-form"{% endif %}>
       {% csrf_token %}
       <div class="form-grid-2">
         <div>
@@ -85,7 +85,7 @@
           {% for error in form.direction.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
         {% endif %}
-        <div>
+        <div{% if expense_only %} class="branch-expense-field"{% endif %}>
           <label class="form-label" for="{{ form.category.id_for_label }}">Category <span class="req">*</span></label>
           {{ form.category }}
           {% for error in form.category.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
@@ -95,7 +95,7 @@
           {{ form.description }}
           {% for error in form.description.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         </div>
-        <div>
+        <div{% if expense_only %} class="branch-expense-field"{% endif %}>
           <label class="form-label" for="{{ form.account.id_for_label }}">Account <span class="req">*</span></label>
           {{ form.account }}
           {% for error in form.account.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
@@ -194,6 +194,7 @@
           <th>Recorded by</th>
           <th class="text-r">Money in</th>
           <th class="text-r">Money out</th>
+          {% if can_manage_transactions %}<th class="text-r">Actions</th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -206,9 +207,26 @@
           <td>{{ item.recorded_by }}</td>
           <td class="text-r">{% if item.inflow %}<span class="ugx cash-flow-chip cash-flow-chip--in">{{ item.inflow|floatformat:0|intcomma }}</span>{% else %}—{% endif %}</td>
           <td class="text-r">{% if item.outflow %}<span class="ugx cash-flow-chip cash-flow-chip--out">{{ item.outflow|floatformat:0|intcomma }}</span>{% else %}—{% endif %}</td>
+          {% if can_manage_transactions %}
+          <td class="text-r">
+            {% if item.can_edit %}
+            <div class="d-flex justify-content-end gap-2">
+              <a class="btn btn-outline btn-sm" href="{% url 'documents:ledger_transaction_edit' item.record_type item.id %}">Edit</a>
+              <form method="post" action="{% url 'documents:ledger_transaction_delete' item.record_type item.id %}" onsubmit="return confirm('Delete this transaction?');">
+                {% csrf_token %}
+                <button class="btn btn-outline btn-sm text-danger" type="submit">Delete</button>
+              </form>
+            </div>
+            {% elif item.actions_locked %}
+            <span class="text-muted">Reviewed</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          {% endif %}
         </tr>
       {% empty %}
-        <tr><td colspan="7" class="text-c text-muted">No transactions recorded for this date.</td></tr>
+        <tr><td colspan="{% if can_manage_transactions %}8{% else %}7{% endif %}" class="text-c text-muted">No transactions recorded for this date.</td></tr>
       {% endfor %}
       </tbody>
     </table>

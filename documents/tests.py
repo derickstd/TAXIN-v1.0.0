@@ -9,7 +9,7 @@ from billing.models import (
     BranchDailySummary, BranchDailyTransaction, Invoice, OtherIncome, Payment,
 )
 from clients.models import Client
-from core.models import Branch, Company, User
+from core.models import AuditLog, Branch, Company, User
 from expenses.models import Expense, ExpenseCategory
 from documents.forms import BranchDailySummaryForm
 from documents.models import BranchAccountTransfer, BranchBalanceSheetEntry
@@ -638,6 +638,16 @@ class ExternalBranchReportTests(TestCase):
         self.assertEqual(response.context['form']['branch'].value(), self.branch.pk)
         self.assertEqual(response.context['form']['direction'].value(), 'outflow')
         self.assertEqual(response.context['form']['category'].value(), 'operating_expense')
+        self.assertIn(
+            's2',
+            response.context['form'].fields['category'].widget.attrs['class'],
+        )
+        self.assertIn(
+            's2',
+            response.context['form'].fields['account'].widget.attrs['class'],
+        )
+        self.assertContains(response, 'class="branch-expense-form"')
+        self.assertContains(response, 'class="branch-expense-field"')
         self.assertContains(
             response,
             f'{reverse("documents:branch_daily_expense")}?branch={self.branch.pk}&amp;open=transaction',
@@ -1311,3 +1321,351 @@ class BranchAccountingReportTests(TestCase):
         self.assertContains(internal_response, 'Monthly Report')
         self.assertContains(internal_response, '>Expenses</span>')
         self.assertNotContains(internal_response, 'Daily Summaries')
+
+
+class LedgerTransactionManagementTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name='Ledger Controls Co', slug='ledger-controls',
+        )
+        self.branch = Branch.objects.create(
+            company=self.company, name='TAXMAN', external_reporting=False,
+        )
+        self.external_branch = Branch.objects.create(
+            company=self.company, name='PRIME FOCUS', external_reporting=True,
+        )
+        self.admin = User.objects.create_user(
+            username='ledger_admin', password='pass1234', role='admin',
+            company=self.company, branch=self.branch,
+        )
+        self.client.force_login(self.admin)
+        self.today = timezone.localdate()
+        self.category = ExpenseCategory.objects.create(
+            name='Ledger management test expense',
+        )
+
+    def _record_fixtures(self):
+        return [
+            (
+                'daily_entry',
+                BranchDailyTransaction.objects.create(
+                    branch=self.external_branch,
+                    business_date=self.today,
+                    direction='inflow',
+                    category='service_receipt',
+                    description='Daily entry before edit',
+                    account='cash',
+                    amount=Decimal('10'),
+                    entered_by=self.admin,
+                ),
+                {
+                    'branch': self.external_branch.pk,
+                    'business_date': self.today.isoformat(),
+                    'direction': 'inflow',
+                    'category': 'service_receipt',
+                    'description': 'Daily entry after edit',
+                    'account': 'cash',
+                    'amount': '11',
+                    'reference': '',
+                },
+                'branch_daily_transaction',
+            ),
+            (
+                'payment',
+                Payment.objects.create(
+                    amount=Decimal('10'), payment_date=self.today,
+                    received_by=self.admin, branch=self.branch,
+                ),
+                {
+                    'amount': '11',
+                    'payment_date': self.today.isoformat(),
+                    'method': 'cash',
+                    'reference': '',
+                    'notes': '',
+                },
+                'payment',
+            ),
+            (
+                'other_income',
+                OtherIncome.objects.create(
+                    source_name='Test source', category='other',
+                    amount=Decimal('10'), income_date=self.today,
+                    recorded_by=self.admin, branch=self.branch,
+                ),
+                {
+                    'source_name': 'Edited test source',
+                    'category': 'other',
+                    'amount': '11',
+                    'income_date': self.today.isoformat(),
+                    'collection_method': 'cash',
+                    'reference': '',
+                    'description': '',
+                },
+                'other_income',
+            ),
+            (
+                'expense',
+                Expense.objects.create(
+                    expense_date=self.today, category=self.category,
+                    description='Expense before edit', amount=Decimal('10'),
+                    status='approved', payment_method='cash',
+                    created_by=self.admin, approved_by=self.admin,
+                    branch=self.branch,
+                ),
+                {
+                    'expense_date': self.today.isoformat(),
+                    'category': self.category.pk,
+                    'description': 'Expense after edit',
+                    'amount': '11',
+                    'payment_method': 'cash',
+                    'reference': '',
+                },
+                'expense',
+            ),
+            (
+                'transfer',
+                BranchAccountTransfer.objects.create(
+                    branch=self.branch, transfer_date=self.today,
+                    source_account='cash', destination_account='bank',
+                    amount=Decimal('10'), description='Transfer before edit',
+                    entered_by=self.admin,
+                ),
+                {
+                    'branch': self.branch.pk,
+                    'transfer_date': self.today.isoformat(),
+                    'source_account': 'cash',
+                    'destination_account': 'bank',
+                    'amount': '11',
+                    'description': 'Transfer after edit',
+                    'reference': '',
+                },
+                'branch_account_transfer',
+            ),
+            (
+                'summary',
+                BranchDailySummary.objects.create(
+                    branch=self.branch, business_date=self.today,
+                    opening_balance=Decimal('10'), cash_inflow=Decimal('10'),
+                    cash_outflow=Decimal('0'), closing_balance=Decimal('20'),
+                    submitted_by=self.admin,
+                ),
+                {
+                    'branch': self.branch.pk,
+                    'business_date': self.today.isoformat(),
+                    'opening_balance': '10',
+                    'cash_inflow': '11',
+                    'cash_outflow': '0',
+                    'closing_balance': '21',
+                    'notes': '',
+                },
+                'branch_daily_summary',
+            ),
+        ]
+
+    def test_admin_can_edit_delete_and_audit_each_ledger_record_type(self):
+        for record_type, record, payload, audit_name in self._record_fixtures():
+            with self.subTest(record_type=record_type):
+                response = self.client.post(
+                    reverse(
+                        'documents:ledger_transaction_edit',
+                        args=[record_type, record.pk],
+                    ),
+                    payload,
+                )
+                self.assertEqual(response.status_code, 302)
+                record.refresh_from_db()
+                edited_amount = (
+                    record.cash_inflow
+                    if record_type == 'summary'
+                    else record.amount
+                )
+                self.assertEqual(edited_amount, Decimal('11'))
+                if record_type == 'expense':
+                    self.assertEqual(record.status, 'submitted')
+                    self.assertIsNone(record.approved_by)
+                self.assertTrue(AuditLog.objects.filter(
+                    model_name=audit_name,
+                    object_id=str(record.pk),
+                    action='UPDATE',
+                    changed_by=self.admin,
+                ).exists())
+
+                response = self.client.post(reverse(
+                    'documents:ledger_transaction_delete',
+                    args=[record_type, record.pk],
+                ))
+                self.assertEqual(response.status_code, 302)
+                self.assertFalse(type(record).objects.filter(pk=record.pk).exists())
+                self.assertTrue(AuditLog.objects.filter(
+                    model_name=audit_name,
+                    object_id=str(record.pk),
+                    action='DELETE',
+                    changed_by=self.admin,
+                ).exists())
+
+    def test_income_payment_and_expense_edits_reject_nonpositive_amounts(self):
+        for record_type, record, payload, _ in self._record_fixtures():
+            if record_type not in ('payment', 'other_income', 'expense'):
+                continue
+            with self.subTest(record_type=record_type):
+                payload['amount'] = '0'
+                response = self.client.post(
+                    reverse(
+                        'documents:ledger_transaction_edit',
+                        args=[record_type, record.pk],
+                    ),
+                    payload,
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context['form'].has_error('amount'))
+                record.refresh_from_db()
+                self.assertEqual(record.amount, Decimal('10'))
+
+    def test_ceo_can_manage_transactions_and_transfer_actions_are_not_duplicated(self):
+        self.admin.role = 'ceo'
+        self.admin.save(update_fields=['role'])
+        transfer = BranchAccountTransfer.objects.create(
+            branch=self.branch, transfer_date=self.today,
+            source_account='cash', destination_account='bank',
+            amount=Decimal('10'), description='Ledger transfer',
+            entered_by=self.admin,
+        )
+
+        response = self.client.get(reverse('documents:branch_daily_ledger'), {
+            'branch': self.branch.pk,
+            'date': self.today.isoformat(),
+        })
+
+        self.assertEqual(response.status_code, 200)
+        transfer_rows = [
+            row for row in response.context['transactions']
+            if row['record_type'] == 'transfer'
+        ]
+        self.assertEqual(len(transfer_rows), 2)
+        self.assertEqual(sum(row['can_edit'] for row in transfer_rows), 1)
+        self.assertContains(response, f'/transactions/transfer/{transfer.pk}/edit/')
+
+    def test_non_admin_cannot_manage_ledger_transactions(self):
+        manager = User.objects.create_user(
+            username='ledger_manager', password='pass1234', role='manager',
+            company=self.company, branch=self.branch,
+        )
+        entry = BranchDailyTransaction.objects.create(
+            branch=self.external_branch, business_date=self.today,
+            direction='inflow', category='service_receipt',
+            description='Protected entry', account='cash',
+            amount=Decimal('10'), entered_by=self.admin,
+        )
+        self.client.force_login(manager)
+
+        edit_response = self.client.get(reverse(
+            'documents:ledger_transaction_edit',
+            args=['daily_entry', entry.pk],
+        ))
+        delete_response = self.client.post(reverse(
+            'documents:ledger_transaction_delete',
+            args=['daily_entry', entry.pk],
+        ))
+
+        self.assertEqual(edit_response.status_code, 403)
+        self.assertEqual(delete_response.status_code, 403)
+        self.assertTrue(BranchDailyTransaction.objects.filter(pk=entry.pk).exists())
+
+    def test_admin_cannot_access_another_company_transaction(self):
+        other_company = Company.objects.create(
+            name='Other Ledger Co', slug='other-ledger',
+        )
+        other_branch = Branch.objects.create(
+            company=other_company, name='Other Branch', external_reporting=True,
+        )
+        entry = BranchDailyTransaction.objects.create(
+            branch=other_branch, business_date=self.today,
+            direction='inflow', category='service_receipt',
+            description='Another company entry', account='cash',
+            amount=Decimal('10'), entered_by=self.admin,
+        )
+
+        response = self.client.get(reverse(
+            'documents:ledger_transaction_edit',
+            args=['daily_entry', entry.pk],
+        ))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_reviewed_day_blocks_edit_and_delete(self):
+        summary = BranchDailySummary.objects.create(
+            branch=self.branch, business_date=self.today,
+            opening_balance=Decimal('0'), cash_inflow=Decimal('0'),
+            cash_outflow=Decimal('0'), closing_balance=Decimal('0'),
+            submitted_by=self.admin, reviewed_by=self.admin,
+            reviewed_at=timezone.now(),
+        )
+        payment = Payment.objects.create(
+            amount=Decimal('10'), payment_date=self.today,
+            received_by=self.admin, branch=self.branch,
+        )
+
+        edit_response = self.client.post(
+            reverse(
+                'documents:ledger_transaction_edit',
+                args=['payment', payment.pk],
+            ),
+            {
+                'amount': '20',
+                'payment_date': self.today.isoformat(),
+                'method': 'cash',
+                'reference': '',
+                'notes': '',
+            },
+        )
+        delete_response = self.client.post(reverse(
+            'documents:ledger_transaction_delete',
+            args=['payment', payment.pk],
+        ))
+
+        self.assertEqual(edit_response.status_code, 200)
+        self.assertContains(edit_response, 'reviewed and locked')
+        self.assertEqual(delete_response.status_code, 302)
+        payment.refresh_from_db()
+        self.assertEqual(payment.amount, Decimal('10'))
+        self.assertTrue(BranchDailySummary.objects.filter(pk=summary.pk).exists())
+        self.assertTrue(Payment.objects.filter(pk=payment.pk).exists())
+
+    def test_edit_cannot_move_a_transaction_into_a_reviewed_day(self):
+        BranchDailySummary.objects.create(
+            branch=self.external_branch, business_date=self.today,
+            opening_balance=Decimal('0'), cash_inflow=Decimal('0'),
+            cash_outflow=Decimal('0'), closing_balance=Decimal('0'),
+            submitted_by=self.admin, reviewed_by=self.admin,
+            reviewed_at=timezone.now(),
+        )
+        entry = BranchDailyTransaction.objects.create(
+            branch=self.external_branch,
+            business_date=self.today - timezone.timedelta(days=1),
+            direction='inflow', category='service_receipt',
+            description='Movable entry', account='cash',
+            amount=Decimal('10'), entered_by=self.admin,
+        )
+
+        response = self.client.post(
+            reverse(
+                'documents:ledger_transaction_edit',
+                args=['daily_entry', entry.pk],
+            ),
+            {
+                'branch': self.external_branch.pk,
+                'business_date': self.today.isoformat(),
+                'direction': 'inflow',
+                'category': 'service_receipt',
+                'description': 'Attempted move',
+                'account': 'cash',
+                'amount': '10',
+                'reference': '',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'destination branch day has been reviewed')
+        entry.refresh_from_db()
+        self.assertEqual(entry.business_date, self.today - timezone.timedelta(days=1))

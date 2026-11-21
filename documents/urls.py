@@ -22,6 +22,16 @@ urlpatterns = [
     path('account-transfer/bank-deposit/', views.branch_account_transfer, name='branch_account_transfer'),
     path('reports/branch-daily-ledger/', views.branch_daily_ledger, name='branch_daily_ledger'),
     path('reports/branch-daily-ledger/expense/', views.branch_daily_expense, name='branch_daily_expense'),
+    path(
+        'reports/branch-daily-ledger/transactions/<str:record_type>/<int:pk>/edit/',
+        views.ledger_transaction_edit,
+        name='ledger_transaction_edit',
+    ),
+    path(
+        'reports/branch-daily-ledger/transactions/<str:record_type>/<int:pk>/delete/',
+        views.ledger_transaction_delete,
+        name='ledger_transaction_delete',
+    ),
     path('reports/branch-daily-summaries/', views.branch_daily_summaries, name='branch_daily_summaries'),
     path('reports/branch-daily-summaries/<int:pk>/review/', views.review_branch_daily_summary, name='review_branch_daily_summary'),
     path('audit-books/', views.audit_books, name='audit_books'),

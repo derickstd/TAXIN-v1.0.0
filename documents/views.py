@@ -2,10 +2,12 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse
+from django.core.exceptions import PermissionDenied
+from django.http import Http404, JsonResponse
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.db.models import Q, Sum, Count
+from django.views.decorators.http import require_http_methods, require_POST
 from services.models import ServiceType, JobCard, JobCardLineItem
 from billing.models import (
     BranchDailySummary, BranchDailyTransaction, Invoice, Payment, OtherIncome,
@@ -25,8 +27,10 @@ from core.branch_reporting import (
 )
 from core.models import Branch
 from .forms import (
-    BranchAccountTransferForm, BranchBalanceSheetEntryForm,
-    BranchDailySummaryForm, BranchDailyTransactionForm,
+    BranchAccountTransferEditForm, BranchAccountTransferForm,
+    BranchBalanceSheetEntryForm, BranchDailySummaryForm,
+    BranchDailyTransactionForm, LedgerExpenseEditForm,
+    LedgerOtherIncomeEditForm, LedgerPaymentEditForm,
 )
 from .accounting import (
     branch_cash_account_balances, branch_cash_account_movements,
@@ -348,6 +352,229 @@ def branch_daily_expense(request):
     return _branch_daily_ledger(request, expense_only=True)
 
 
+_LEDGER_RECORD_MODELS = {
+    'daily_entry': BranchDailyTransaction,
+    'payment': Payment,
+    'other_income': OtherIncome,
+    'expense': Expense,
+    'transfer': BranchAccountTransfer,
+    'summary': BranchDailySummary,
+}
+_LEDGER_RECORD_DATE_FIELDS = {
+    'daily_entry': 'business_date',
+    'payment': 'payment_date',
+    'other_income': 'income_date',
+    'expense': 'expense_date',
+    'transfer': 'transfer_date',
+    'summary': 'business_date',
+}
+_LEDGER_RECORD_LABELS = {
+    'daily_entry': 'Branch transaction',
+    'payment': 'Payment',
+    'other_income': 'Other income',
+    'expense': 'Expense',
+    'transfer': 'Account transfer',
+    'summary': 'Daily summary',
+}
+
+
+def _can_manage_ledger_transactions(user):
+    return user.is_superuser or user.role in ('admin', 'ceo')
+
+
+def _get_ledger_record(user, record_type, pk, *, for_update=False):
+    model = _LEDGER_RECORD_MODELS.get(record_type)
+    if model is None:
+        raise Http404
+    queryset = model.objects.all()
+    if for_update:
+        queryset = queryset.select_for_update()
+    return get_object_or_404(scope_queryset(user, queryset), pk=pk)
+
+
+def _ledger_record_branch_date(record_type, record, values=None):
+    values = values or {}
+    date_field = _LEDGER_RECORD_DATE_FIELDS[record_type]
+    return (
+        values.get('branch', record.branch),
+        values.get(date_field, getattr(record, date_field)),
+    )
+
+
+def _has_reviewed_ledger_day(
+    branch, business_date, *, exclude_summary_id=None, for_update=False,
+):
+    if not branch or not business_date:
+        return False
+    summaries = BranchDailySummary.objects.filter(
+        branch=branch,
+        business_date=business_date,
+    )
+    if exclude_summary_id:
+        summaries = summaries.exclude(pk=exclude_summary_id)
+    if for_update:
+        summaries = summaries.select_for_update()
+    return summaries.filter(reviewed_at__isnull=False).exists()
+
+
+def _ledger_record_is_locked(record_type, record, *, for_update=False):
+    if record_type == 'summary' and record.reviewed_at:
+        return True
+    branch, business_date = _ledger_record_branch_date(record_type, record)
+    return _has_reviewed_ledger_day(
+        branch, business_date, for_update=for_update,
+    )
+
+
+def _ledger_edit_form(record_type, request, record):
+    data = request.POST if request.method == 'POST' else None
+    if record_type == 'daily_entry':
+        return BranchDailyTransactionForm(
+            data, instance=record, branches=accessible_branches(request.user),
+        )
+    if record_type == 'payment':
+        return LedgerPaymentEditForm(data, instance=record)
+    if record_type == 'other_income':
+        return LedgerOtherIncomeEditForm(data, instance=record)
+    if record_type == 'expense':
+        return LedgerExpenseEditForm(data, instance=record)
+    if record_type == 'transfer':
+        return BranchAccountTransferEditForm(
+            data, instance=record, branches=accessible_branches(request.user),
+        )
+    if record_type == 'summary':
+        return BranchDailySummaryForm(
+            data, instance=record, branches=accessible_branches(request.user),
+        )
+    raise Http404
+
+
+def _ledger_redirect(branch, business_date):
+    return (
+        f'{reverse("documents:branch_daily_ledger")}?'
+        f'branch={branch.pk}&date={business_date.isoformat()}'
+    )
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def ledger_transaction_edit(request, record_type, pk):
+    if not _can_manage_ledger_transactions(request.user):
+        raise PermissionDenied
+
+    record = _get_ledger_record(request.user, record_type, pk)
+    if request.method == 'POST':
+        form = None
+        try:
+            with transaction.atomic():
+                record = _get_ledger_record(
+                    request.user, record_type, pk, for_update=True,
+                )
+                form = _ledger_edit_form(record_type, request, record)
+                if _ledger_record_is_locked(
+                    record_type, record, for_update=True,
+                ):
+                    form.add_error(
+                        None,
+                        'This branch day has been reviewed and locked.',
+                    )
+                elif form.is_valid():
+                    target_branch, target_date = _ledger_record_branch_date(
+                        record_type, record, form.cleaned_data,
+                    )
+                    exclude_summary_id = (
+                        record.pk if record_type == 'summary' else None
+                    )
+                    if _has_reviewed_ledger_day(
+                        target_branch,
+                        target_date,
+                        exclude_summary_id=exclude_summary_id,
+                        for_update=True,
+                    ):
+                        form.add_error(
+                            None,
+                            'The destination branch day has been reviewed and locked.',
+                        )
+                    else:
+                        updated_record = form.save(commit=False)
+                        updated_record._audit_actor = request.user
+                        if record_type == 'summary':
+                            updated_record.updated_by = request.user
+                        if (
+                            record_type == 'expense'
+                            and updated_record.status == 'approved'
+                            and form.changed_data
+                        ):
+                            updated_record.status = 'submitted'
+                            updated_record.approved_by = None
+                        updated_record.save()
+                        form.save_m2m()
+                        branch, business_date = _ledger_record_branch_date(
+                            record_type, updated_record,
+                        )
+                        messages.success(
+                            request,
+                            f'{_LEDGER_RECORD_LABELS[record_type]} updated.',
+                        )
+                        return redirect(_ledger_redirect(branch, business_date))
+        except IntegrityError:
+            if form is None:
+                form = _ledger_edit_form(record_type, request, record)
+            form.add_error(
+                None,
+                'This reference or branch/date is already in use.',
+            )
+
+    else:
+        if _ledger_record_is_locked(record_type, record):
+            messages.error(request, 'This branch day has been reviewed and locked.')
+            branch, business_date = _ledger_record_branch_date(record_type, record)
+            return redirect(_ledger_redirect(branch, business_date))
+        form = _ledger_edit_form(record_type, request, record)
+
+    return render(request, 'documents/ledger_transaction_edit.html', {
+        'form': form,
+        'record': record,
+        'record_type': record_type,
+        'record_label': _LEDGER_RECORD_LABELS[record_type],
+        'return_url': _ledger_redirect(
+            record.branch,
+            getattr(record, _LEDGER_RECORD_DATE_FIELDS[record_type]),
+        ),
+    })
+
+
+@login_required
+@require_POST
+def ledger_transaction_delete(request, record_type, pk):
+    if not _can_manage_ledger_transactions(request.user):
+        raise PermissionDenied
+
+    try:
+        with transaction.atomic():
+            record = _get_ledger_record(
+                request.user, record_type, pk, for_update=True,
+            )
+            branch, business_date = _ledger_record_branch_date(
+                record_type, record,
+            )
+            if _ledger_record_is_locked(
+                record_type, record, for_update=True,
+            ):
+                messages.error(request, 'This branch day has been reviewed and locked.')
+            else:
+                record._audit_actor = request.user
+                record.delete()
+                messages.success(
+                    request,
+                    f'{_LEDGER_RECORD_LABELS[record_type]} deleted.',
+                )
+    except IntegrityError:
+        messages.error(request, 'This transaction could not be deleted.')
+
+    return redirect(_ledger_redirect(branch, business_date))
+
+
 def _branch_daily_ledger(request, expense_only=False):
     branches = accessible_branches(request.user)
     external_branches = branches.filter(external_reporting=True)
@@ -424,6 +651,10 @@ def _branch_daily_ledger(request, expense_only=False):
         ).select_related('branch', 'submitted_by', 'reviewed_by')
     )
     summary_by_branch = {summary.branch_id: summary for summary in summaries}
+    locked_branch_ids = {
+        summary.branch_id for summary in summaries if summary.reviewed_at
+    }
+    can_manage_transactions = _can_manage_ledger_transactions(request.user)
     external_entries = list(
         BranchDailyTransaction.objects.filter(
             branch__in=selected_branches.filter(external_reporting=True),
@@ -463,6 +694,7 @@ def _branch_daily_ledger(request, expense_only=False):
     def append_transaction(
         *, branch, created_at, pk, entry_type, description, method, reference,
         recorded_by, inflow=zero, outflow=zero, counts_in_totals=True,
+        record_type=None, actions_available=True,
     ):
         transactions.append({
             'branch': branch,
@@ -476,6 +708,16 @@ def _branch_daily_ledger(request, expense_only=False):
             'inflow': inflow,
             'outflow': outflow,
             'counts_in_totals': counts_in_totals,
+            'record_type': record_type,
+            'actions_locked': bool(
+                record_type and branch.pk in locked_branch_ids
+            ),
+            'can_edit': bool(
+                can_manage_transactions
+                and record_type
+                and actions_available
+                and branch.pk not in locked_branch_ids
+            ),
         })
 
     for entry in external_entries:
@@ -490,6 +732,7 @@ def _branch_daily_ledger(request, expense_only=False):
             recorded_by=user_label(entry.entered_by),
             inflow=entry.amount if entry.direction == 'inflow' else zero,
             outflow=entry.amount if entry.direction == 'outflow' else zero,
+            record_type='daily_entry',
         )
 
     payments = Payment.objects.filter(
@@ -513,6 +756,7 @@ def _branch_daily_ledger(request, expense_only=False):
             reference=payment.reference,
             recorded_by=user_label(payment.received_by),
             inflow=payment.amount,
+            record_type='payment',
         )
 
     incomes = OtherIncome.objects.filter(
@@ -531,6 +775,7 @@ def _branch_daily_ledger(request, expense_only=False):
             reference=income.reference,
             recorded_by=user_label(income.recorded_by),
             inflow=income.amount,
+            record_type='other_income',
         )
 
     expenses = Expense.objects.filter(
@@ -557,6 +802,7 @@ def _branch_daily_ledger(request, expense_only=False):
             recorded_by=user_label(expense.paid_by or expense.created_by),
             outflow=expense.amount,
             counts_in_totals=expense.status == 'approved',
+            record_type='expense',
         )
 
     for transfer in BranchAccountTransfer.objects.filter(
@@ -579,6 +825,7 @@ def _branch_daily_ledger(request, expense_only=False):
             'reference': transfer.reference,
             'recorded_by': user_label(transfer.entered_by),
             'counts_in_totals': False,
+            'record_type': 'transfer',
         }
         append_transaction(
             **common,
@@ -595,6 +842,7 @@ def _branch_daily_ledger(request, expense_only=False):
                 f'{transfer.description}'
             ),
             inflow=transfer.amount,
+            actions_available=False,
         )
 
     external_entry_branches = {entry.branch_id for entry in external_entries}
@@ -612,6 +860,7 @@ def _branch_daily_ledger(request, expense_only=False):
             recorded_by=user_label(summary.submitted_by),
             inflow=summary.cash_inflow,
             outflow=summary.cash_outflow,
+            record_type='summary',
         )
 
     transactions.sort(
@@ -640,6 +889,7 @@ def _branch_daily_ledger(request, expense_only=False):
         'net_movement': total_inflow - total_outflow,
         'reconciliations': reconciliations,
         'can_review_summary': request.user.is_manager_or_admin(),
+        'can_manage_transactions': can_manage_transactions,
         'open_transaction_modal': open_transaction_modal,
         'category_directions': BranchDailyTransaction.CATEGORY_DIRECTIONS,
         'expense_only': expense_only,

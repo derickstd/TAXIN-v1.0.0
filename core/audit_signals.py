@@ -13,6 +13,9 @@ AUDITED_MODELS = {
     'billing.Payment': ('payment', 'received_by'),
     'billing.Invoice': ('invoice', 'created_by'),
     'billing.OtherIncome': ('other_income', 'recorded_by'),
+    'billing.BranchDailySummary': ('branch_daily_summary', 'submitted_by'),
+    'billing.BranchDailyTransaction': ('branch_daily_transaction', 'entered_by'),
+    'documents.BranchAccountTransfer': ('branch_account_transfer', 'entered_by'),
     'services.JobCard': ('job_card', 'created_by'),
     'compliance.ComplianceDeadline': ('compliance_deadline', 'filed_by'),
 }
