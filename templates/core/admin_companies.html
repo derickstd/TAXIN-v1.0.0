@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Company and Branches{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'core:admin_dashboard' %}">Admin Dashboard</a></li><li class="active">Company and Branches</li>{% endblock %}
 {% block content %}
 <div style="padding:2rem;max-width:1400px;margin:0 auto;">
   <h1 style="margin:0 0 2rem;color:#1A3C6E;font-size:1.8rem;font-weight:800;">Company and Branches</h1>

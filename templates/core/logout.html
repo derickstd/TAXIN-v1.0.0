@@ -40,11 +40,11 @@ p{color:#64748b;font-size:.95rem;margin:0 0 1.6rem;line-height:1.6}
 <div class="login-layout">
   <section class="login-hero">
     <div class="hero-copy">
-      <h3>You’re signed out.</h3>
-      <p>Your session has ended. Sign back in to continue using Taxin and keep managing your practice securely.</p>
+      <h3>Ready to sign out?</h3>
+      <p>Your session stays active until you confirm that you want to sign out.</p>
       <div class="hero-stats">
-        <div class="stat-block"><strong>Secure</strong><span>Session cleared</span></div>
-        <div class="stat-block"><strong>Ready</strong><span>When you are</span></div>
+        <div class="stat-block"><strong>Secure</strong><span>Confirm to end your session</span></div>
+        <div class="stat-block"><strong>Taxin</strong><span>Return whenever you need</span></div>
       </div>
     </div>
     <div class="hero-graphic">
@@ -58,9 +58,13 @@ p{color:#64748b;font-size:.95rem;margin:0 0 1.6rem;line-height:1.6}
   <div class="login-shell">
     <div class="logout-card">
       <div class="icon"><i class="fas fa-sign-out-alt"></i></div>
-      <h2>You've been signed out</h2>
-      <p>Your session has ended. Sign back in to continue using Taxin.</p>
-      <a href="{% url 'login' %}" class="btn-login">Sign In Again</a>
+      <h2>Sign out of Taxin?</h2>
+      <p>Choose whether to end your current session.</p>
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn-login">Sign Out</button>
+      </form>
+      <a href="{% url 'dashboard:index' %}" class="btn-login" style="margin-top:.7rem;background:#64748b">Stay Signed In</a>
       <div class="hint">Taxin Practice Management System</div>
     </div>
   </div>

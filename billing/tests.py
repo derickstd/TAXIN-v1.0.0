@@ -1153,8 +1153,6 @@ class PaymentReceiptReportTests(TestCase):
             'search': self.payment.receipt_number,
             'date_from': self.payment_date.isoformat(),
             'date_to': self.payment_date.isoformat(),
-            'client': self.customer.pk,
-            'service_type': self.service.pk,
             'method': 'cash',
             'branch': self.branch.pk,
         })
@@ -1162,14 +1160,37 @@ class PaymentReceiptReportTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['record_count'], 1)
         self.assertEqual(response.context['total_amount'], Decimal('1234.50'))
+        self.assertContains(
+            response,
+            '<li class="active payment-report-breadcrumb" aria-current="page">Payments &amp; Receipts</li>',
+            html=True,
+        )
+        self.assertNotContains(response, '<h1 class="page-title">')
         self.assertContains(response, self.payment.receipt_number)
         self.assertNotContains(response, other_payment.receipt_number)
         self.assertContains(response, 'Searchable Customer')
-        self.assertContains(response, 'class="form-control s2"')
+        self.assertContains(response, 'Payment receipt filters')
+        self.assertContains(response, 'data-filter-toolbar')
+        self.assertContains(response, 'data-filter-submit')
+        self.assertContains(response, 'Receipt, customer, service, invoice, or reference')
+        self.assertNotIn('client', response.context['filter_form'].fields)
+        self.assertNotIn('service_type', response.context['filter_form'].fields)
         self.assertContains(
             response,
             reverse('billing:payment_receipt', args=[self.payment.pk]),
         )
+
+    def test_receipt_report_search_matches_customer_and_service_names(self):
+        for search in (self.customer.full_name, self.service.name):
+            with self.subTest(search=search):
+                response = self.client.get(
+                    reverse('billing:payments_report'),
+                    {'search': search},
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['record_count'], 1)
+                self.assertContains(response, self.payment.receipt_number)
 
     def test_admin_can_delete_payment_and_related_balances_are_recalculated(self):
         invoice = Invoice.objects.create(

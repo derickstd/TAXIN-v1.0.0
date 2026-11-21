@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Transaction Edit Log{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'core:admin_dashboard' %}">Admin Dashboard</a></li><li><a href="{% url 'core:admin_audit_logs' %}">Audit Logs</a></li><li class="active">Transaction Edit Log</li>{% endblock %}
 {% block content %}
 <h3>Transaction Edit Log</h3>
 <table class="tbl">

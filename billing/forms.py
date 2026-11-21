@@ -2,7 +2,6 @@ from django import forms
 from clients.models import Client
 from core.branch_access import accessible_branches, scope_queryset
 from core.models import Branch
-from services.models import ServiceType
 from .models import Invoice, Payment
 
 
@@ -59,7 +58,7 @@ class PaymentReceiptFilterForm(forms.Form):
         max_length=200,
         widget=forms.TextInput(attrs={
             'class': 'form-control',
-            'placeholder': 'Receipt, customer, invoice, or reference',
+            'placeholder': 'Receipt, customer, service, invoice, or reference',
         }),
     )
     date_from = forms.DateField(
@@ -71,26 +70,6 @@ class PaymentReceiptFilterForm(forms.Form):
         required=False,
         label='To',
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-    )
-    client = forms.ModelChoiceField(
-        required=False,
-        label='Customer',
-        queryset=Client.objects.none(),
-        empty_label='All customers',
-        widget=forms.Select(attrs={
-            'class': 'form-control s2',
-            'data-ph': 'Search customers…',
-        }),
-    )
-    service_type = forms.ModelChoiceField(
-        required=False,
-        label='Service',
-        queryset=ServiceType.objects.none(),
-        empty_label='All services',
-        widget=forms.Select(attrs={
-            'class': 'form-control s2',
-            'data-ph': 'Search services…',
-        }),
     )
     method = forms.ChoiceField(
         required=False,
@@ -108,14 +87,6 @@ class PaymentReceiptFilterForm(forms.Form):
 
     def __init__(self, *args, user, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['client'].queryset = scope_queryset(
-            user, Client.objects.order_by('full_name'),
-        )
-        self.fields['service_type'].queryset = scope_queryset(
-            user,
-            ServiceType.objects.filter(is_active=True),
-            branch_path='branches',
-        ).distinct().order_by('name')
         self.fields['branch'].queryset = accessible_branches(user).order_by('name')
 
     def clean(self):

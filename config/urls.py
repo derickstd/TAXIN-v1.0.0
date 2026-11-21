@@ -29,7 +29,7 @@ urlpatterns = [
     path('password-reset-complete/', auth_views.PasswordResetCompleteView.as_view(
         template_name='core/password_reset_complete.html'
     ), name='password_reset_complete'),
-    path('logout/', auth_views.LogoutView.as_view(template_name='core/logout.html'), name='logout'),
+    path('logout/', core_views.ConfirmLogoutView.as_view(template_name='core/logout.html'), name='logout'),
     path('signup/', signup, name='signup'),
     path('sw.js',   service_worker, name='sw'),
     path('dashboard/',     include('dashboard.urls')),

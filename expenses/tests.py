@@ -7,6 +7,7 @@ from django.urls import reverse
 from core.models import Branch, Company, User
 from expenses.models import Expense, ExpenseCategory, ExpenseApprovalSettings
 from expenses.utils import should_require_approval
+from expenses.views import ExpenseForm
 
 
 class ExpenseApprovalTests(TestCase):
@@ -72,6 +73,26 @@ class ExpenseApprovalTests(TestCase):
         self.assertEqual(expense.approved_by, superuser)
         self.assertEqual(response.status_code, 302)
 
+    def test_expense_list_uses_finance_breadcrumb_and_filter_card_actions(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('expenses:list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<li><a href="{reverse("billing:list")}">Finance</a></li>',
+        )
+        self.assertContains(response, '<li class="active" aria-current="page">Expenses</li>')
+        self.assertNotContains(response, '<div class="page-header">')
+        self.assertContains(response, 'Manage Categories')
+        self.assertContains(response, 'Log Expense')
+        html = response.content.decode()
+        filter_card_start = html.index('aria-label="Expense search and filters"')
+        filter_card_end = html.index('</section>', filter_card_start)
+        actions_position = html.index('Manage Categories')
+        self.assertLess(filter_card_start, actions_position)
+        self.assertLess(actions_position, filter_card_end)
+
     def test_expense_entry_uses_the_users_branch_workspace(self):
         company = Company.objects.create(name='Expense Branch Co', slug='expense-branch')
         branch = Branch.objects.create(company=company, name='TAXMAN')
@@ -96,6 +117,21 @@ class ExpenseApprovalTests(TestCase):
         self.assertEqual(response.status_code, 302)
         expense = Expense.objects.get(description='Branch workspace expense')
         self.assertEqual(expense.branch, branch)
+
+    def test_expense_categories_are_available_in_each_branch(self):
+        company = Company.objects.create(name='Shared Categories Co', slug='shared-categories')
+        branch = Branch.objects.create(company=company, name='PRIME FOCUS')
+        user = User.objects.create_user(
+            username='prime-focus-expense-user',
+            password='pass1234',
+            role='tax_officer',
+            company=company,
+            branch=branch,
+        )
+
+        form = ExpenseForm(user=user)
+
+        self.assertIn(self.category, form.fields['category'].queryset)
 
     def test_invalid_expense_submission_shows_errors_and_preserves_input(self):
         self.client.force_login(self.user)

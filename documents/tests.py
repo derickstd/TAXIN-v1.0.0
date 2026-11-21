@@ -596,6 +596,13 @@ class ExternalBranchReportTests(TestCase):
         self.assertContains(response, 'What was received or paid?')
         self.assertContains(response, 'Record money in or out for the selected branch.')
         self.assertContains(response, 'ledgerCategoryDirections')
+        ledger_html = response.content.decode()
+        filter_card_start = ledger_html.index('<section class="card-box mb-3">')
+        filter_card_end = ledger_html.index('</section>', filter_card_start)
+        add_transaction_position = ledger_html.index('id="openLedgerEntryModal"')
+        self.assertLess(filter_card_start, add_transaction_position)
+        self.assertLess(add_transaction_position, filter_card_end)
+        self.assertNotIn('page-header-actions', ledger_html)
 
         payload = {
             'branch': self.branch.pk,
@@ -1070,6 +1077,48 @@ class BranchAccountingReportTests(TestCase):
             sum(row['outflow'] for row in transfer_rows),
             Decimal('50'),
         )
+        self.assertFalse(Expense.objects.exists())
+
+    def test_account_transfer_records_bank_charges_as_expense(self):
+        today = timezone.localdate()
+        url = f"{reverse('documents:branch_account_transfer')}?popover=1"
+        response = self.client.post(
+            url,
+            {
+                'branch': self.branch.pk,
+                'transfer_date': today.isoformat(),
+                'source_account': 'cash',
+                'destination_account': 'bank',
+                'amount': '50000',
+                'bank_charges': '1250.50',
+                'description': 'Daily banking',
+                'reference': 'BANK-FEE-001',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content,
+            {
+                'message': (
+                    'Bank deposit recorded. Bank charges of UGX 1,250.50 '
+                    'were recorded as an expense.'
+                ),
+            },
+        )
+        transfer = BranchAccountTransfer.objects.get(reference='BANK-FEE-001')
+        charge = Expense.objects.get(reference='BANK-FEE-001')
+        self.assertEqual(transfer.amount, Decimal('50000'))
+        self.assertEqual(charge.category.name, 'Bank Charges')
+        self.assertEqual(charge.amount, Decimal('1250.50'))
+        self.assertEqual(charge.branch, self.branch)
+        self.assertEqual(charge.expense_date, today)
+        self.assertEqual(charge.payment_method, 'bank_transfer')
+        self.assertEqual(charge.paid_by, self.user)
+        self.assertEqual(charge.created_by, self.user)
+        self.assertEqual(charge.status, 'submitted')
+        self.assertIn('BANK-FEE-001', charge.description)
 
     def test_account_transfer_popover_loads_validates_and_records(self):
         today = timezone.localdate()
@@ -1079,6 +1128,7 @@ class BranchAccountingReportTests(TestCase):
         self.assertEqual(form_response.status_code, 200)
         self.assertContains(form_response, 'Record Bank Transfer')
         self.assertContains(form_response, 'data-branch-transfer-form')
+        self.assertContains(form_response, 'name="bank_charges"')
         self.assertEqual(form_response.context['selected_branch'], self.branch)
 
         invalid_response = self.client.post(
@@ -1122,6 +1172,7 @@ class BranchAccountingReportTests(TestCase):
                 'source_account': 'cash',
                 'destination_account': 'bank',
                 'amount': '25',
+                'bank_charges': '0',
                 'description': 'Daily banking',
                 'reference': 'BANK-POPOVER-001',
             },
@@ -1136,6 +1187,7 @@ class BranchAccountingReportTests(TestCase):
             branch=self.branch, reference='BANK-POPOVER-001',
             amount=Decimal('25'),
         ).exists())
+        self.assertFalse(Expense.objects.exists())
 
     def test_bank_statement_and_cash_flow_show_both_sides_of_transfers(self):
         today = timezone.localdate()

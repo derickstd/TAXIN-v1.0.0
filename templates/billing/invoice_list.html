@@ -26,25 +26,51 @@
 </div>
 {% endif %}
 
-<div class="list-toolbar">
-  <div class="list-actions">
-    {% include "components/export_buttons.html" with excel_url="core:export_invoices_excel" pdf_url="core:export_invoices_pdf" show_condition=page_obj.paginator.count compact=True %}
+<section class="record-filter-toolbar" aria-label="Invoice search and filters">
+  <div class="record-filter-toolbar__head">
+    <div class="record-filter-toolbar__identity">
+      <span class="record-filter-toolbar__icon"><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i></span>
+      <div>
+        <h2>Find an invoice</h2>
+        <p>Search by invoice number or client, then narrow by status.</p>
+      </div>
+    </div>
+    <div class="record-filter-toolbar__exports">
+      {% include "components/export_buttons.html" with excel_url="core:export_invoices_excel" pdf_url="core:export_invoices_pdf" show_condition=page_obj.paginator.count compact=True %}
+    </div>
   </div>
-  <form method="get">
-    <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Invoice number or client name…">
-    <select name="status" class="form-select" onchange="this.form.submit()">
-      <option value="">All Statuses</option>
-      {% for val,label in status_choices %}<option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-    </select>
-    <button class="btn btn-primary" title="Apply filters"><i class="fas fa-search"></i></button>
-    <a href="{% url 'billing:list' %}" class="btn btn-outline" title="Clear filters"><i class="fas fa-times"></i></a>
+
+  <form class="record-filter-toolbar__form record-filter-toolbar__form--invoice" method="get" action="{% url 'billing:list' %}" data-filter-toolbar>
+    <label class="record-filter-toolbar__field record-filter-toolbar__search">
+      <span>Search invoices</span>
+      <span class="record-filter-toolbar__input">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input type="search" name="q" value="{{ q }}" class="form-control"
+          placeholder="Invoice number or client name" aria-label="Search by invoice number or client name">
+      </span>
+    </label>
+    <label class="record-filter-toolbar__field">
+      <span>Invoice status</span>
+      <select name="status" class="form-select" data-auto-submit>
+        <option value="">All statuses</option>
+        {% for val,label in status_choices %}<option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="record-filter-toolbar__actions">
+      <button type="submit" class="btn btn-primary" data-filter-submit>
+        <i class="fas fa-search" aria-hidden="true"></i><span>Apply</span>
+      </button>
+      <a href="{% url 'billing:list' %}" class="btn btn-outline" aria-label="Clear invoice filters">
+        <i class="fas fa-rotate-left" aria-hidden="true"></i><span>Reset</span>
+      </a>
+    </div>
   </form>
-  <div class="toolbar-meta">
-    <span class="badge badge-open">{{ invoices|length }} visible</span>
-    <span>Status: {{ status|default:"All" }}</span>
-    <a href="{% url 'billing:create' %}" class="btn btn-outline btn-sm">New invoice</a>
+
+  <div class="record-filter-toolbar__footer">
+    <span class="record-filter-toolbar__result"><i class="fas fa-layer-group" aria-hidden="true"></i>{{ page_obj.paginator.count }} matching invoices</span>
+    {% if status %}<span class="record-filter-toolbar__active">Filtered by <strong>{{ status|title }}</strong></span>{% endif %}
   </div>
-</div>
+</section>
 
 <div class="card-box card-compact">
   <div class="tbl-wrap">

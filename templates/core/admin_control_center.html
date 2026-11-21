@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}System Control Center{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'core:admin_dashboard' %}">Admin Dashboard</a></li><li class="active">System Control Center</li>{% endblock %}
 {% block content %}
 <div style="padding:2rem;max-width:1400px;margin:0 auto;">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem;">

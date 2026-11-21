@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Branches for {{ company.name }}{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'core:admin_dashboard' %}">Admin Dashboard</a></li><li><a href="{% url 'core:admin_companies' %}">Company and Branches</a></li><li class="active">Branches for {{ company.name }}</li>{% endblock %}
 {% block content %}
 <div style="padding:2rem;max-width:1200px;margin:0 auto;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;gap:1rem;flex-wrap:wrap;">

@@ -146,6 +146,21 @@ class BranchBalanceSheetEntryForm(forms.ModelForm):
 
 
 class BranchAccountTransferForm(forms.ModelForm):
+    bank_charges = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=12,
+        decimal_places=2,
+        label='Bank charges',
+        help_text='Optional bank fee, recorded separately as an expense.',
+        widget=forms.NumberInput(attrs={
+            'min': '0',
+            'step': '0.01',
+            'placeholder': 'e.g. 1,500',
+            'data-money-input': 'true',
+        }),
+    )
+
     class Meta:
         model = BranchAccountTransfer
         fields = [

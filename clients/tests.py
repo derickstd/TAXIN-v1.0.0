@@ -60,6 +60,28 @@ class ClientOnboardingTests(TestCase):
             [newer_client.pk, older_client.pk],
         )
 
+    def test_client_list_renders_status_tab_counts(self):
+        response = self.client.get(reverse('clients:list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-filter-toolbar')
+        self.assertContains(response, 'Find a client')
+        self.assertNotContains(response, '<h2>Client directory</h2>')
+        status_counts = {
+            value: count
+            for value, _label, count in response.context['status_counts']
+        }
+        for value, count in status_counts.items():
+            self.assertEqual(
+                count,
+                Client.objects.filter(status=value).count(),
+            )
+            self.assertContains(
+                response,
+                f'<span class="record-filter-tab__count">{count}</span>',
+                html=True,
+            )
+
     def test_create_route_uses_add_customer_page(self):
         request = self.factory.get(reverse('clients:create'))
         request.user = self.user

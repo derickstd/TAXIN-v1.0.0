@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.utils.text import slugify
 
 from .models import Branch
@@ -53,13 +54,10 @@ def ensure_business_branches(company):
 
     from services.models import ServiceType
 
-    for service in ServiceType.objects.filter(
-        branches__isnull=True,
-    ).distinct():
-        service.branches.add(taxman, prime_focus)
-    for service in ServiceType.objects.filter(
-        branches=taxman,
-    ).distinct():
-        service.branches.add(prime_focus)
+    services = ServiceType.objects.filter(
+        Q(branches__company=company) | Q(branches__isnull=True),
+    ).distinct()
+    for service in services:
+        service.branches.add(taxman, prime_focus, aba_uganda)
 
     return taxman, prime_focus, aba_uganda

@@ -1,5 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}Edit Transaction{% endblock %}
+{% block breadcrumbs %}
+{% if transaction_type == 'invoice' %}
+<li><a href="{% url 'billing:list' %}">Finance</a></li>
+{% elif transaction_type == 'job_card' %}
+<li><a href="{% url 'services:list' %}">Engagements</a></li>
+{% elif transaction_type == 'compliance_deadline' %}
+<li><a href="{% url 'compliance:list' %}">Compliance</a></li>
+{% endif %}
+<li class="active">Edit Transaction</li>
+{% endblock %}
 {% block content %}
 <h3>Edit Transaction</h3>
 <form method="post">{% csrf_token %}

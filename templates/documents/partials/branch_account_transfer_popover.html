@@ -3,7 +3,7 @@
     <h5 id="accountTransferTitle">Record Bank Transfer</h5>
     <button type="button" class="modal-close" data-close-account-transfer aria-label="Close transfer form">&times;</button>
   </div>
-  <p class="form-hint">Record money moving between cash accounts and the bank. Transfers are not income or expenses.</p>
+  
   <form method="post" action="{% url 'documents:branch_account_transfer' %}?popover=1" data-branch-transfer-form>
     {% csrf_token %}
     {% include 'documents/partials/branch_account_transfer_fields.html' %}

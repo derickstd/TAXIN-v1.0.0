@@ -733,6 +733,7 @@ def branch_account_transfer(request):
         if form.is_valid():
             transfer = form.save(commit=False)
             transfer.entered_by = request.user
+            bank_charges = form.cleaned_data['bank_charges']
             try:
                 with transaction.atomic():
                     summary = BranchDailySummary.objects.select_for_update().filter(
@@ -743,22 +744,52 @@ def branch_account_transfer(request):
                         form.add_error(None, 'This day has been reviewed and locked.')
                     else:
                         transfer.save()
+                        if bank_charges:
+                            category, _ = ExpenseCategory.objects.get_or_create(
+                                name='Bank Charges',
+                            )
+                            transfer_identifier = (
+                                transfer.reference or f'#{transfer.pk}'
+                            )
+                            Expense.objects.create(
+                                expense_date=transfer.transfer_date,
+                                category=category,
+                                description=(
+                                    'Bank charges for account transfer '
+                                    f'{transfer_identifier}'
+                                ),
+                                amount=bank_charges,
+                                paid_by=request.user,
+                                payment_method='bank_transfer',
+                                reference=(
+                                    transfer.reference
+                                    or f'BANK-CHARGE-{transfer.pk}'
+                                ),
+                                status='submitted',
+                                branch=transfer.branch,
+                                created_by=request.user,
+                            )
                 if not form.errors:
                     transfer_label = (
                         'Bank deposit'
                         if transfer.destination_account == 'bank'
                         else 'Bank withdrawal'
                     )
+                    charge_note = (
+                        f' Bank charges of UGX {bank_charges:,.2f} '
+                        'were recorded as an expense.'
+                        if bank_charges else ''
+                    )
                     if (
                         popover_mode
                         and request.headers.get('X-Requested-With') == 'XMLHttpRequest'
                     ):
                         return JsonResponse({
-                            'message': f'{transfer_label} recorded.',
+                            'message': f'{transfer_label} recorded.{charge_note}',
                         })
                     messages.success(
                         request,
-                        f'{transfer_label} recorded as an account transfer.',
+                        f'{transfer_label} recorded as an account transfer.{charge_note}',
                     )
                     return redirect(
                         f"{reverse('documents:branch_account_statement')}?"

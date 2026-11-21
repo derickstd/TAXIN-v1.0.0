@@ -3,78 +3,100 @@
 {% block nav_clients %}active{% endblock %}
 {% block breadcrumbs %}<li class="active">Clients</li>{% endblock %}
 {% block content %}
-<div class="list-toolbar">
-  <div class="list-actions">
-    {% include "components/export_buttons.html" with excel_url="core:export_clients_excel" pdf_url="core:export_clients_pdf" show_condition=page_obj.paginator.count compact=True %}
+<section class="record-filter-toolbar" aria-label="Client directory filters">
+  {% if page_obj.paginator.count %}
+  <div class="record-filter-toolbar__head record-filter-toolbar__head--actions">
+    <div class="record-filter-toolbar__exports">
+      {% include "components/export_buttons.html" with excel_url="core:export_clients_excel" pdf_url="core:export_clients_pdf" show_condition=page_obj.paginator.count compact=True %}
+    </div>
   </div>
-  <form id="clientFilterForm" method="get" action="{% url 'clients:list' %}">
-      <!-- Instant search -->
-        <input type="text" id="clientSearch" name="q" value="{{ q }}"
-          class="form-control" style="font-size:.85rem"
-          placeholder="Search name, TIN, phone, ID…"
-          autocomplete="off">
+  {% endif %}
 
-        <!-- Status -->
-        <select id="filterStatus" name="status" class="form-select" style="font-size:.83rem">
-          <option value="">All Statuses</option>
-          {% for val,label in status_choices %}
-          <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
+  <form id="clientFilterForm" class="record-filter-toolbar__form" method="get" action="{% url 'clients:list' %}" data-filter-toolbar>
+    <label class="record-filter-toolbar__field record-filter-toolbar__search">
+      <span>Find a client</span>
+      <span class="record-filter-toolbar__input">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input type="search" id="clientSearch" name="q" value="{{ q }}"
+          class="form-control" placeholder="Name, TIN, phone or client ID"
+          autocomplete="off" aria-label="Search clients by name, TIN, phone or ID">
+      </span>
+    </label>
 
-        <!-- Type -->
-        <select id="filterType" name="type" class="form-select" style="font-size:.83rem">
-          <option value="">All Types</option>
-          {% for val,label in type_choices %}
-          <option value="{{ val }}" {% if ctype == val %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
+    <label class="record-filter-toolbar__field">
+      <span>Status</span>
+      <select id="filterStatus" name="status" class="form-select" data-auto-submit>
+        <option value="">All statuses</option>
+        {% for val,label in status_choices %}
+        <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
 
-        <!-- Debt filter -->
-        <select id="filterDebt" name="debt" class="form-select" style="font-size:.83rem">
-          <option value="">All Clients</option>
-          <option value="indebted" {% if debt_filter == 'indebted' %}selected{% endif %}>Indebted (Balance &gt; 0)</option>
-          <option value="uncleared_invoices" {% if debt_filter == 'uncleared_invoices' %}selected{% endif %}>Uncleared Invoices</option>
-          <option value="cleared" {% if debt_filter == 'cleared' %}selected{% endif %}>Fully Cleared</option>
-        </select>
+    <label class="record-filter-toolbar__field">
+      <span>Client type</span>
+      <select id="filterType" name="type" class="form-select" data-auto-submit>
+        <option value="">All types</option>
+        {% for val,label in type_choices %}
+        <option value="{{ val }}" {% if ctype == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
 
-        <button type="submit" class="btn btn-outline btn-sm"><i class="fas fa-search"></i> Search</button>
-        <a href="?per_page={{ page_obj.paginator.per_page }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i> Clear</a>
-        <label style="display:flex;align-items:center;gap:.4rem;font-size:.85rem">
-          Show
-          <select name="per_page" class="form-select" style="min-width:96px">
-            {% for opt in per_page_options %}
-              <option value="{{ opt }}" {% if page_obj.paginator.per_page == opt %}selected{% endif %}>{{ opt }}</option>
-            {% endfor %}
-          </select>
-          per page
-        </label>
-        <span id="visibleCount" style="font-size:.78rem;color:#888;margin-left:.3rem"></span>
+    <label class="record-filter-toolbar__field">
+      <span>Account</span>
+      <select id="filterDebt" name="debt" class="form-select" data-auto-submit>
+        <option value="">All accounts</option>
+        <option value="indebted" {% if debt_filter == 'indebted' %}selected{% endif %}>Has outstanding balance</option>
+        <option value="uncleared_invoices" {% if debt_filter == 'uncleared_invoices' %}selected{% endif %}>Uncleared invoices</option>
+        <option value="cleared" {% if debt_filter == 'cleared' %}selected{% endif %}>Fully cleared</option>
+      </select>
+    </label>
+
+    <div class="record-filter-toolbar__actions">
+      <button type="submit" class="btn btn-primary" data-filter-submit>
+        <i class="fas fa-search" aria-hidden="true"></i><span>Apply</span>
+      </button>
+      <a href="?per_page={{ page_obj.paginator.per_page }}" class="btn btn-outline" aria-label="Clear client filters">
+        <i class="fas fa-rotate-left" aria-hidden="true"></i><span>Reset</span>
+      </a>
+    </div>
   </form>
-  <div class="toolbar-meta">
-    <span class="badge badge-open">{{ page_obj.paginator.count }} clients</span>
-  </div>
-</div>
 
-<!-- Status chips -->
-<div class="client-status-chips">
-  <a href="?{% if q %}q={{ q }}&{% endif %}per_page={{ page_obj.paginator.per_page }}" class="btn btn-sm {% if not status %}btn-primary{% else %}btn-outline{% endif %}">All</a>
-  {% for val,label in status_choices %}
-  <a href="?{% if q %}q={{ q }}&{% endif %}status={{ val }}{% if ctype %}&type={{ ctype }}{% endif %}{% if debt_filter %}&debt={{ debt_filter }}{% endif %}&per_page={{ page_obj.paginator.per_page }}"
-     class="btn btn-sm {% if status == val %}btn-primary{% else %}btn-outline{% endif %}">
-    {{ label }} <span style="opacity:.7">({{ counts|dictsort:val }})</span>
+  <div class="record-filter-toolbar__footer">
+    <span class="record-filter-toolbar__result"><i class="fas fa-layer-group" aria-hidden="true"></i>{{ page_obj.paginator.count }} matching clients</span>
+    <label class="record-filter-toolbar__page-size">
+      <span>Rows per page</span>
+      <select name="per_page" class="form-select" form="clientFilterForm" data-auto-submit>
+        {% for opt in per_page_options %}
+        <option value="{{ opt }}" {% if page_obj.paginator.per_page == opt %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+</section>
+
+<nav class="record-filter-tabs client-status-chips" aria-label="Filter clients by status">
+  <a href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if ctype %}type={{ ctype|urlencode }}&amp;{% endif %}{% if debt_filter %}debt={{ debt_filter|urlencode }}&amp;{% endif %}per_page={{ page_obj.paginator.per_page }}"
+     class="record-filter-tab {% if not status %}is-active{% endif %}" {% if not status %}aria-current="page"{% endif %}>
+    <span>All clients</span><span class="record-filter-tab__count">{{ page_obj.paginator.count }}</span>
+  </a>
+  {% for val,label,count in status_counts %}
+  <a href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if ctype %}type={{ ctype|urlencode }}&amp;{% endif %}{% if debt_filter %}debt={{ debt_filter|urlencode }}&amp;{% endif %}status={{ val|urlencode }}&amp;per_page={{ page_obj.paginator.per_page }}"
+     class="record-filter-tab {% if status == val %}is-active{% endif %}" {% if status == val %}aria-current="page"{% endif %}>
+    <span>{{ label }}</span><span class="record-filter-tab__count">{{ count }}</span>
   </a>
   {% endfor %}
-  <!-- Debt quick chips -->
-  <a href="?{% if q %}q={{ q }}&{% endif %}debt=indebted{% if status %}&status={{ status }}{% endif %}&per_page={{ page_obj.paginator.per_page }}"
-     class="btn btn-sm {% if debt_filter == 'indebted' %}btn-primary{% else %}btn-outline{% endif %}" style="{% if debt_filter == 'indebted' %}{% else %}color:var(--red){% endif %}">
-    <i class="fas fa-exclamation-circle"></i> Indebted
+  <span class="record-filter-tabs__divider" aria-hidden="true"></span>
+  <a href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if status %}status={{ status|urlencode }}&amp;{% endif %}{% if ctype %}type={{ ctype|urlencode }}&amp;{% endif %}debt=indebted&amp;per_page={{ page_obj.paginator.per_page }}"
+     class="record-filter-tab record-filter-tab--alert {% if debt_filter == 'indebted' %}is-active{% endif %}" {% if debt_filter == 'indebted' %}aria-current="page"{% endif %}>
+    <i class="fas fa-circle-exclamation" aria-hidden="true"></i><span>Indebted</span>
   </a>
-  <a href="?{% if q %}q={{ q }}&{% endif %}debt=uncleared_invoices{% if status %}&status={{ status }}{% endif %}&per_page={{ page_obj.paginator.per_page }}"
-     class="btn btn-sm {% if debt_filter == 'uncleared_invoices' %}btn-primary{% else %}btn-outline{% endif %}">
-    <i class="fas fa-file-invoice-dollar"></i> Uncleared Invoices
+  <a href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if status %}status={{ status|urlencode }}&amp;{% endif %}{% if ctype %}type={{ ctype|urlencode }}&amp;{% endif %}debt=uncleared_invoices&amp;per_page={{ page_obj.paginator.per_page }}"
+     class="record-filter-tab {% if debt_filter == 'uncleared_invoices' %}is-active{% endif %}" {% if debt_filter == 'uncleared_invoices' %}aria-current="page"{% endif %}>
+    <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i><span>Uncleared invoices</span>
   </a>
-</div>
+</nav>
 
 <div class="card card-compact">
   <div class="tbl-wrap">
@@ -209,32 +231,18 @@
 {% block extra_js %}
 <script>
 (function(){
-  var searchInput  = document.getElementById('clientSearch');
-  var filterStatus = document.getElementById('filterStatus');
-  var filterType   = document.getElementById('filterType');
-  var filterDebt   = document.getElementById('filterDebt');
-  var countEl      = document.getElementById('visibleCount');
-
-  function applyFilters() {
-    // Use the form submission instead of client-side filtering for complete results.
-    document.getElementById('clientFilterForm').submit();
-  }
-
-  // Submit the server-side filter form on change.
-  searchInput.addEventListener('keydown', function(event) {
-    if (event.key === 'Enter') {
+  var searchInput = document.getElementById('clientSearch');
+  document.addEventListener('keydown', function(event){
+    var target = event.target;
+    var isTyping = target instanceof HTMLElement
+      && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+    if(event.key==='/'&&!event.altKey&&!event.ctrlKey&&!event.metaKey&&!isTyping){
       event.preventDefault();
-      applyFilters();
+      searchInput.focus();
+    }else if(event.key==='Escape'&&target===searchInput&&searchInput.value){
+      searchInput.value='';
     }
   });
-  filterStatus.addEventListener('change', applyFilters);
-  filterType.addEventListener('change', applyFilters);
-  filterDebt.addEventListener('change', applyFilters);
-
-  var perPageSelect = document.querySelector('select[name="per_page"]');
-  if (perPageSelect) {
-    perPageSelect.addEventListener('change', applyFilters);
-  }
 
   refreshOutstandingBalances();
 

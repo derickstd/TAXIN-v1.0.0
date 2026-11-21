@@ -3,7 +3,7 @@ from django.utils import timezone
 from django.db.models import Count, Q
 from .models import JobCard, JobCardLineItem, ServiceCategory, ServiceType
 from clients.models import Client
-from core.models import User
+from core.models import Branch, User
 from core.branch_access import accessible_branches, scope_queryset
 from django.forms import inlineformset_factory
 import calendar
@@ -197,9 +197,19 @@ class ServiceTypeForm(forms.ModelForm):
             choices.append((self.instance.category, self.instance.category))
         self.fields['category'].choices = choices
         if user:
-            self.fields['branches'].queryset = accessible_branches(user)
-            if user.branch_id and user.role not in ('admin', 'ceo') and not user.is_superuser:
-                self.fields['branches'].initial = [user.branch_id]
+            if user.company_id:
+                branches = Branch.objects.filter(
+                    company_id=user.company_id, is_active=True,
+                )
+                self.fields['branches'].queryset = branches
+                if not self.instance.pk:
+                    self.fields['branches'].initial = list(
+                        branches.values_list('pk', flat=True),
+                    )
+            else:
+                self.fields['branches'].queryset = accessible_branches(user)
+                if user.branch_id and user.role not in ('admin', 'ceo') and not user.is_superuser:
+                    self.fields['branches'].initial = [user.branch_id]
         else:
             self.fields['branches'].queryset = self.instance.branches.all() if self.instance.pk else self.fields['branches'].queryset.none()
         self.fields['description'].required = False

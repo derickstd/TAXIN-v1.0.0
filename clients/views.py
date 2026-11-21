@@ -236,7 +236,10 @@ def client_list(request):
         'q': q, 'status': status, 'ctype': ctype, 'debt_filter': debt_filter,
         'status_choices': Client.STATUS, 'type_choices': Client.CLIENT_TYPE,
         'total_outstanding': total_outstanding,
-        'counts': {s: branch_clients.filter(status=s).count() for s, _ in Client.STATUS},
+        'status_counts': [
+            (status_value, status_label, branch_clients.filter(status=status_value).count())
+            for status_value, status_label in Client.STATUS
+        ],
         'per_page_options': [15, 30, 50, 100],
         'can_archive_clients': can_archive_clients,
     })

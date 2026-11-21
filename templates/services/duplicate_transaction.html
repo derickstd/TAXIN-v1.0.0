@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% block breadcrumbs %}<li><a href="{% url 'services:list' %}">Engagements</a></li><li class="active">Possible Duplicate Transaction</li>{% endblock %}
 {% block content %}
 <h2>Possible duplicate transaction detected</h2>
 <p>The system found similar transactions for this client and period. Review them before creating a new one.</p>

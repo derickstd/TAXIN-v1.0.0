@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% block breadcrumbs %}<li><a href="{% url 'clients:list' %}">Clients</a></li><li class="active">Possible Duplicate Clients</li>{% endblock %}
 {% block content %}
 <h2>Possible duplicate clients found</h2>
 <p>The system found existing clients similar to the one you're registering. Choose an action:</p>

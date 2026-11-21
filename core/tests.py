@@ -30,6 +30,36 @@ from core.branch_access import scope_queryset
 from core.views import UserForm
 
 
+class LogoutViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='logout-user',
+            password='logout-pass-123',
+        )
+        self.client.force_login(self.user)
+
+    def test_get_logout_shows_confirmation_without_ending_session(self):
+        response = self.client.get(reverse('logout'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Sign out of Taxin?')
+        self.assertContains(response, 'name="csrfmiddlewaretoken"')
+        self.assertEqual(int(self.client.session['_auth_user_id']), self.user.pk)
+
+    def test_post_logout_ends_session_and_redirects_to_login(self):
+        response = self.client.post(reverse('logout'))
+
+        self.assertRedirects(response, reverse('login'))
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_get_logout_redirects_unauthenticated_users_to_login(self):
+        self.client.logout()
+
+        response = self.client.get(reverse('logout'))
+
+        self.assertRedirects(response, reverse('login'))
+
+
 class CoreVisibilityTests(TestCase):
     def setUp(self):
         self.client_ct = ContentType.objects.get_for_model(Client)
@@ -180,17 +210,22 @@ class CoreVisibilityTests(TestCase):
         self.client.force_login(admin_user)
 
         pages = (
-            'core:admin_dashboard',
-            'core:admin_control_center',
-            'core:admin_companies',
-            'core:admin_analytics',
-            'core:admin_health',
+            ('core:admin_dashboard', 'Admin Dashboard'),
+            ('core:admin_control_center', 'System Control Center'),
+            ('core:admin_companies', 'Company and Branches'),
+            ('core:admin_analytics', 'System Analytics'),
+            ('core:admin_health', 'System Health'),
         )
-        for page_name in pages:
+        for page_name, breadcrumb in pages:
             with self.subTest(page=page_name):
                 response = self.client.get(reverse(page_name))
                 self.assertEqual(response.status_code, 200)
                 self.assertNotContains(response, 'Manage Tenants')
+                self.assertContains(
+                    response,
+                    f'<li class="active">{breadcrumb}</li>',
+                    html=True,
+                )
 
 
 class SettingsToolsTests(TestCase):

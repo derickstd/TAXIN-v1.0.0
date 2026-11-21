@@ -9,6 +9,7 @@ from billing.models import Invoice, Payment
 from clients.models import Client
 from core.models import Branch, Company, User
 from core.models import AuditLog
+from core.branch_setup import ensure_business_branches
 from core.duplicate_detection import check_duplicate_transaction
 from expenses.models import Expense, ExpenseCategory
 from services.models import JobCard, JobCardLineItem, ServiceType
@@ -631,17 +632,46 @@ class ServiceCatalogueManagementTests(TestCase):
         self.assertTrue(service.vat_applicable)
         self.assertTrue(service.is_active)
 
-    def test_service_form_defaults_to_managers_branch(self):
+    def test_service_form_defaults_to_all_company_branches(self):
         company = Company.objects.create(name='Service Form Co', slug='service-form')
-        branch = Branch.objects.create(company=company, name='Assigned Branch')
+        branches = [
+            Branch.objects.create(company=company, name=name)
+            for name in ('TAXMAN', 'PRIME FOCUS', 'ABA UGANDA')
+        ]
         manager = User.objects.create_user(
             username='service_manager', password='pass1234',
-            role='manager', company=company, branch=branch,
+            role='manager', company=company, branch=branches[0],
         )
 
         form = ServiceTypeForm(user=manager)
 
-        self.assertEqual(form['branches'].value(), [branch.pk])
+        self.assertCountEqual(
+            form['branches'].value(),
+            [branch.pk for branch in branches],
+        )
+
+    def test_branch_service_catalogue_shows_services_shared_by_branch_setup(self):
+        company = Company.objects.create(name='Shared Services Co', slug='shared-services')
+        taxman = Branch.objects.create(company=company, name='TAXMAN')
+        service = ServiceType.objects.create(
+            name='Shared Payroll Service',
+            category='nssf',
+        )
+        service.branches.add(taxman)
+        _, _, aba_uganda = ensure_business_branches(company)
+        user = User.objects.create_user(
+            username='aba-service-user',
+            password='pass1234',
+            role='tax_officer',
+            company=company,
+            branch=aba_uganda,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse('services:catalogue'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Shared Payroll Service')
 
     def test_remove_unused_service_deletes_it(self):
         service = ServiceType.objects.create(

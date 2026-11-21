@@ -12,7 +12,7 @@
 <section class="card-box">
   <div class="card-box-header">Cash and bank transfer</div>
   <div class="card-body">
-    <p class="form-hint">Transfers appear as money out of the source account and money into the destination account. They do not change total cash or profit.</p>
+    <p class="form-hint">The transfer amount moves money between accounts without changing total cash or profit. Any bank charges entered below are recorded separately as an expense.</p>
     <form method="post">
       {% csrf_token %}
       {% include 'documents/partials/branch_account_transfer_fields.html' %}

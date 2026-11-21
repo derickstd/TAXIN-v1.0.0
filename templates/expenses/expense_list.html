@@ -1,20 +1,11 @@
 {% extends 'base.html' %}
 {% block title %}Expenses{% endblock %}
 {% block nav_exp %}active{% endblock %}
-{% block breadcrumbs %}<li class="active">Expenses</li>{% endblock %}
+{% block breadcrumbs %}
+<li><a href="{% url 'billing:list' %}">Finance</a></li>
+<li class="active" aria-current="page">Expenses</li>
+{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h4 class="page-title"><i class="fas fa-receipt"></i>Expenses</h4>
-  <div style="display:flex;gap:.6rem">
-    <a href="{% url 'expenses:category_list' %}" class="btn btn-outline"><i class="fas fa-tags"></i>Manage Categories</a>
-    {% if active_branch.external_reporting %}
-    <a href="{% url 'documents:branch_daily_expense' %}?branch={{ active_branch.pk }}&amp;open=transaction" class="btn btn-primary"><i class="fas fa-plus"></i>Branch Daily Entries</a>
-    {% else %}
-    <a href="{% url 'expenses:create' %}" class="btn btn-primary"><i class="fas fa-plus"></i>Log Expense</a>
-    {% endif %}
-  </div>
-</div>
-
 <div class="stats-grid" style="margin-bottom:1rem">
   <div class="kpi red"><div class="kpi-label">Total Expenses</div><div class="kpi-value" style="font-size:1.1rem">{{ total|floatformat:0|intcomma }}</div><div class="kpi-sub">UGX all time</div></div>
   <div class="kpi"><div class="kpi-label">Approved</div><div class="kpi-value" style="font-size:1.1rem">{{ approved_total|floatformat:0|intcomma }}</div><div class="kpi-sub">UGX approved</div></div>
@@ -23,22 +14,46 @@
 
 <div class="row g-3">
   <div class="col-lg-8">
-    <div class="card-box card-compact" style="margin-bottom:.9rem">
-      <div class="card-body" style="padding:.7rem 1rem">
-        <form method="get" class="expense-list-filters">
+    <section class="record-filter-toolbar record-filter-toolbar--compact" aria-label="Expense search and filters">
+      <div class="record-filter-toolbar__head">
+        <div class="record-filter-toolbar__identity">
+          <span class="record-filter-toolbar__icon"><i class="fas fa-filter" aria-hidden="true"></i></span>
+          <div>
+            <h2>Filter expenses</h2>
+            <p>Narrow the list by category or date range.</p>
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap ms-auto">
+          <a href="{% url 'expenses:category_list' %}" class="btn btn-outline"><i class="fas fa-tags"></i>Manage Categories</a>
+          {% if active_branch.external_reporting %}
+          <a href="{% url 'documents:branch_daily_expense' %}?branch={{ active_branch.pk }}&amp;open=transaction" class="btn btn-primary"><i class="fas fa-plus"></i>Branch Daily Entries</a>
+          {% else %}
+          <a href="{% url 'expenses:create' %}" class="btn btn-primary"><i class="fas fa-plus"></i>Log Expense</a>
+          {% endif %}
+        </div>
+      </div>
+      <form method="get" class="record-filter-toolbar__form record-filter-toolbar__form--expenses" data-filter-toolbar>
+        <label class="record-filter-toolbar__field">
+          <span>Category</span>
           <select name="category" class="form-select s2" data-ph="Filter by category…">
             <option value="">All Categories</option>
             {% for cat in categories %}<option value="{{ cat.pk }}" {% if cat.pk|stringformat:"s" == cat_filter %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}
           </select>
-          <input type="date" name="start_date" value="{{ start_date|default:'' }}" class="form-control" placeholder="From">
-          <input type="date" name="end_date" value="{{ end_date|default:'' }}" class="form-control" placeholder="To">
-          <div class="expense-list-filter-actions">
-            <button class="btn btn-primary btn-sm">Filter</button>
-            <a href="{% url 'expenses:list' %}" class="btn btn-outline btn-sm">Clear</a>
-          </div>
-        </form>
-      </div>
-    </div>
+        </label>
+        <label class="record-filter-toolbar__field">
+          <span>From</span>
+          <input type="date" name="start_date" value="{{ start_date|default:'' }}" class="form-control" aria-label="Start date">
+        </label>
+        <label class="record-filter-toolbar__field">
+          <span>To</span>
+          <input type="date" name="end_date" value="{{ end_date|default:'' }}" class="form-control" aria-label="End date">
+        </label>
+        <div class="record-filter-toolbar__actions">
+          <button type="submit" class="btn btn-primary" data-filter-submit><i class="fas fa-filter" aria-hidden="true"></i><span>Apply</span></button>
+          <a href="{% url 'expenses:list' %}" class="btn btn-outline" aria-label="Clear expense filters"><i class="fas fa-rotate-left" aria-hidden="true"></i><span>Reset</span></a>
+        </div>
+      </form>
+    </section>
     <div class="card-box card-compact">
       <div class="tbl-wrap">
         <table class="tbl">

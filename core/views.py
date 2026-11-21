@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LogoutView
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
@@ -11,6 +12,15 @@ from django import forms
 from django.forms.models import inlineformset_factory
 from .export_utils import export_to_excel, export_to_pdf, paginate_list
 from .branch_access import scope_queryset
+
+
+class ConfirmLogoutView(LogoutView):
+    http_method_names = ['get', 'post', 'options']
+
+    def get(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+        return render(request, self.template_name)
 
 
 class UserForm(forms.ModelForm):

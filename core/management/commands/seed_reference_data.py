@@ -35,7 +35,9 @@ class Command(BaseCommand):
         with transaction.atomic():
             taxman, prime_focus, aba_uganda = ensure_business_branches(company)
             categories_created = self._seed_expense_categories()
-            services_created = self._seed_services(taxman, prime_focus)
+            services_created = self._seed_services(
+                (taxman, prime_focus, aba_uganda),
+            )
             if admin_user:
                 admin_user.company = company
                 if not admin_user.branch_id:
@@ -133,7 +135,7 @@ class Command(BaseCommand):
             created += 1
         return created
 
-    def _seed_services(self, taxman, prime_focus):
+    def _seed_services(self, branches):
         created = 0
         for defaults in SERVICE_TYPES:
             matches = list(
@@ -151,5 +153,5 @@ class Command(BaseCommand):
             else:
                 service = ServiceType.objects.create(**defaults)
                 created += 1
-            service.branches.add(taxman, prime_focus)
+            service.branches.add(*branches)
         return created

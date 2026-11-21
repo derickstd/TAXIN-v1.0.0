@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% block breadcrumbs %}<li><a href="{% url 'billing:list' %}">Invoices</a></li><li class="active">Possible Duplicate Invoice</li>{% endblock %}
 {% block content %}
 <h2>Possible duplicate invoice detected</h2>
 <p>There are recent invoices that look similar to this one. Review before creating a new invoice.</p>

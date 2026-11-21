@@ -9,34 +9,8 @@
 {% block content %}
 {% include 'components/report_watermark.html' %}
 <div class="page-header">
-  <div>
-    <h1 class="page-title"><i class="fas fa-book"></i> Daily Transaction Ledger</h1>
-
-  </div>
-  <div class="page-header-actions">
-    {% if external_branches %}
-    <button class="btn btn-primary" type="button" id="openLedgerEntryModal">
-      <i class="fas fa-plus"></i> Add transaction
-    </button>
-    {% endif %}
-    <details class="header-action-menu">
-      <summary class="btn btn-outline">Branch tools <i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
-      <div class="header-action-menu__items">
-        <a href="{% url 'documents:branch_daily_summaries' %}?open=summary"><i class="fas fa-clipboard-check"></i> End-of-day summary</a>
-        {% if external_branches %}
-        <a href="{% url 'documents:branch_account_transfer' %}{% if selected_branch %}?branch={{ selected_branch.pk }}{% endif %}"
-           data-open-account-transfer
-           data-transfer-url="{% url 'documents:branch_account_transfer' %}?popover=1{% if selected_branch %}&amp;branch={{ selected_branch.pk }}{% endif %}"
-           aria-haspopup="dialog" aria-expanded="false"><i class="fas fa-building-columns"></i> Bank deposit</a>
-        {% endif %}
-      </div>
-    </details>
-  </div>
+  <h1 class="page-title"><i class="fas fa-book"></i> Daily Transaction Ledger</h1>
 </div>
-
-{% if external_branches %}
-
-{% endif %}
 
 {% if branches %}
 <section class="card-box mb-3">
@@ -56,6 +30,23 @@
         <input id="ledger-date" class="form-control" type="date" name="date" value="{{ business_date|date:'Y-m-d' }}">
       </div>
       <button class="btn btn-primary" type="submit">Show transactions</button>
+      {% if external_branches %}
+      <button class="btn btn-primary" type="button" id="openLedgerEntryModal">
+        <i class="fas fa-plus"></i> Add transaction
+      </button>
+      {% endif %}
+      <details class="header-action-menu">
+        <summary class="btn btn-outline">Branch tools <i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+        <div class="header-action-menu__items">
+          <a href="{% url 'documents:branch_daily_summaries' %}?open=summary"><i class="fas fa-clipboard-check"></i> End-of-day summary</a>
+          {% if external_branches %}
+          <a href="{% url 'documents:branch_account_transfer' %}{% if selected_branch %}?branch={{ selected_branch.pk }}{% endif %}"
+             data-open-account-transfer
+             data-transfer-url="{% url 'documents:branch_account_transfer' %}?popover=1{% if selected_branch %}&amp;branch={{ selected_branch.pk }}{% endif %}"
+             aria-haspopup="dialog" aria-expanded="false"><i class="fas fa-building-columns"></i> Bank deposit</a>
+          {% endif %}
+        </div>
+      </details>
     </form>
   </div>
 </section>

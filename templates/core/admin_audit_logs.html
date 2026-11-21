@@ -2,6 +2,7 @@
 {% load static %}
 {% block title %}Audit Logs{% endblock %}
 {% block nav_audit %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'core:admin_dashboard' %}">Admin Dashboard</a></li><li class="active">Audit Logs</li>{% endblock %}
 {% block content %}
 <div style="padding:2rem;max-width:1400px;margin:0 auto;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;">

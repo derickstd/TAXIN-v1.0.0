@@ -26,6 +26,11 @@ class SeedReferenceDataCommandTests(TestCase):
             category='ura_filing',
             default_price=Decimal('123456'),
         )
+        existing_service = ServiceType.objects.create(
+            name='Custom Service',
+            category='miscellaneous',
+        )
+        existing_service.branches.add(main_branch)
 
         call_command(
             'seed_reference_data', company_slug=company.slug, stdout=StringIO(),
@@ -45,11 +50,15 @@ class SeedReferenceDataCommandTests(TestCase):
             ExpenseCategory.objects.count(),
             len(EXPENSE_CATEGORIES) + 1,
         )
-        self.assertEqual(ServiceType.objects.count(), len(SERVICE_TYPES))
+        self.assertEqual(ServiceType.objects.count(), len(SERVICE_TYPES) + 1)
         self.assertEqual(vat_service.default_price, Decimal('123456'))
         self.assertCountEqual(
             vat_service.branches.values_list('name', flat=True),
-            ['TAXMAN', 'PRIME FOCUS'],
+            ['TAXMAN', 'PRIME FOCUS', 'ABA UGANDA'],
+        )
+        self.assertCountEqual(
+            existing_service.branches.values_list('name', flat=True),
+            ['TAXMAN', 'PRIME FOCUS', 'ABA UGANDA'],
         )
         self.assertEqual(User.objects.count(), 0)
         self.assertEqual(Client.objects.count(), 0)
@@ -64,7 +73,7 @@ class SeedReferenceDataCommandTests(TestCase):
             ExpenseCategory.objects.count(),
             len(EXPENSE_CATEGORIES) + 1,
         )
-        self.assertEqual(ServiceType.objects.count(), len(SERVICE_TYPES))
+        self.assertEqual(ServiceType.objects.count(), len(SERVICE_TYPES) + 1)
 
     def test_command_refuses_unexpected_branches_without_seeding(self):
         company = Company.objects.create(name='TAXMAN', slug='taxman')

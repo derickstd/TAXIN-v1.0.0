@@ -159,10 +159,6 @@ def payment_receipts_report(request):
             payments = payments.filter(payment_date__gte=filters['date_from'])
         if filters['date_to']:
             payments = payments.filter(payment_date__lte=filters['date_to'])
-        if filters['client']:
-            payments = payments.filter(client=filters['client'])
-        if filters['service_type']:
-            payments = payments.filter(service_type=filters['service_type'])
         if filters['method']:
             payments = payments.filter(method=filters['method'])
         if filters['branch']:
