@@ -18,7 +18,7 @@ from .models import (
 )
 from .forms import InvoiceForm, PaymentReceiptFilterForm
 from clients.models import Client
-from services.models import ServiceType
+from services.models import JobCard, JobCardLineItem, ServiceType, StaffActivityLog
 from services.forms import service_category_choices
 from core.utils import paginate_queryset
 from core.duplicate_detection import check_duplicate_transaction
@@ -848,6 +848,41 @@ def _get_walkin_customer(user):
     return client
 
 
+def _create_quick_payment_job_card(client, service_type, amount, payment_date, branch, user, notes, *, paid):
+    period_month = payment_date.month if service_type.deadline_type != 'none' else None
+    period_year = payment_date.year if service_type.deadline_type != 'none' else None
+    line_total = amount
+    vat_amount = Decimal('0')
+    if service_type.vat_applicable:
+        line_total = (amount / Decimal('1.18')).quantize(Decimal('0.01'))
+        vat_amount = amount - line_total
+
+    job = JobCard.objects.create(
+        client=client,
+        branch=branch,
+        period_month=period_month,
+        period_year=period_year,
+        notes=notes,
+        created_by=user,
+    )
+    JobCardLineItem.objects.create(
+        job_card=job,
+        service_type=service_type,
+        default_price=service_type.default_price,
+        negotiated_price=line_total,
+        vat_amount=vat_amount,
+        status='handled_paid' if paid else 'handled_not_paid',
+        period_label=payment_date.strftime('%B %Y') if period_month else '',
+        notes=notes[:300],
+    )
+    StaffActivityLog.objects.create(
+        job_card=job,
+        staff=user,
+        action='Job card created from quick payment',
+    )
+    return job
+
+
 @login_required
 @require_http_methods(['GET', 'POST'])
 @transaction.atomic
@@ -962,13 +997,27 @@ def quick_payment(request):
             if notes:
                 invoice_notes += f'\n{notes}'
             with transaction.atomic():
+                job = None
+                subtotal = amount
+                vat_total = Decimal('0')
+                if not is_external_branch:
+                    job = _create_quick_payment_job_card(
+                        client, service_type, amount, payment_date, payment_branch,
+                        request.user, notes, paid=False,
+                    )
+                    vat_total = sum(
+                        item.vat_amount for item in job.line_items.all()
+                    )
+                    subtotal = job.total_fee - vat_total
                 credit_invoice = Invoice.objects.create(
                     client=client,
                     branch=payment_branch,
                     service_type=service_type,
+                    job_card=job,
                     is_credit_sale=True,
                     due_date=payment_date + timedelta(days=14),
-                    subtotal=amount,
+                    subtotal=subtotal,
+                    vat_total=vat_total,
                     grand_total=amount,
                     status='sent',
                     notes=invoice_notes,
@@ -977,9 +1026,11 @@ def quick_payment(request):
                 Invoice.objects.filter(pk=credit_invoice.pk).update(
                     date_issued=payment_date,
                 )
+            engagement_note = f'on job card {job.job_number} and ' if job else ''
             confirmation = (
                 f'UGX {amount:,.0f} recorded as credit for '
-                f'{client.get_display_name()} on invoice {credit_invoice.invoice_number}. '
+                f'{client.get_display_name()} {engagement_note}'
+                f'on invoice {credit_invoice.invoice_number}. '
                 f'Due {credit_invoice.due_date:%d %b %Y}. No cash payment was recorded.'
             )
             _complete_payment_submission(
@@ -1081,34 +1132,36 @@ def quick_payment(request):
                             'Record the payment on an open business date.'
                         )
 
-                for invoice in unpaid_invoices.select_for_update():
-                    if remaining <= 0:
-                        break
-                    invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
-                    balance = invoice.grand_total - invoice.amount_paid
-                    if balance <= 0:
-                        continue
-                    applied_amount = min(balance, remaining)
+                if service_type and not is_external_branch:
+                    job = _create_quick_payment_job_card(
+                        client, service_type, amount, payment_date, payment_branch,
+                        request.user, notes, paid=True,
+                    )
+                    vat_total = sum(
+                        item.vat_amount for item in job.line_items.all()
+                    )
+                    invoice = Invoice.objects.create(
+                        client=client,
+                        branch=payment_branch,
+                        service_type=service_type,
+                        job_card=job,
+                        due_date=payment_date + timedelta(days=14),
+                        subtotal=job.total_fee - vat_total,
+                        vat_total=vat_total,
+                        grand_total=amount,
+                        status='sent',
+                        payment_method=method,
+                        notes=notes,
+                        created_by=request.user,
+                    )
+                    Invoice.objects.filter(pk=invoice.pk).update(
+                        date_issued=payment_date,
+                    )
                     Payment.objects.create(
                         invoice=invoice,
                         client=client,
                         service_type=service_type,
-                        amount=applied_amount,
-                        payment_date=payment_date,
-                        method=method,
-                        reference=reference,
-                        notes=notes,
-                        received_by=request.user,
-                        branch=invoice.branch or payment_branch,
-                    )
-                    remaining -= applied_amount
-                    allocated_count += 1
-
-                if remaining > 0:
-                    Payment.objects.create(
-                        client=client,
-                        service_type=service_type,
-                        amount=remaining,
+                        amount=amount,
                         payment_date=payment_date,
                         method=method,
                         reference=reference,
@@ -1116,6 +1169,44 @@ def quick_payment(request):
                         received_by=request.user,
                         branch=payment_branch,
                     )
+                    allocated_count = 1
+                    remaining = Decimal('0')
+                else:
+                    for invoice in unpaid_invoices.select_for_update():
+                        if remaining <= 0:
+                            break
+                        invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
+                        balance = invoice.grand_total - invoice.amount_paid
+                        if balance <= 0:
+                            continue
+                        applied_amount = min(balance, remaining)
+                        Payment.objects.create(
+                            invoice=invoice,
+                            client=client,
+                            service_type=service_type,
+                            amount=applied_amount,
+                            payment_date=payment_date,
+                            method=method,
+                            reference=reference,
+                            notes=notes,
+                            received_by=request.user,
+                            branch=invoice.branch or payment_branch,
+                        )
+                        remaining -= applied_amount
+                        allocated_count += 1
+
+                    if remaining > 0:
+                        Payment.objects.create(
+                            client=client,
+                            service_type=service_type,
+                            amount=remaining,
+                            payment_date=payment_date,
+                            method=method,
+                            reference=reference,
+                            notes=notes,
+                            received_by=request.user,
+                            branch=payment_branch,
+                        )
 
                 if is_external_branch:
                     account_for_method = {
@@ -1142,7 +1233,12 @@ def quick_payment(request):
                 'This reference has already been recorded for the branch and date.'
             )
 
-        if allocated_count:
+        if allocated_count and service_type and not is_external_branch:
+            confirmation = (
+                f'UGX {amount:,.0f} recorded for {client.get_display_name()} and '
+                f'applied to a new handled and paid engagement for {service_type.name}.'
+            )
+        elif allocated_count:
             confirmation = (
                 f'UGX {amount:,.0f} recorded for {client.get_display_name()} and '
                 f'allocated to {allocated_count} oldest outstanding invoice(s).'

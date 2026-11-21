@@ -16,7 +16,7 @@ from billing.models import (
 )
 from clients.models import Client
 from core.models import AuditLog, Branch, Company, User
-from services.models import ServiceCategory, ServiceType
+from services.models import JobCard, JobCardLineItem, ServiceCategory, ServiceType
 from services.forms import ServiceTypeForm, service_category_choices
 
 
@@ -253,6 +253,11 @@ class QuickPaymentTests(TestCase):
         self.assertEqual(invoice.date_issued, business_date)
         self.assertEqual(invoice.due_date, business_date + timezone.timedelta(days=14))
         self.assertEqual(invoice.grand_total, Decimal('25000'))
+        self.assertIsNotNone(invoice.job_card)
+        job = invoice.job_card
+        item = job.line_items.get()
+        self.assertEqual(item.status, 'handled_not_paid')
+        self.assertEqual(job.status, 'pending_payment')
         self.assertEqual(self.client_obj.total_outstanding, Decimal('25000'))
         self.assertFalse(Payment.objects.exists())
         self.assertFalse(BranchDailyTransaction.objects.exists())
@@ -264,6 +269,47 @@ class QuickPaymentTests(TestCase):
         self.assertEqual(report.context['accounts_receivable'], Decimal('25000'))
         self.assertEqual(report.context['cash_inflow'], Decimal('0'))
         self.assertEqual(list(report.context['transactions'])[0]['type_key'], 'credit')
+
+    def test_quick_payment_creates_a_handled_paid_engagement_for_selected_service(self):
+        service = ServiceType.objects.create(
+            name='VAT Filing Service',
+            category='ura_filing',
+            default_price=Decimal('10000'),
+            vat_applicable=True,
+        )
+        older_invoice = Invoice.objects.create(
+            client=self.client_obj,
+            due_date=timezone.localdate(),
+            subtotal=Decimal('5000'),
+            grand_total=Decimal('5000'),
+            status='sent',
+            created_by=self.user,
+        )
+
+        response = self.client.post(reverse('billing:quick_payment'), {
+            'client': self.client_obj.pk,
+            'service_type': service.pk,
+            'amount': '25000',
+            'method': 'cash',
+            'payment_date': timezone.localdate().isoformat(),
+            'reference': 'ENGAGEMENT-PAID-001',
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+        job = JobCard.objects.get(client=self.client_obj)
+        item = JobCardLineItem.objects.get(job_card=job)
+        invoice = Invoice.objects.get(job_card=job)
+        payment = Payment.objects.get(reference='ENGAGEMENT-PAID-001')
+        self.assertEqual(item.status, 'handled_paid')
+        self.assertEqual(job.status, 'completed')
+        self.assertEqual(invoice.service_type, service)
+        self.assertEqual(invoice.grand_total, Decimal('25000'))
+        self.assertEqual(invoice.amount_paid, Decimal('25000'))
+        self.assertEqual(invoice.status, 'paid')
+        self.assertEqual(payment.invoice, invoice)
+        older_invoice.refresh_from_db()
+        self.assertEqual(older_invoice.amount_paid, Decimal('0'))
 
     def test_external_credit_sale_updates_receivable_without_ledger_cash(self):
         company = Company.objects.create(
@@ -526,10 +572,6 @@ class QuickPaymentTests(TestCase):
         self.user.save(update_fields=['company', 'branch'])
         self.client_obj.branch = branch
         self.client_obj.save(update_fields=['branch'])
-        service = ServiceType.objects.create(
-            name='Tax Filing', category='ura_filing', default_price=Decimal('1000'),
-        )
-        service.branches.add(branch)
         older = Invoice.objects.create(
             client=self.client_obj, branch=branch,
             due_date=timezone.localdate(), subtotal=Decimal('1000'),
@@ -543,7 +585,6 @@ class QuickPaymentTests(TestCase):
 
         response = self.client.post(reverse('billing:quick_payment'), {
             'client': self.client_obj.pk,
-            'service_type': service.pk,
             'amount': '1500',
             'method': 'cash',
             'reference': 'quick-invoice-pay',
@@ -560,7 +601,7 @@ class QuickPaymentTests(TestCase):
             list(Payment.objects.order_by('invoice_id').values_list('invoice_id', 'amount')),
             [(older.pk, Decimal('1000')), (newer.pk, Decimal('500'))],
         )
-        self.assertTrue(Payment.objects.filter(service_type=service).exists())
+        self.assertFalse(JobCard.objects.exists())
 
     def test_quick_payment_keeps_overpayment_as_unapplied_client_credit(self):
         invoice = Invoice.objects.create(
