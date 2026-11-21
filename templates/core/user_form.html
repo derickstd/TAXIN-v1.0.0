@@ -14,12 +14,23 @@
       <div class="card-hd"><i class="fas fa-id-card"></i>Account Details</div>
       <div class="card-bd">
         <form method="post" novalidate>{% csrf_token %}
+      {% if form.errors %}
+      <div class="alert alert-danger" role="alert">
+        <strong>User was not updated. Correct the following and try again:</strong>
+        <ul class="mb-0">
+          {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+          {% for field in form %}
+            {% for error in field.errors %}<li>{{ field.label }}: {{ error }}</li>{% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
       <div class="form-grid-2">
         <div><label class="form-label">First Name</label><input type="text" name="first_name" value="{{ form.first_name.value|default:'' }}" class="form-ctrl" placeholder="First name"></div>
         <div><label class="form-label">Last Name</label><input type="text" name="last_name" value="{{ form.last_name.value|default:'' }}" class="form-ctrl" placeholder="Last name"></div>
         <div><label class="form-label">Username <span class="req">*</span></label>
           <input type="text" name="username" value="{{ form.username.value|default:'' }}" class="form-ctrl" required>
-          {% for e in form.username.errors %}<span class="err-msg">{{ e }}</span>{% endfor %}</div>
+        </div>
         <div><label class="form-label">Role <span class="req">*</span></label>
           <select name="role" class="s2" data-ph="Select role">
             {% for val,label in form.fields.role.choices %}<option value="{{ val }}" {% if form.role.value == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
@@ -29,7 +40,6 @@
             <option value="">All branches (leadership only)</option>
             {% for branch in form.fields.branch.queryset %}<option value="{{ branch.pk }}" {% if form.branch.value|stringformat:'s' == branch.pk|stringformat:'s' %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
           </select>
-          {% for e in form.branch.errors %}<span class="err-msg">{{ e }}</span>{% endfor %}
         </div>
         <div><label class="form-label">WhatsApp Number</label>
           <input type="text" name="phone_whatsapp" value="{{ form.phone_whatsapp.value|default:'' }}" class="form-ctrl" placeholder="+256 700 000000">

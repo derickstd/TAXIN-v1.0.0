@@ -324,6 +324,73 @@ class SettingsToolsTests(TestCase):
                 self.assertTrue(self.company.branches.filter(name='New Branch').exists())
 
 
+class UserEditTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(name='User Edit Co', slug='user-edit')
+        self.branch = Branch.objects.create(company=self.company, name='Main Branch')
+        self.admin = User.objects.create_user(
+            username='user-edit-admin',
+            password='admin-pass-123',
+            role='admin',
+            company=self.company,
+        )
+        self.target = User.objects.create_user(
+            username='user-edit-target',
+            password='old-pass-123',
+            role='tax_officer',
+            company=self.company,
+            branch=self.branch,
+            first_name='Original',
+        )
+        self.client.force_login(self.admin)
+
+    def _edit_data(self, password1, password2, first_name='Updated'):
+        return {
+            'username': self.target.username,
+            'first_name': first_name,
+            'last_name': '',
+            'email': '',
+            'email_notify': '',
+            'phone_whatsapp': '',
+            'branch': str(self.branch.pk),
+            'role': 'tax_officer',
+            'ui_theme': 'ocean',
+            'is_active_staff': 'on',
+            'is_active': 'on',
+            'receive_debt_alerts': 'on',
+            'receive_task_reminders': 'on',
+            'date_joined_firm': '',
+            'password1': password1,
+            'password2': password2,
+        }
+
+    def test_user_edit_saves_matching_new_password(self):
+        response = self.client.post(
+            reverse('core:user_edit', args=[self.target.pk]),
+            self._edit_data('new-pass-123', 'new-pass-123'),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'User {self.target.username} updated.')
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.first_name, 'Updated')
+        self.assertTrue(self.target.check_password('new-pass-123'))
+
+    def test_user_edit_shows_validation_error_when_passwords_do_not_match(self):
+        response = self.client.post(
+            reverse('core:user_edit', args=[self.target.pk]),
+            self._edit_data('new-pass-123', 'different-pass-123'),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'User was not updated.')
+        self.assertContains(response, 'Passwords do not match.')
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.first_name, 'Original')
+        self.assertTrue(self.target.check_password('old-pass-123'))
+
+
 class BranchAccessTests(TestCase):
     def setUp(self):
         self.company = Company.objects.create(name='Branch Test Co', slug='branch-test')
