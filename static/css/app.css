@@ -2091,6 +2091,10 @@ body[data-theme="dark"] .modal-box{box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .branch-expense-form .branch-expense-field .select2-container{
   max-width:100%;width:100%!important
 }
+.branch-expense-form .branch-expense-field .branch-expense-category-row{gap:0}
+.branch-expense-form .branch-expense-field .branch-expense-category-row>.select2-container{
+  flex:1 1 0;min-width:0;max-width:100%;width:auto!important
+}
 .quick-payment-select-row{
   display:flex;
   align-items:stretch;

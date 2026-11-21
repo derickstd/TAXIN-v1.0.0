@@ -430,7 +430,13 @@ def _ledger_edit_form(record_type, request, record):
     data = request.POST if request.method == 'POST' else None
     if record_type == 'daily_entry':
         return BranchDailyTransactionForm(
-            data, instance=record, branches=accessible_branches(request.user),
+            data,
+            instance=record,
+            branches=accessible_branches(request.user),
+            expense_only=(
+                record.direction == 'outflow'
+                and record.category == 'operating_expense'
+            ),
         )
     if record_type == 'payment':
         return LedgerPaymentEditForm(data, instance=record)
@@ -580,8 +586,14 @@ def _branch_daily_ledger(request, expense_only=False):
     external_branches = branches.filter(external_reporting=True)
     branch_id = request.GET.get('branch') or request.POST.get('branch')
     selected_branch = get_object_or_404(branches, pk=branch_id) if branch_id else None
-    if not selected_branch and branches.count() == 1:
+    can_manage_transactions = _can_manage_ledger_transactions(request.user)
+    if (
+        not selected_branch
+        and branches.count() == 1
+        and not can_manage_transactions
+    ):
         selected_branch = branches.first()
+    explicitly_selected_branch = bool(request.GET.get('branch'))
 
     raw_date = request.GET.get('date') or request.POST.get('business_date', '')
     try:
@@ -591,7 +603,10 @@ def _branch_daily_ledger(request, expense_only=False):
         messages.error(request, 'Invalid transaction date.')
 
     initial = {'business_date': business_date}
-    if selected_branch and selected_branch.external_reporting:
+    if (
+        selected_branch and selected_branch.external_reporting
+        and (not can_manage_transactions or explicitly_selected_branch)
+    ):
         initial['branch'] = selected_branch
     requested_direction = request.GET.get('direction')
     requested_category = request.GET.get('category')
@@ -610,6 +625,7 @@ def _branch_daily_ledger(request, expense_only=False):
         form = BranchDailyTransactionForm(
             request.POST, branches=external_branches,
             expense_only=expense_only,
+            require_branch_selection=can_manage_transactions,
         )
         if form.is_valid():
             branch = form.cleaned_data['branch']
@@ -639,6 +655,7 @@ def _branch_daily_ledger(request, expense_only=False):
         form = BranchDailyTransactionForm(
             initial=initial, branches=external_branches,
             expense_only=expense_only,
+            require_branch_selection=can_manage_transactions,
         )
 
     selected_branches = branches
@@ -654,12 +671,11 @@ def _branch_daily_ledger(request, expense_only=False):
     locked_branch_ids = {
         summary.branch_id for summary in summaries if summary.reviewed_at
     }
-    can_manage_transactions = _can_manage_ledger_transactions(request.user)
     external_entries = list(
         BranchDailyTransaction.objects.filter(
             branch__in=selected_branches.filter(external_reporting=True),
             business_date=business_date,
-        ).select_related('branch', 'entered_by')
+        ).select_related('branch', 'entered_by', 'expense_category')
     )
     zero = Decimal('0')
     ledger_totals_by_branch = {}
@@ -725,7 +741,7 @@ def _branch_daily_ledger(request, expense_only=False):
             branch=entry.branch,
             created_at=entry.created_at,
             pk=entry.pk,
-            entry_type=entry.get_category_display(),
+            entry_type=entry.display_category,
             description=entry.description,
             method=entry.get_account_display(),
             reference=entry.reference,
@@ -1104,7 +1120,7 @@ def branch_account_statement(request, bank_only=False):
     ledger_entries = list(BranchDailyTransaction.objects.filter(
         branch__in=statement_branches.filter(external_reporting=True),
         business_date__range=(date_from, date_to),
-    ).select_related('branch', 'entered_by'))
+    ).select_related('branch', 'entered_by', 'expense_category'))
     ledger_dates = {
         (entry.branch_id, entry.business_date) for entry in ledger_entries
     }
@@ -1209,7 +1225,7 @@ def branch_account_statement(request, bank_only=False):
             branch=entry.branch,
             transaction_date=entry.business_date,
             account=entry.get_account_display(),
-            description=f'{entry.get_category_display()} — {entry.description}',
+            description=f'{entry.display_category} — {entry.description}',
             reference=entry.reference,
             recorded_by=(
                 entry.entered_by.get_full_name() or entry.entered_by.username
@@ -1398,7 +1414,7 @@ def _financial_report(request, report_view, balance_sheet_entry_form=None):
     daily_ledger_entries = list(BranchDailyTransaction.objects.filter(
         branch__in=summary_branches,
         business_date__range=(date_from, date_to),
-    ).select_related('branch', 'entered_by'))
+    ).select_related('branch', 'entered_by', 'expense_category'))
     ledger_dates = {
         (entry.branch_id, entry.business_date)
         for entry in daily_ledger_entries
@@ -1868,7 +1884,7 @@ def _financial_report(request, report_view, balance_sheet_entry_form=None):
         transactions.append({
             'date': entry.business_date,
             'id': entry.pk,
-            'type': entry.get_category_display(),
+            'type': entry.display_category,
             'type_key': entry_type_key,
             'record_type_keys': entry_record_types,
             'description': f'{entry.branch.name} — {entry.description}',

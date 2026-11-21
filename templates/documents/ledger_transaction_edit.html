@@ -7,14 +7,36 @@
 {% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1 class="page-title">Edit {{ record_label }}</h1>
+  <div>
+    <h1 class="page-title"><i class="fas fa-pen-to-square"></i> Edit {{ record_label }}</h1>
+    <p class="form-hint mb-0"></p>
+  </div>
 </div>
-<section class="card-box">
+<section class="card-box card-compact">
+  <div class="card-box-header">Transaction details</div>
   <div class="card-body">
-    <form method="post">
+    <form method="post" class="ledger-edit-form">
       {% csrf_token %}
-      {{ form.as_p }}
-      <div class="d-flex gap-2 mt-3">
+      {% if form.non_field_errors %}
+      <div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>
+      {% endif %}
+      <div class="form-grid-2">
+        {% for field in form %}
+        {% if field.is_hidden %}
+        {{ field }}
+        {% else %}
+        <div{% if field.name == 'description' or field.name == 'notes' %} class="field-span-2"{% endif %}>
+          <label class="form-label" for="{{ field.id_for_label }}">
+            {{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}
+          </label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-hint">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="err-msg" role="alert">{{ error }}</div>{% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <div class="form-actions mt-3">
         <button class="btn btn-primary" type="submit">Save changes</button>
         <a class="btn btn-outline" href="{{ return_url }}">Cancel</a>
       </div>

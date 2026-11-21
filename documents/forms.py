@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django import forms
+from django.db.models import Q
 from django.utils import timezone
 
 from billing.models import (
@@ -61,8 +62,8 @@ class BranchDailyTransactionForm(forms.ModelForm):
     class Meta:
         model = BranchDailyTransaction
         fields = [
-            'branch', 'business_date', 'direction', 'category', 'description',
-            'account', 'amount', 'reference',
+            'branch', 'business_date', 'direction', 'category',
+            'expense_category', 'description', 'account', 'amount', 'reference',
         ]
         widgets = {
             'business_date': forms.DateInput(attrs={'type': 'date'}),
@@ -81,21 +82,37 @@ class BranchDailyTransactionForm(forms.ModelForm):
             }),
         }
 
-    def __init__(self, *args, branches, expense_only=False, **kwargs):
+    def __init__(
+        self, *args, branches, expense_only=False,
+        require_branch_selection=False, **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.expense_only = expense_only
+        self.require_branch_selection = require_branch_selection
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'
         self.fields['branch'].queryset = branches.filter(external_reporting=True)
         if expense_only:
-            self.fields['category'].widget.attrs.update({
+            expense_categories = ExpenseCategory.objects.filter(is_active=True)
+            if self.instance.pk and self.instance.expense_category_id:
+                expense_categories = ExpenseCategory.objects.filter(
+                    Q(is_active=True) | Q(pk=self.instance.expense_category_id),
+                )
+            self.fields['expense_category'].queryset = expense_categories.order_by('name')
+            self.fields['expense_category'].required = not self.instance.pk
+            self.fields['expense_category'].widget.attrs.update({
                 'class': 'form-control s2',
-                'data-ph': 'Search categories…',
+                'data-ph': 'Search expense categories…',
             })
+            self.fields['direction'].widget = forms.HiddenInput()
+            self.fields['category'].widget = forms.HiddenInput()
+            self.fields['category'].initial = 'operating_expense'
             self.fields['account'].widget.attrs.update({
                 'class': 'form-control s2',
                 'data-ph': 'Search accounts…',
             })
+        else:
+            self.fields.pop('expense_category')
         categories = list(self.fields['category'].choices)
         if expense_only:
             categories = [
@@ -107,7 +124,8 @@ class BranchDailyTransactionForm(forms.ModelForm):
             *categories,
         ]
         if (
-            not self.is_bound
+            not require_branch_selection
+            and not self.is_bound
             and not self.initial.get('branch')
             and self.fields['branch'].queryset.count() == 1
         ):
@@ -124,6 +142,12 @@ class BranchDailyTransactionForm(forms.ModelForm):
         if self.expense_only and direction != 'outflow':
             raise forms.ValidationError('Expense entries must record money out.')
         return direction
+
+    def clean_category(self):
+        category = self.cleaned_data['category']
+        if self.expense_only and category != 'operating_expense':
+            raise forms.ValidationError('Branch expenses must be recorded as operating expenses.')
+        return category
 
 
 class LedgerPaymentEditForm(forms.ModelForm):

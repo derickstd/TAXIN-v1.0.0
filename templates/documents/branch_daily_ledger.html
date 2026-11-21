@@ -78,6 +78,8 @@
         {% if expense_only %}
         {{ form.direction.as_hidden }}
         {% for error in form.direction.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+        {{ form.category.as_hidden }}
+        {% for error in form.category.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
         {% else %}
         <div>
           <label class="form-label" for="{{ form.direction.id_for_label }}">Direction <span class="req">*</span></label>
@@ -86,9 +88,22 @@
         </div>
         {% endif %}
         <div{% if expense_only %} class="branch-expense-field"{% endif %}>
+          {% if expense_only %}
+          <label class="form-label" for="{{ form.expense_category.id_for_label }}">Expense category <span class="req">*</span></label>
+          <div class="quick-payment-select-row branch-expense-category-row">
+            {{ form.expense_category }}
+            <button class="btn btn-outline quick-payment-add-button" type="button"
+                    id="openExpenseCategoryModal" title="Add expense category"
+                    aria-label="Add expense category">
+              <i class="fas fa-plus" aria-hidden="true"></i>
+            </button>
+          </div>
+          {% for error in form.expense_category.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+          {% else %}
           <label class="form-label" for="{{ form.category.id_for_label }}">Category <span class="req">*</span></label>
           {{ form.category }}
           {% for error in form.category.errors %}<div class="err-msg">{{ error }}</div>{% endfor %}
+          {% endif %}
         </div>
         <div class="field-span-2">
           <label class="form-label" for="{{ form.description.id_for_label }}">Description <span class="req">*</span></label>
@@ -114,6 +129,37 @@
       <div class="form-actions mt-3">
         <button class="btn btn-primary btn-lg" type="submit"><i class="fas fa-save"></i> {% if expense_only %}Record expense{% else %}Record transaction{% endif %}</button>
         <button class="btn btn-outline" type="button" data-close-ledger-entry>Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% if external_branches and expense_only %}
+<div class="modal-overlay" id="expenseCategoryModal" data-create-url="{% url 'expenses:category_create' %}" aria-hidden="true">
+  <div class="modal-box" style="width:min(100%,520px);max-width:520px" role="dialog" aria-modal="true" aria-labelledby="expenseCategoryModalTitle">
+    <div class="modal-hd">
+      <div>
+        <h5 id="expenseCategoryModalTitle"><i class="fas fa-tag"></i> Add expense category</h5>
+        <p class="form-hint mb-0">New categories are shared across branches.</p>
+      </div>
+      <button class="modal-close" type="button" data-close-expense-category aria-label="Close">&times;</button>
+    </div>
+    <form id="expenseCategoryForm">
+      {% csrf_token %}
+      <div id="expenseCategoryError" class="alert alert-danger" role="alert" hidden></div>
+      <div class="mb-3">
+        <label class="form-label" for="expenseCategoryName">Category name <span class="req">*</span></label>
+        <input id="expenseCategoryName" class="form-control" type="text" maxlength="100" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="expenseCategoryDescription">Description</label>
+        <textarea id="expenseCategoryDescription" class="form-control" rows="2" maxlength="300"></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" id="saveExpenseCategory">
+          <i class="fas fa-save"></i> Save category
+        </button>
+        <button class="btn btn-outline" type="button" data-close-expense-category>Cancel</button>
       </div>
     </form>
   </div>
@@ -257,10 +303,22 @@
   var overlay = document.getElementById('ledgerEntryModal');
   var trigger = document.getElementById('openLedgerEntryModal');
   if (!overlay) return;
+  var categoryOverlay = document.getElementById('expenseCategoryModal');
+  var categoryTrigger = document.getElementById('openExpenseCategoryModal');
+  var categoryForm = document.getElementById('expenseCategoryForm');
+  var categorySelect = document.getElementById('id_expense_category');
+  var categoryError = document.getElementById('expenseCategoryError');
+  var categorySaveButton = document.getElementById('saveExpenseCategory');
   var directionsElement = document.getElementById('ledgerCategoryDirections');
   var directionField = document.getElementById('id_direction');
   var categoryField = document.getElementById('id_category');
-  if (directionsElement && directionField && categoryField) {
+  if (
+    directionsElement
+    && directionField
+    && categoryField
+    && directionField.tagName === 'SELECT'
+    && categoryField.tagName === 'SELECT'
+  ) {
     var categoryDirections = JSON.parse(directionsElement.textContent);
     function filterCategories(){
       Array.prototype.forEach.call(categoryField.options, function(option){
@@ -282,6 +340,76 @@
     document.body.style.overflow = '';
   }
 
+  function closeCategoryModal(){
+    if (!categoryOverlay) return;
+    categoryOverlay.classList.remove('open');
+    categoryOverlay.setAttribute('aria-hidden', 'true');
+    if (categoryTrigger) categoryTrigger.focus();
+  }
+
+  if (categoryTrigger && categoryOverlay && categoryForm && categorySelect) {
+    categoryTrigger.addEventListener('click', function(){
+      categoryError.hidden = true;
+      categoryError.textContent = '';
+      categoryOverlay.classList.add('open');
+      categoryOverlay.setAttribute('aria-hidden', 'false');
+      document.getElementById('expenseCategoryName').focus();
+    });
+
+    categoryOverlay.addEventListener('click', function(event){
+      if (event.target === categoryOverlay || event.target.closest('[data-close-expense-category]')) {
+        closeCategoryModal();
+      }
+    });
+
+    categoryForm.addEventListener('submit', function(event){
+      event.preventDefault();
+      var name = document.getElementById('expenseCategoryName').value.trim();
+      var description = document.getElementById('expenseCategoryDescription').value.trim();
+      if (!name) {
+        categoryError.textContent = 'Category name is required.';
+        categoryError.hidden = false;
+        return;
+      }
+
+      categorySaveButton.disabled = true;
+      $.ajax({
+        url: categoryOverlay.getAttribute('data-create-url'),
+        method: 'POST',
+        data: {
+          name: name,
+          description: description,
+          is_active: true,
+          csrfmiddlewaretoken: categoryForm.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        success: function(response){
+          if (!response.success) {
+            categoryError.textContent = response.error || 'Could not create this category.';
+            categoryError.hidden = false;
+            return;
+          }
+          categorySelect.add(new Option(
+            response.category.name, response.category.id, true, true,
+          ));
+          if (window.jQuery) {
+            $(categorySelect).trigger('change');
+          } else {
+            categorySelect.dispatchEvent(new Event('change', {bubbles:true}));
+          }
+          categoryForm.reset();
+          closeCategoryModal();
+        },
+        error: function(){
+          categoryError.textContent = 'Could not create this category. Please try again.';
+          categoryError.hidden = false;
+        },
+        complete: function(){
+          categorySaveButton.disabled = false;
+        }
+      });
+    });
+  }
+
   if (trigger) {
     trigger.addEventListener('click', function(){
       overlay.classList.add('open');
@@ -295,7 +423,12 @@
     }
   });
   document.addEventListener('keydown', function(event){
-    if (event.key === 'Escape' && overlay.classList.contains('open')) closeModal();
+    if (event.key !== 'Escape') return;
+    if (categoryOverlay && categoryOverlay.classList.contains('open')) {
+      closeCategoryModal();
+    } else if (overlay.classList.contains('open')) {
+      closeModal();
+    }
   });
 })();
 </script>

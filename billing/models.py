@@ -344,6 +344,13 @@ class BranchDailyTransaction(models.Model):
     branch = models.ForeignKey(
         'core.Branch', on_delete=models.PROTECT, related_name='daily_transactions',
     )
+    expense_category = models.ForeignKey(
+        'expenses.ExpenseCategory',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='branch_daily_transactions',
+    )
     business_date = models.DateField()
     direction = models.CharField(max_length=10, choices=DIRECTION)
     category = models.CharField(max_length=32, choices=CATEGORY)
@@ -375,6 +382,12 @@ class BranchDailyTransaction(models.Model):
         errors = {}
         if self.branch_id and not self.branch.external_reporting:
             errors['branch'] = 'Manual ledger entries are only for externally managed branches.'
+        if self.expense_category_id and (
+            self.direction != 'outflow' or self.category != 'operating_expense'
+        ):
+            errors['expense_category'] = (
+                'An expense category can only be used for operating expenses.'
+            )
         expected_direction = self.CATEGORY_DIRECTIONS.get(self.category)
         if expected_direction and self.direction != expected_direction:
             errors['direction'] = 'The selected category does not match the transaction direction.'
@@ -383,5 +396,11 @@ class BranchDailyTransaction(models.Model):
         if errors:
             raise ValidationError(errors)
 
+    @property
+    def display_category(self):
+        if self.expense_category_id:
+            return self.expense_category.name
+        return self.get_category_display()
+
     def __str__(self):
-        return f'{self.branch.name} — {self.business_date} — {self.get_category_display()}'
+        return f'{self.branch.name} — {self.business_date} — {self.display_category}'

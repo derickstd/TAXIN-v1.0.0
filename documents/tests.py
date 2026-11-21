@@ -640,8 +640,9 @@ class ExternalBranchReportTests(TestCase):
         self.assertEqual(response.context['form']['category'].value(), 'operating_expense')
         self.assertIn(
             's2',
-            response.context['form'].fields['category'].widget.attrs['class'],
+            response.context['form'].fields['expense_category'].widget.attrs['class'],
         )
+        self.assertTrue(response.context['form'].fields['expense_category'].required)
         self.assertIn(
             's2',
             response.context['form'].fields['account'].widget.attrs['class'],
@@ -1521,6 +1522,155 @@ class LedgerTransactionManagementTests(TestCase):
                 self.assertTrue(response.context['form'].has_error('amount'))
                 record.refresh_from_db()
                 self.assertEqual(record.amount, Decimal('10'))
+
+    def test_branch_transaction_edit_uses_compact_labeled_grid(self):
+        entry = BranchDailyTransaction.objects.create(
+            branch=self.external_branch, business_date=self.today,
+            direction='inflow', category='service_receipt',
+            description='Compact form test', account='cash',
+            amount=Decimal('10'), entered_by=self.admin,
+        )
+
+        response = self.client.get(reverse(
+            'documents:ledger_transaction_edit',
+            args=['daily_entry', entry.pk],
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="form-grid-2"')
+        self.assertContains(response, 'class="ledger-edit-form"')
+        self.assertContains(response, 'class="field-span-2"')
+        self.assertContains(response, 'Save changes')
+
+    def test_branch_expense_can_create_and_save_shared_expense_category(self):
+        create_response = self.client.post(
+            reverse('expenses:category_create'),
+            {
+                'name': 'Printer supplies',
+                'description': 'Printing materials',
+                'is_active': 'true',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(create_response.status_code, 200)
+        self.assertTrue(create_response.json()['success'])
+        category = ExpenseCategory.objects.get(name='Printer supplies')
+        form_response = self.client.get(
+            reverse('documents:branch_daily_expense'),
+            {'branch': self.external_branch.pk, 'open': 'transaction'},
+        )
+        self.assertEqual(form_response.status_code, 200)
+        self.assertIn(
+            category,
+            form_response.context['form'].fields['expense_category'].queryset,
+        )
+        self.assertContains(form_response, 'id="openExpenseCategoryModal"')
+        self.assertContains(form_response, 'Add expense category')
+        expense_form_html = form_response.content.decode()
+        category_field_start = expense_form_html.index(
+            'class="quick-payment-select-row branch-expense-category-row"',
+        )
+        category_select_position = expense_form_html.index(
+            'id="id_expense_category"', category_field_start,
+        )
+        add_button_position = expense_form_html.index(
+            'id="openExpenseCategoryModal"', category_field_start,
+        )
+        category_field_end = expense_form_html.index('</div>', category_field_start)
+        self.assertLess(category_select_position, add_button_position)
+        self.assertLess(add_button_position, category_field_end)
+
+        save_response = self.client.post(
+            reverse('documents:branch_daily_expense'),
+            {
+                'branch': self.external_branch.pk,
+                'business_date': self.today.isoformat(),
+                'direction': 'outflow',
+                'category': 'operating_expense',
+                'expense_category': category.pk,
+                'description': 'Toner purchase',
+                'account': 'cash',
+                'amount': '45',
+                'reference': 'BR-EXP-CATEGORY-001',
+            },
+        )
+
+        self.assertEqual(save_response.status_code, 302)
+        entry = BranchDailyTransaction.objects.get(
+            reference='BR-EXP-CATEGORY-001',
+        )
+        self.assertEqual(entry.expense_category, category)
+        self.assertEqual(entry.display_category, 'Printer supplies')
+        ledger_response = self.client.get(
+            reverse('documents:branch_daily_ledger'),
+            {'branch': self.external_branch.pk, 'date': self.today.isoformat()},
+        )
+        self.assertEqual(ledger_response.status_code, 200)
+        self.assertEqual(
+            ledger_response.context['transactions'][0]['type'],
+            'Printer supplies',
+        )
+
+    def test_ceo_and_admin_must_choose_branch_before_ledger_entry(self):
+        category = ExpenseCategory.objects.create(
+            name='Branch selection test expense',
+        )
+        for role in ('admin', 'ceo'):
+            with self.subTest(role=role):
+                company = Company.objects.create(
+                    name=f'{role.title()} Single Branch Co',
+                    slug=f'{role}-single-branch',
+                )
+                branch = Branch.objects.create(
+                    company=company,
+                    name='External Branch',
+                    external_reporting=True,
+                )
+                leader = User.objects.create_user(
+                    username=f'{role}_single_branch',
+                    password='pass1234',
+                    role=role,
+                    company=company,
+                    branch=branch,
+                )
+                self.client.force_login(leader)
+
+                response = self.client.get(
+                    reverse('documents:branch_daily_expense'),
+                    {'open': 'transaction'},
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIsNone(response.context['form']['branch'].value())
+                self.assertTrue(response.context['form'].fields['branch'].required)
+
+                transaction_response = self.client.get(
+                    reverse('documents:branch_daily_ledger'),
+                    {'open': 'transaction'},
+                )
+                self.assertEqual(transaction_response.status_code, 200)
+                self.assertIsNone(
+                    transaction_response.context['form']['branch'].value(),
+                )
+
+                post_response = self.client.post(
+                    reverse('documents:branch_daily_expense'),
+                    {
+                        'business_date': self.today.isoformat(),
+                        'direction': 'outflow',
+                        'category': 'operating_expense',
+                        'expense_category': category.pk,
+                        'description': 'Must select a branch',
+                        'account': 'cash',
+                        'amount': '25',
+                        'reference': '',
+                    },
+                )
+
+                self.assertEqual(post_response.status_code, 200)
+                self.assertTrue(post_response.context['form'].has_error('branch'))
+                self.assertFalse(BranchDailyTransaction.objects.exists())
 
     def test_ceo_can_manage_transactions_and_transfer_actions_are_not_duplicated(self):
         self.admin.role = 'ceo'
