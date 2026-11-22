@@ -13,9 +13,20 @@ function initSelect2(){
     return !select.hasClass('select2-hidden-accessible')
       && (select.is('.s2, .select2, [data-searchable]')
         || this.options.length>15);
-  }).select2({theme:'bootstrap-5',allowClear:false,width:'100%',
-    minimumResultsForSearch:0,
-    placeholder:function(){return jQuery(this).data('ph')||'Search or select…';}});
+  }).each(function(){
+    var select=jQuery(this);
+    if(select.hasClass('select2-hidden-accessible'))return;
+    var modal=select.closest('.modal-overlay');
+    var options={
+      theme:'bootstrap-5',
+      allowClear:false,
+      width:'100%',
+      minimumResultsForSearch:0,
+      placeholder:function(){return jQuery(this).data('ph')||'Search or select…';}
+    };
+    if(modal.length)options.dropdownParent=modal;
+    select.select2(options);
+  });
   // service select: autofill price
   jQuery(document).on('select2:select','.s2-svc',function(e){
     var price=jQuery(e.params.data.element).data('price')||'',

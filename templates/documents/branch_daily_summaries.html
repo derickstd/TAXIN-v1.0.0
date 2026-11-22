@@ -42,8 +42,9 @@
       <button class="modal-close" type="button" data-close-branch-entry aria-label="Close">&times;</button>
     </div>
     {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-    <form method="post">
+    <form method="post" data-summary-prefill-url="{% url 'documents:branch_daily_summaries' %}">
       {% csrf_token %}
+      <p class="form-hint" id="summaryPrefillStatus" aria-live="polite" hidden></p>
       <div class="form-grid-2">
         <div>
           <label class="form-label" for="{{ form.branch.id_for_label }}">Branch</label>
@@ -169,7 +170,8 @@
   var inflow = document.getElementById('id_cash_inflow');
   var outflow = document.getElementById('id_cash_outflow');
   var closing = document.getElementById('id_closing_balance');
-  if (!opening || !inflow || !outflow || !closing) return;
+  var form = opening && opening.form;
+  if (!opening || !inflow || !outflow || !closing || !form) return;
 
   function updateClosingBalance(){
     var total = (window.parseMoneyNumber(opening.value) || 0)
@@ -185,14 +187,47 @@
 
   var branch = document.getElementById('id_branch');
   var businessDate = document.getElementById('id_business_date');
+  var status = document.getElementById('summaryPrefillStatus');
+  var requestNumber = 0;
+  function setStatus(message){
+    status.textContent = message;
+    status.hidden = !message;
+  }
   function refreshPrefill(){
-    var params = new URLSearchParams(window.location.search);
-    if (branch.value) params.set('branch', branch.value);
-    else params.delete('branch');
-    if (businessDate.value) params.set('date', businessDate.value);
-    else params.delete('date');
-    params.set('open', 'summary');
-    window.location.search = params.toString();
+    var currentRequest = ++requestNumber;
+    if (!branch.value || !businessDate.value) {
+      setStatus('Select a branch and business date to load balances.');
+      return;
+    }
+
+    var params = new URLSearchParams({
+      prefill: 'summary',
+      branch: branch.value,
+      date: businessDate.value,
+    });
+    setStatus('Loading balances…');
+    fetch(form.dataset.summaryPrefillUrl + '?' + params.toString(), {
+      credentials: 'same-origin',
+      headers: {'X-Requested-With': 'XMLHttpRequest'},
+    }).then(function(response){
+      return response.json().then(function(data){
+        if (!response.ok) throw new Error(data.error || 'Could not load balances.');
+        return data;
+      });
+    }).then(function(data){
+      if (currentRequest !== requestNumber) return;
+      opening.value = data.opening_balance;
+      inflow.value = data.cash_inflow;
+      outflow.value = data.cash_outflow;
+      closing.value = data.closing_balance;
+      [opening, inflow, outflow, closing].forEach(function(field){
+        window.formatMoneyInput(field);
+      });
+      setStatus('Balances updated for the selected branch and date.');
+    }).catch(function(error){
+      if (currentRequest !== requestNumber) return;
+      setStatus(error.message || 'Could not load balances. Please try again.');
+    });
   }
 
   branch.addEventListener('change', refreshPrefill);

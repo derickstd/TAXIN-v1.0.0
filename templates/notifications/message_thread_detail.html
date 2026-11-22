@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}{{ thread.subject|default:'Message Thread' }}{% endblock %}
-{% block nav_messages %}active{% endblock %}
-{% block breadcrumbs %}<li><a href="{% url 'notifications:message_threads' %}">Staff Messages</a></li><li class="active">{{ thread.subject|default:'Thread' }}</li>{% endblock %}
+{% block nav_inbox %}active{% endblock %}
+{% block breadcrumbs %}<li><a href="{% url 'notifications:list' %}?tab=messages">Inbox</a></li><li class="active">{{ thread.subject|default:'Thread' }}</li>{% endblock %}
 {% block extra_css %}
 <style>
 .chat-window {

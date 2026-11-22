@@ -6,6 +6,11 @@
 <li><a href="{% url 'documents:financial_reports' %}">Reports</a></li>
 <li class="active">Daily Transaction Ledger</li>
 {% endblock %}
+{% block extra_css %}
+<style>
+.ledger-period-menu > .header-action-menu__items {left:0;right:auto}
+</style>
+{% endblock %}
 {% block content %}
 {% include 'components/report_watermark.html' %}
 <div class="page-header">
@@ -15,21 +20,25 @@
 {% if branches %}
 <section class="card-box mb-3">
   <div class="card-body">
-    <form method="get" class="d-flex align-items-end gap-2 flex-wrap">
-      <div>
-        <label class="form-label" for="ledger-branch">Branch</label>
-        <select id="ledger-branch" class="form-control" name="branch">
-          <option value="">All accessible branches</option>
-          {% for branch in branches %}
-          <option value="{{ branch.pk }}" {% if selected_branch.pk == branch.pk %}selected{% endif %}>{{ branch.name }}</option>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <details class="header-action-menu ledger-period-menu">
+        <summary class="btn btn-outline">
+          <i class="fas fa-calendar-days"></i> {{ period_label }}
+          <i class="fas fa-chevron-down" aria-hidden="true"></i>
+        </summary>
+        <div class="header-action-menu__items">
+          {% for value, label in period_options %}
+          <a href="?period={{ value }}{% if selected_branch %}&amp;branch={{ selected_branch.pk }}{% endif %}"{% if period == value %} aria-current="true"{% endif %}>{{ label }}</a>
           {% endfor %}
-        </select>
-      </div>
-      <div>
-        <label class="form-label" for="ledger-date">Business date</label>
-        <input id="ledger-date" class="form-control" type="date" name="date" value="{{ business_date|date:'Y-m-d' }}">
-      </div>
-      <button class="btn btn-primary" type="submit">Show transactions</button>
+        </div>
+      </details>
+      <span class="text-muted">
+        {% if date_from == date_to %}
+          {{ date_from|date:'d M Y' }}
+        {% else %}
+          {{ date_from|date:'d M Y' }} – {{ date_to|date:'d M Y' }}
+        {% endif %}
+      </span>
       {% if external_branches %}
       <button class="btn btn-primary" type="button" id="openLedgerEntryModal">
         <i class="fas fa-plus"></i> Add transaction
@@ -47,7 +56,7 @@
           {% endif %}
         </div>
       </details>
-    </form>
+    </div>
   </div>
 </section>
 
@@ -64,6 +73,7 @@
     {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
     <form method="post"{% if expense_only %} class="branch-expense-form"{% endif %}>
       {% csrf_token %}
+      <input type="hidden" name="period" value="{{ period }}">
       <div class="form-grid-2">
         <div>
           <label class="form-label" for="{{ form.branch.id_for_label }}">Branch <span class="req">*</span></label>
@@ -135,7 +145,7 @@
 </div>
 {% endif %}
 {% if external_branches and expense_only %}
-<div class="modal-overlay" id="expenseCategoryModal" data-create-url="{% url 'expenses:category_create' %}" aria-hidden="true">
+<div class="modal-overlay modal-overlay--nested" id="expenseCategoryModal" data-create-url="{% url 'expenses:category_create' %}" aria-hidden="true">
   <div class="modal-box" style="width:min(100%,520px);max-width:520px" role="dialog" aria-modal="true" aria-labelledby="expenseCategoryModalTitle">
     <div class="modal-hd">
       <div>
@@ -172,12 +182,12 @@
   <div class="kpi-card green">
     <div class="kpi-label">Money in</div>
     <div class="kpi-value ugx">{{ total_inflow|floatformat:0|intcomma }}</div>
-    <div class="kpi-sub">{{ business_date|date:'d M Y' }}</div>
+    <div class="kpi-sub">{{ period_label }} · {{ date_from|date:'d M Y' }}{% if date_from != date_to %} – {{ date_to|date:'d M Y' }}{% endif %}</div>
   </div>
   <div class="kpi-card red">
     <div class="kpi-label">Money out</div>
     <div class="kpi-value ugx">{{ total_outflow|floatformat:0|intcomma }}</div>
-    <div class="kpi-sub">{{ business_date|date:'d M Y' }}</div>
+    <div class="kpi-sub">{{ period_label }} · {{ date_from|date:'d M Y' }}{% if date_from != date_to %} – {{ date_to|date:'d M Y' }}{% endif %}</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Net movement</div>
@@ -227,13 +237,14 @@
 <section class="card-box">
   <div class="card-head">
     <span><i class="fas fa-list"></i> Transactions · {{ transactions.paginator.count }}</span>
-    <span class="text-muted">{{ business_date|date:'d M Y' }}{% if selected_branch %} · {{ selected_branch.name }}{% endif %}</span>
+    <span class="text-muted">{{ period_label }} · {{ date_from|date:'d M Y' }}{% if date_from != date_to %} – {{ date_to|date:'d M Y' }}{% endif %}{% if selected_branch %} · {{ selected_branch.name }}{% endif %}</span>
   </div>
   <div class="tbl-wrap">
     <table class="tbl">
       <thead>
         <tr>
           <th>Branch</th>
+          <th>Date</th>
           <th>Category</th>
           <th>Description</th>
           <th>Account / reference</th>
@@ -247,8 +258,12 @@
       {% for item in transactions %}
         <tr>
           <td>{{ item.branch.name }}</td>
+          <td>{{ item.business_date|date:'d M Y' }}</td>
           <td>{{ item.type }}</td>
-          <td>{{ item.description }}</td>
+          <td>
+            {{ item.description }}
+            {% if item.transfer_amount %}<br><span class="text-muted">Transfer amount: <span class="ugx">{{ item.transfer_amount|floatformat:0|intcomma }}</span></span>{% endif %}
+          </td>
           <td>{{ item.method }}{% if item.reference != '—' %}<br><span class="text-muted">{{ item.reference }}</span>{% endif %}</td>
           <td>{{ item.recorded_by }}</td>
           <td class="text-r">{% if item.inflow %}<span class="ugx cash-flow-chip cash-flow-chip--in">{{ item.inflow|floatformat:0|intcomma }}</span>{% else %}—{% endif %}</td>
@@ -272,7 +287,7 @@
           {% endif %}
         </tr>
       {% empty %}
-        <tr><td colspan="{% if can_manage_transactions %}8{% else %}7{% endif %}" class="text-c text-muted">No transactions recorded for this date.</td></tr>
+        <tr><td colspan="{% if can_manage_transactions %}9{% else %}8{% endif %}" class="text-c text-muted">No transactions recorded for this period.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -282,10 +297,10 @@
     <span class="text-muted">Page {{ transactions.number }} of {{ transactions.paginator.num_pages }}</span>
     <div class="d-flex gap-2">
       {% if transactions.has_previous %}
-      <a class="btn btn-outline btn-sm" href="?date={{ business_date|date:'Y-m-d' }}{% if selected_branch %}&amp;branch={{ selected_branch.pk }}{% endif %}&amp;page={{ transactions.previous_page_number }}">Previous</a>
+      <a class="btn btn-outline btn-sm" href="?{% if period == 'custom' %}date={{ date_from|date:'Y-m-d' }}{% else %}period={{ period }}{% endif %}{% if selected_branch %}&amp;branch={{ selected_branch.pk }}{% endif %}&amp;page={{ transactions.previous_page_number }}">Previous</a>
       {% endif %}
       {% if transactions.has_next %}
-      <a class="btn btn-outline btn-sm" href="?date={{ business_date|date:'Y-m-d' }}{% if selected_branch %}&amp;branch={{ selected_branch.pk }}{% endif %}&amp;page={{ transactions.next_page_number }}">Next</a>
+      <a class="btn btn-outline btn-sm" href="?{% if period == 'custom' %}date={{ date_from|date:'Y-m-d' }}{% else %}period={{ period }}{% endif %}{% if selected_branch %}&amp;branch={{ selected_branch.pk }}{% endif %}&amp;page={{ transactions.next_page_number }}">Next</a>
       {% endif %}
     </div>
   </div>

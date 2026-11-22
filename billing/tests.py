@@ -1172,7 +1172,10 @@ class PaymentReceiptReportTests(TestCase):
         self.assertContains(response, 'Payment receipt filters')
         self.assertContains(response, 'data-filter-toolbar')
         self.assertContains(response, 'data-filter-submit')
-        self.assertContains(response, 'Receipt, customer, service, invoice, or reference')
+        self.assertContains(response, 'Search receipt, invoice, client, service, or reference')
+        self.assertContains(response, 'payment-receipt-filters__primary')
+        self.assertContains(response, 'type="search"')
+        self.assertContains(response, 'Payment method')
         self.assertNotIn('client', response.context['filter_form'].fields)
         self.assertNotIn('service_type', response.context['filter_form'].fields)
         self.assertContains(
@@ -1191,6 +1194,31 @@ class PaymentReceiptReportTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.context['record_count'], 1)
                 self.assertContains(response, self.payment.receipt_number)
+
+    def test_receipt_method_dropdown_filters_matching_payments(self):
+        bank_payment = Payment.objects.create(
+            client=self.other_customer,
+            branch=self.branch,
+            amount=Decimal('900'),
+            method='bank_transfer',
+            payment_date=self.payment_date,
+            received_by=self.user,
+        )
+
+        response = self.client.get(
+            reverse('billing:payments_report'),
+            {'method': 'bank_transfer'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['record_count'], 1)
+        self.assertEqual(response.context['total_amount'], Decimal('900'))
+        self.assertContains(response, bank_payment.receipt_number)
+        self.assertNotContains(response, self.payment.receipt_number)
+        self.assertEqual(
+            response.context['filter_form']['method'].value(),
+            'bank_transfer',
+        )
 
     def test_admin_can_delete_payment_and_related_balances_are_recalculated(self):
         invoice = Invoice.objects.create(

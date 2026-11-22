@@ -868,10 +868,6 @@ select.form-ctrl,select.form-control,select.form-select{
   background-repeat:no-repeat;
   background-size:.75rem;
 }
-/* Select2: fully collapse the original hidden select */
-.select2-hidden-accessible{
-  display:none!important;
-}
 .form-select-sm{font-size:.78rem;padding:.35rem .65rem}
 input[type=file].form-control{padding:.38rem .65rem}
 
@@ -976,6 +972,7 @@ input[type=file].form-control{padding:.38rem .65rem}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(8,24,46,.72);
   backdrop-filter:blur(12px);z-index:9000;align-items:center;justify-content:center;padding:1.2rem;
   transition:opacity .25s ease,visibility .25s ease;opacity:0;visibility:hidden}
+.modal-overlay--nested{z-index:9010}
 .modal-overlay.open{display:flex;opacity:1;visibility:visible;animation:ui-overlay-enter .2s ease}
 .modal-box{background:var(--modal-bg);border-radius:22px;padding:1.6rem;
   width:100%;max-width:620px;box-shadow:0 32px 86px rgba(0,0,0,.24);
@@ -1082,10 +1079,17 @@ input[type=file].form-control{padding:.38rem .65rem}
 .record-filter-toolbar__form--expenses{
   grid-template-columns:repeat(2,minmax(0,1fr));
 }
-.record-filter-toolbar__form--receipts{grid-template-columns:repeat(4,minmax(0,1fr))}
-.record-filter-toolbar__form--receipts .record-filter-toolbar__search{grid-column:span 2}
-.record-filter-toolbar__form--receipts .record-filter-toolbar__field--wide{grid-column:span 2}
-.record-filter-toolbar__form--receipts .record-filter-toolbar__actions{grid-column:1/-1}
+.record-filter-toolbar__form--receipts{grid-template-columns:minmax(0,1fr)}
+.payment-receipt-filters__primary{
+  display:grid;grid-template-columns:minmax(260px,1.8fr) minmax(190px,.8fr) auto;
+  grid-column:1/-1;align-items:end;gap:.7rem;min-width:0;
+}
+.payment-receipt-filters__secondary{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-column:1/-1;gap:.7rem;min-width:0;padding-top:.7rem;border-top:1px solid var(--border);
+}
+.payment-receipt-filters__method{min-width:0}
+.payment-receipt-filters__primary .record-filter-toolbar__actions{flex-wrap:wrap}
 .record-filter-toolbar__field{display:grid;gap:.34rem;min-width:0;margin:0}
 .record-filter-toolbar__field>span:first-child{
   color:var(--muted);font-size:.67rem;font-weight:750;letter-spacing:.055em;text-transform:uppercase;
@@ -2152,8 +2156,13 @@ body[data-theme="dark"] .modal-box{box-shadow:0 8px 24px rgba(0,0,0,.3)}
   .record-filter-toolbar__form--receipts{grid-template-columns:repeat(2,minmax(0,1fr))}
   .record-filter-toolbar__search{grid-column:1/-1}
   .record-filter-toolbar__form--receipts .record-filter-toolbar__search{grid-column:1/-1}
-  .record-filter-toolbar__form--receipts .record-filter-toolbar__field--wide{grid-column:auto}
-  .record-filter-toolbar__actions{grid-column:1/-1}
+  .payment-receipt-filters__primary{grid-template-columns:minmax(0,1fr) auto}
+  .payment-receipt-filters__primary .record-filter-toolbar__search{grid-column:1/-1}
+  .payment-receipt-filters__method{grid-column:1}
+  .payment-receipt-filters__primary .record-filter-toolbar__actions{grid-column:2}
+  .payment-receipt-filters__secondary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .payment-receipt-filters__secondary .record-filter-toolbar__field:last-child{grid-column:1/-1}
+  .record-filter-toolbar__form--receipts>.record-filter-toolbar__actions{grid-column:1/-1}
   .record-filter-toolbar__form--expenses .record-filter-toolbar__field:first-child{grid-column:1/-1}
   .payment-records-table{display:none}
   .payment-records-cards{
@@ -2170,9 +2179,12 @@ body[data-theme="dark"] .modal-box{box-shadow:0 8px 24px rgba(0,0,0,.3)}
   .record-filter-toolbar__form--receipts{grid-template-columns:repeat(2,minmax(0,1fr))}
   .record-filter-toolbar__search,
   .record-filter-toolbar__form--receipts .record-filter-toolbar__search,
-  .record-filter-toolbar__actions,
+  .record-filter-toolbar__form--receipts>.record-filter-toolbar__actions,
   .record-filter-toolbar__form--expenses .record-filter-toolbar__field:first-child{grid-column:1/-1}
-  .record-filter-toolbar__form--receipts .record-filter-toolbar__field--wide{grid-column:auto}
+  .payment-receipt-filters__primary{grid-template-columns:minmax(0,1fr) auto}
+  .payment-receipt-filters__primary .record-filter-toolbar__search{grid-column:1/-1}
+  .payment-receipt-filters__method{grid-column:1}
+  .payment-receipt-filters__primary .record-filter-toolbar__actions{grid-column:2}
 }
 @media(max-width:600px){
   html,body{width:100%;max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%}
@@ -2255,6 +2267,13 @@ body[data-theme="dark"] .modal-box{box-shadow:0 8px 24px rgba(0,0,0,.3)}
   .payment-report-summary__item{padding:.65rem}
   .payment-report-summary__item strong{font-size:.95rem}
   .record-filter-toolbar__form--receipts{gap:.55rem}
+  .payment-receipt-filters__primary{grid-template-columns:minmax(0,1fr)}
+  .payment-receipt-filters__primary .record-filter-toolbar__search,
+  .payment-receipt-filters__method,
+  .payment-receipt-filters__primary .record-filter-toolbar__actions{grid-column:1/-1}
+  .payment-receipt-filters__primary .record-filter-toolbar__actions .btn{flex:1}
+  .payment-receipt-filters__secondary{grid-template-columns:minmax(0,1fr)}
+  .payment-receipt-filters__secondary .record-filter-toolbar__field:last-child{grid-column:auto}
   .quick-payment-select-row{gap:.35rem}
   .quick-payment-select-row>.btn{padding:.4rem .5rem;white-space:nowrap}
   .tbl-wrap{overflow:visible}
@@ -2313,8 +2332,11 @@ body[data-theme="dark"] .modal-box{box-shadow:0 8px 24px rgba(0,0,0,.3)}
   .field-span-2{grid-column:auto}
   .payment-report-summary{grid-template-columns:minmax(0,1fr)}
   .record-filter-toolbar__form--receipts{grid-template-columns:minmax(0,1fr)}
-  .record-filter-toolbar__form--receipts .record-filter-toolbar__search,
-  .record-filter-toolbar__form--receipts .record-filter-toolbar__actions{grid-column:1/-1}
+  .payment-receipt-filters__primary,
+  .payment-receipt-filters__secondary{grid-template-columns:minmax(0,1fr)}
+  .payment-receipt-filters__primary .record-filter-toolbar__search,
+  .payment-receipt-filters__method,
+  .payment-receipt-filters__primary .record-filter-toolbar__actions{grid-column:1/-1}
 }
 @media print{
   .payment-records-table{display:block!important}

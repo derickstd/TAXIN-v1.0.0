@@ -10,11 +10,7 @@
 <section class="record-filter-toolbar" aria-label="Engagement search and filters">
   <div class="record-filter-toolbar__head">
     <div class="record-filter-toolbar__identity">
-      <span class="record-filter-toolbar__icon"><i class="fas fa-briefcase" aria-hidden="true"></i></span>
-      <div>
-        <h2>Find an engagement</h2>
-        <p>Search job cards, review status, or isolate duplicates.</p>
-      </div>
+
     </div>
     <div class="record-filter-toolbar__exports">
       {% include "components/export_buttons.html" with excel_url="core:export_jobcards_excel" pdf_url="core:export_jobcards_pdf" show_condition=page_obj.paginator.count compact=True %}

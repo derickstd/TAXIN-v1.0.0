@@ -38,7 +38,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
-<link rel="stylesheet" href="{% static 'css/app.css' %}?v=34"><style>
+<link rel="stylesheet" href="{% static 'css/app.css' %}?v=35"><style>
 .floating-payment-button {
   position:fixed;
   right:1rem;
@@ -322,18 +322,15 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
         <a href="{% url 'documents:financial_reports' %}" class="sb-link {% block nav_financial_reports %}{% endblock %}" title="Financial Reports"><i class="fas fa-scale-balanced"></i><span class="sb-lbl">Cash Flow &amp; Balance Sheet</span></a>
         <a href="{% url 'documents:branch_account_statement' %}{% if active_branch %}?branch={{ active_branch.pk }}{% endif %}" class="sb-link" title="Branch Account Statement"><i class="fas fa-book-open"></i><span class="sb-lbl">Account Statement</span></a>
         <a href="{% url 'documents:branch_bank_statement' %}{% if active_branch %}?branch={{ active_branch.pk }}{% endif %}" class="sb-link" title="Bank Statement"><i class="fas fa-building-columns"></i><span class="sb-lbl">Bank Statement</span></a>
-        {% if not active_branch or external_reporting_workspace %}
         <a href="{% url 'documents:branch_daily_ledger' %}" class="sb-link {% block nav_branch_ledger %}{% endblock %}" title="Branch Daily Transaction Ledger"><i class="fas fa-clipboard-check"></i><span class="sb-lbl">Daily Transaction Ledger</span></a>
-        <a href="{% url 'documents:branch_daily_summaries' %}" class="sb-link" title="Branch Daily Summaries"><i class="fas fa-calendar-check"></i><span class="sb-lbl">Daily Summaries</span></a>
-        {% endif %}
+        <a href="{% url 'documents:branch_daily_summaries' %}" class="sb-link {% block nav_branch_summaries %}{% endblock %}" title="Branch Daily Summaries"><i class="fas fa-calendar-check"></i><span class="sb-lbl">Daily Summaries</span></a>
         <a href="{% url 'documents:price_list' %}"     class="sb-link {% block nav_price %}{% endblock %}" title="Price List"><i class="fas fa-tags"></i><span class="sb-lbl">Price List</span></a>
         <a href="{% url 'documents:doc_list' %}"         class="sb-link" title="Documents"><i class="fas fa-folder-open"></i><span class="sb-lbl">Documents</span></a>
         {% if not external_reporting_workspace %}
         <a href="{% url 'documents:monthly_report' %}" class="sb-link" title="Monthly Report"><i class="fas fa-chart-line"></i><span class="sb-lbl">Monthly Report</span></a>
         <a href="{% url 'documents:audit_books' %}"    class="sb-link" title="Audit Books"><i class="fas fa-book"></i><span class="sb-lbl">Audit Books</span></a>
         {% endif %}
-        <a href="{% url 'notifications:list' %}"       class="sb-link {% block nav_notif %}{% endblock %}" title="Notifications"><i class="fas fa-bell"></i><span class="sb-lbl">Notifications</span></a>
-        <a href="{% url 'notifications:message_threads' %}" class="sb-link {% block nav_messages %}{% endblock %}" title="Messages"><i class="fas fa-comments"></i><span class="sb-lbl">Messages</span></a>
+        <a href="{% url 'notifications:list' %}?tab=messages" class="sb-link {% block nav_inbox %}{% endblock %}" title="Inbox"><i class="fas fa-inbox"></i><span class="sb-lbl">Inbox</span></a>
       </div>
     </div>
 
@@ -559,7 +556,7 @@ body[data-theme="dark"] .floating-transfer-button { color:#fff; }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="{% static 'js/app.js' %}?v=7"></script>
+<script src="{% static 'js/app.js' %}?v=8"></script>
 <script>
 (function(){
   var body = document.body;

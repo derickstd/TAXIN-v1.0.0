@@ -10,19 +10,34 @@ from core.utils import paginate_queryset
 
 @login_required
 def notification_list(request):
-    logs_qs = NotificationLog.objects.select_related('client','triggered_by').order_by('-created_at')
-    page_obj = paginate_queryset(request, logs_qs, per_page=50)
-    return render(request, 'notifications/log_list.html', {'logs': page_obj, 'page_obj': page_obj})
+    return _inbox(request, 'notifications')
+
 
 @login_required
 def message_threads(request):
+    return _inbox(request, 'messages')
+
+
+def _inbox(request, default_tab):
+    active_tab = request.GET.get('tab', default_tab)
+    if active_tab not in ('messages', 'notifications'):
+        active_tab = default_tab
+
+    logs_qs = NotificationLog.objects.select_related('client','triggered_by').order_by('-created_at')
+    logs = paginate_queryset(
+        request, logs_qs, per_page=50, page_param='notifications_page',
+    )
     threads_qs = MessageThread.objects.filter(participants=request.user)
     threads_qs = threads_qs.annotate(last_activity=Max('messages__created_at')).order_by('-last_activity', '-created_at')
-    page_obj = paginate_queryset(request, threads_qs, per_page=25)
-    for thread in page_obj.object_list:
+    threads = paginate_queryset(
+        request, threads_qs, per_page=25, page_param='messages_page',
+    )
+    for thread in threads.object_list:
         thread.unread_count_for_user = thread.messages.exclude(read_by=request.user).count()
-    return render(request, 'notifications/message_threads.html', {
-        'threads': page_obj, 'page_obj': page_obj,
+    return render(request, 'notifications/inbox.html', {
+        'active_tab': active_tab,
+        'logs': logs,
+        'threads': threads,
     })
 
 @login_required

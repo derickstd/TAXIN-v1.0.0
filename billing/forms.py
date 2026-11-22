@@ -56,9 +56,9 @@ class PaymentReceiptFilterForm(forms.Form):
         required=False,
         label='Search',
         max_length=200,
-        widget=forms.TextInput(attrs={
+        widget=forms.SearchInput(attrs={
             'class': 'form-control',
-            'placeholder': 'Receipt, customer, service, invoice, or reference',
+            'placeholder': 'Search receipt, invoice, client, service, or reference',
         }),
     )
     date_from = forms.DateField(

@@ -27,41 +27,45 @@
 
 <section class="record-filter-toolbar record-filter-toolbar--receipts no-print" aria-label="Payment receipt filters">
   <form method="get" class="record-filter-toolbar__form record-filter-toolbar__form--receipts" data-filter-toolbar>
-    <label class="record-filter-toolbar__field record-filter-toolbar__search">
-      <span>Search</span>
-      <span class="record-filter-toolbar__input">
-        <i class="fas fa-search" aria-hidden="true"></i>
-        {{ filter_form.search }}
-      </span>
-      {% for error in filter_form.search.errors %}<span class="err-msg">{{ error }}</span>{% endfor %}
-    </label>
-    <label class="record-filter-toolbar__field">
-      <span>From</span>
-      {{ filter_form.date_from }}
-      {% for error in filter_form.date_from.errors %}<span class="err-msg">{{ error }}</span>{% endfor %}
-    </label>
-    <label class="record-filter-toolbar__field">
-      <span>To</span>
-      {{ filter_form.date_to }}
-      {% for error in filter_form.date_to.errors %}<span class="err-msg">{{ error }}</span>{% endfor %}
-    </label>
-    <label class="record-filter-toolbar__field record-filter-toolbar__field--wide">
-      <span>Payment method</span>
-      {{ filter_form.method }}
-      {% for error in filter_form.method.errors %}<span class="err-msg">{{ error }}</span>{% endfor %}
-    </label>
-    <label class="record-filter-toolbar__field record-filter-toolbar__field--wide">
-      <span>Branch</span>
-      {{ filter_form.branch }}
-      {% for error in filter_form.branch.errors %}<span class="err-msg">{{ error }}</span>{% endfor %}
-    </label>
-    <div class="record-filter-toolbar__actions">
-      <button class="btn btn-primary" type="submit" data-filter-submit>
-        <i class="fas fa-search" aria-hidden="true"></i><span>Apply filters</span>
-      </button>
-      <a class="btn btn-outline" href="{% url 'billing:payments_report' %}" aria-label="Clear receipt filters">
-        <i class="fas fa-rotate-left" aria-hidden="true"></i><span>Clear</span>
-      </a>
+    <div class="payment-receipt-filters__primary">
+      <label class="record-filter-toolbar__field record-filter-toolbar__search">
+        <span>Search receipts</span>
+        <span class="record-filter-toolbar__input">
+          <i class="fas fa-search" aria-hidden="true"></i>
+          {{ filter_form.search }}
+        </span>
+        {% for error in filter_form.search.errors %}<span class="err-msg">{{ error }}</span>{% endfor %}
+      </label>
+      <label class="record-filter-toolbar__field payment-receipt-filters__method">
+        <span>Payment method</span>
+        {{ filter_form.method }}
+        {% for error in filter_form.method.errors %}<span class="err-msg">{{ error }}</span>{% endfor %}
+      </label>
+      <div class="record-filter-toolbar__actions">
+        <button class="btn btn-primary" type="submit" data-filter-submit>
+          <i class="fas fa-search" aria-hidden="true"></i><span>Apply filters</span>
+        </button>
+        <a class="btn btn-outline" href="{% url 'billing:payments_report' %}" aria-label="Clear receipt filters">
+          <i class="fas fa-rotate-left" aria-hidden="true"></i><span>Clear</span>
+        </a>
+      </div>
+    </div>
+    <div class="payment-receipt-filters__secondary">
+      <label class="record-filter-toolbar__field">
+        <span>From</span>
+        {{ filter_form.date_from }}
+        {% for error in filter_form.date_from.errors %}<span class="err-msg">{{ error }}</span>{% endfor %}
+      </label>
+      <label class="record-filter-toolbar__field">
+        <span>To</span>
+        {{ filter_form.date_to }}
+        {% for error in filter_form.date_to.errors %}<span class="err-msg">{{ error }}</span>{% endfor %}
+      </label>
+      <label class="record-filter-toolbar__field">
+        <span>Branch</span>
+        {{ filter_form.branch }}
+        {% for error in filter_form.branch.errors %}<span class="err-msg">{{ error }}</span>{% endfor %}
+      </label>
     </div>
   </form>
 </section>
