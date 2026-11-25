@@ -38,7 +38,7 @@ def scope_queryset(user, queryset: QuerySet, branch_path='branch'):
     if user.is_superuser:
         return queryset
     if not user.company_id and not user.branch_id:
-        return queryset
+        return queryset if has_company_wide_branch_access(user) else queryset.none()
     if user.company_id and has_company_wide_branch_access(user):
         return queryset.filter(**{f'{branch_path}__company_id': user.company_id})
     branches = accessible_branches(user)

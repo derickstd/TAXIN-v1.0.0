@@ -143,6 +143,11 @@
       <div class="card-bd">
         <form method="post" action="{% url 'billing:pay' invoice.pk %}" data-payment-submit>{% csrf_token %}
           <input type="hidden" name="payment_submission_token" value="{{ payment_submission_token }}">
+          <label class="form-label mb-2">
+            <input type="hidden" name="create_job_card" value="0">
+            <input type="checkbox" name="create_job_card" value="1" checked>
+            Create a job card if this invoice has none
+          </label>
           <div class="mb-2"><label class="form-label">Amount (UGX)</label>
             <input type="number" name="amount" class="form-ctrl" value="{{ invoice.balance_due|floatformat:0 }}" placeholder="e.g. 150,000"></div>
           <div class="mb-2"><label class="form-label">Payment date</label>

@@ -70,6 +70,11 @@
         <form method="post" action="{% url 'billing:client_pay' %}" data-payment-submit>{% csrf_token %}
           <input type="hidden" name="payment_submission_token" value="{{ payment_submission_token }}">
           <input type="hidden" name="client" value="{{ client.pk }}">
+          <label class="form-label mb-2">
+            <input type="hidden" name="create_job_card" value="0">
+            <input type="checkbox" name="create_job_card" value="1" checked>
+            Create job cards for invoices without one
+          </label>
           <div class="mb-2">
             <label class="form-label">Amount (UGX)</label>
             <input type="number" name="amount" id="clientPaymentAmount" class="form-ctrl" min="0" step="1000" value="{{ balance|floatformat:0 }}" placeholder="Enter lump sum">
@@ -87,7 +92,7 @@
             {% empty %}
             <div class="text-muted" style="font-size:.78rem">No pending invoices.</div>
             {% endfor %}
-            <div class="text-muted" style="font-size:.72rem;margin-top:.35rem">Select invoices to collect. Leave all unchecked to include all pending invoices.</div>
+            <div class="text-muted" style="font-size:.72rem;margin-top:.35rem">Select invoices to collect. Leave all unchecked to include all pending invoices; payments are applied earliest periods first.</div>
           </div>
           <div class="mb-2">
             <label class="form-label">Method</label>

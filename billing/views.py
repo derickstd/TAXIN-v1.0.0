@@ -58,6 +58,58 @@ def _complete_payment_submission(submission, message, redirect_url):
     submission.save(update_fields=['message', 'redirect_url'])
 
 
+def _should_create_job_card(request):
+    values = request.POST.getlist('create_job_card')
+    return '1' in values if values else True
+
+
+def _invoice_service_type(invoice):
+    if invoice.service_type_id:
+        return invoice.service_type
+    if invoice.job_card_id:
+        line_item = invoice.job_card.line_items.select_related('service_type').filter(
+            service_type__isnull=False,
+        ).first()
+        if line_item:
+            return line_item.service_type
+    return None
+
+
+def _create_job_card_for_invoice(invoice, user):
+    if invoice.job_card_id:
+        return invoice.job_card
+
+    service_type = _invoice_service_type(invoice)
+    description = (
+        service_type.name if service_type
+        else invoice.notes.strip() or f'Payment for {invoice.invoice_number}'
+    )
+    job = JobCard.objects.create(
+        client=invoice.client,
+        branch=invoice.branch or invoice.client.branch or get_entry_branch(user),
+        notes=f'Created automatically from invoice {invoice.invoice_number}.',
+        created_by=user,
+    )
+    JobCardLineItem.objects.create(
+        job_card=job,
+        service_type=service_type,
+        custom_description='' if service_type else description[:300],
+        default_price=invoice.subtotal,
+        negotiated_price=invoice.subtotal,
+        vat_amount=invoice.vat_total,
+        status='handled_not_paid',
+        notes=f'Invoice {invoice.invoice_number}',
+    )
+    invoice.job_card = job
+    invoice.save(update_fields=['job_card'])
+    StaffActivityLog.objects.create(
+        job_card=job,
+        staff=user,
+        action='Job card created from invoice payment',
+    )
+    return job
+
+
 def _duplicate_payment_response(request, submission, fallback_url, is_ajax=False):
     message = submission.message or 'This payment submission has already been processed.'
     message = f'{message} No duplicate was created.'
@@ -617,6 +669,7 @@ def record_payment(request, pk):
                     request.user, Invoice.objects.all(),
                 ).select_for_update().get(pk=pk)
                 invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
+                create_job_card = _should_create_job_card(request)
                 remaining = amount
                 unapplied_amount = Decimal('0')
                 created_payments = []
@@ -646,8 +699,11 @@ def record_payment(request, pk):
                     to_apply = min(balance, remaining)
                     if to_apply <= 0:
                         continue
+                    if create_job_card and not inv.job_card_id:
+                        _create_job_card_for_invoice(inv, request.user)
                     payment = Payment.objects.create(
                         invoice=inv, branch=inv.branch or payment_branch,
+                        service_type=_invoice_service_type(inv),
                         amount=to_apply, method=method,
                         payment_date=payment_date,
                         reference=reference, received_by=request.user)
@@ -658,6 +714,7 @@ def record_payment(request, pk):
                     unapplied_amount = remaining
                     credit = Payment.objects.create(
                         client=invoice.client, branch=invoice.branch or payment_branch,
+                        service_type=_invoice_service_type(invoice),
                         amount=remaining, method=method,
                         payment_date=payment_date,
                         reference=reference, received_by=request.user)
@@ -758,6 +815,7 @@ def record_client_payment(request):
     if selected_invoice_ids:
         unpaid = unpaid.filter(pk__in=selected_invoice_ids)
     unpaid = unpaid.order_by('date_issued', 'pk')
+    create_job_card = _should_create_job_card(request)
 
     with transaction.atomic():
         unpaid = unpaid.select_for_update()
@@ -773,9 +831,12 @@ def record_client_payment(request):
             to_apply = min(balance, remaining)
             if to_apply <= 0:
                 continue
+            if create_job_card and not inv.job_card_id:
+                _create_job_card_for_invoice(inv, request.user)
             Payment.objects.create(
                 invoice=inv,
                 branch=inv.branch or payment_branch,
+                service_type=_invoice_service_type(inv),
                 amount=to_apply,
                 method=method,
                 payment_date=payment_date,
@@ -793,6 +854,7 @@ def record_client_payment(request):
             Payment.objects.create(
                 client=client,
                 branch=payment_branch,
+                service_type=_invoice_service_type(inv) if allocated_count else None,
                 amount=remaining,
                 method=method,
                 payment_date=payment_date,
@@ -879,6 +941,71 @@ def _create_quick_payment_job_card(client, service_type, amount, payment_date, b
     return job
 
 
+def _quick_payment_tenders(request, method, amount):
+    if method not in ('credit', 'mixed'):
+        return {method: amount}
+
+    tenders = {}
+    for payment_method, field_name in (
+        ('cash', 'cash_amount'),
+        ('mobile_money', 'mobile_money_amount'),
+        ('bank_transfer', 'bank_transfer_amount'),
+    ):
+        raw_amount = request.POST.get(field_name, '').strip()
+        try:
+            tender_amount = Decimal(raw_amount) if raw_amount else Decimal('0')
+        except (InvalidOperation, TypeError):
+            raise ValueError(f'Enter a valid {payment_method.replace("_", " ")} amount.')
+        if not tender_amount.is_finite() or tender_amount < 0:
+            raise ValueError('Tender amounts must be valid non-negative amounts.')
+        try:
+            rounded_tender = tender_amount.quantize(Decimal('0.01'))
+        except InvalidOperation:
+            raise ValueError('Tender amounts must be valid non-negative amounts.')
+        if tender_amount != rounded_tender:
+            raise ValueError('Tender amounts must be non-negative with at most two decimal places.')
+        tenders[payment_method] = tender_amount
+
+    total_tendered = sum(tenders.values(), Decimal('0'))
+    if total_tendered > amount:
+        raise ValueError('Tender amounts cannot exceed the total amount.')
+    if method == 'mixed' and total_tendered != amount:
+        raise ValueError('Mixed payment tender amounts must equal the total amount.')
+    return {key: value for key, value in tenders.items() if value > 0}
+
+
+def _create_external_branch_payment_entries(
+    branch, payment_date, client, service_type, tenders, reference, user,
+):
+    if not branch or not branch.external_reporting:
+        return
+
+    accounts = {
+        'cash': 'cash',
+        'mobile_money': 'mobile_money',
+        'bank_transfer': 'bank_transfer',
+    }
+    tender_items = list(tenders.items())
+    for index, (method, tender_amount) in enumerate(tender_items):
+        entry_reference = reference
+        if reference and len(tender_items) > 1:
+            entry_reference = f'{reference[:88]}-{index + 1}'
+        description = f'Customer payment — {client.get_display_name()}'
+        if service_type:
+            description += f' — {service_type.name}'
+        BranchDailyTransaction.objects.create(
+            branch=branch,
+            business_date=payment_date,
+            direction='inflow',
+            category='service_receipt',
+            description=description[:255],
+            account=accounts[method],
+            amount=tender_amount,
+            reference=entry_reference,
+            entered_by=user,
+        )
+
+
 @login_required
 @require_http_methods(['GET', 'POST'])
 @transaction.atomic
@@ -899,6 +1026,8 @@ def quick_payment(request):
             amount = Decimal(amount_raw)
         except (InvalidOperation, TypeError):
             return payment_error('Enter a valid payment amount.')
+        if not amount.is_finite():
+            return payment_error('Enter a valid payment amount.')
         if amount <= 0:
             return payment_error('Payment amount must be greater than zero.')
         if amount > Decimal('9999999999999.99'):
@@ -912,9 +1041,15 @@ def quick_payment(request):
         amount = rounded_amount
 
         method = request.POST.get('method', 'cash')
-        quick_payment_methods = Payment.METHOD + [('credit', 'Credit')]
+        quick_payment_methods = Payment.METHOD + [
+            ('mixed', 'Mixed'), ('credit', 'Credit'),
+        ]
         if method not in dict(quick_payment_methods):
             return payment_error('Select a valid payment method.')
+        try:
+            tenders = _quick_payment_tenders(request, method, amount)
+        except ValueError as exc:
+            return payment_error(str(exc))
 
         payment_date_raw = request.POST.get('payment_date', '').strip()
         try:
@@ -946,10 +1081,23 @@ def quick_payment(request):
         )
         if is_external_branch and payment_date > timezone.localdate():
             return payment_error('An external-branch payment cannot be dated in the future.')
+        if is_external_branch:
+            locked_summary = BranchDailySummary.objects.filter(
+                branch=payment_branch,
+                business_date=payment_date,
+                reviewed_at__isnull=False,
+            ).exists()
+            if locked_summary:
+                return payment_error(
+                    'This branch day has been reviewed and locked. '
+                    'Record the payment on an open business date.'
+                )
 
         service_type = None
         service_id = request.POST.get('service_type', '').strip()
         is_capital_injection = service_id == 'capital_injection'
+        if is_capital_injection and method == 'mixed':
+            return payment_error('Record capital injections using one payment method at a time.')
         if service_id and not is_capital_injection:
             service_type = scope_queryset(
                 request.user,
@@ -965,6 +1113,20 @@ def quick_payment(request):
         ):
             return payment_error('The selected service is not available to this client’s branch.')
 
+        unpaid_invoices = scope_queryset(
+            request.user, Invoice.objects.filter(client=client),
+        ).exclude(status__in=['paid', 'written_off']).order_by('date_issued', 'pk')
+        if is_external_branch:
+            unpaid_invoices = unpaid_invoices.filter(branch=payment_branch)
+        if not is_capital_injection and not service_type:
+            if not unpaid_invoices.exists():
+                return payment_error('Select a service to record the payment purpose.')
+            if unpaid_invoices.filter(service_type__isnull=True).exists():
+                return payment_error(
+                    'Select a service or add a service to each outstanding invoice before recording payment.'
+                )
+
+        create_job_card = _should_create_job_card(request)
         notes = request.POST.get('notes', '').strip()
         submission, replay = _claim_payment_submission(request, 'quick')
         if replay == 'invalid':
@@ -992,43 +1154,87 @@ def quick_payment(request):
                 invoice_notes += f'\nReference: {reference}'
             if notes:
                 invoice_notes += f'\n{notes}'
-            with transaction.atomic():
-                job = None
-                subtotal = amount
-                vat_total = Decimal('0')
-                if not is_external_branch:
-                    job = _create_quick_payment_job_card(
-                        client, service_type, amount, payment_date, payment_branch,
-                        request.user, notes, paid=False,
+            try:
+                with transaction.atomic():
+                    if is_external_branch:
+                        summary = BranchDailySummary.objects.select_for_update().filter(
+                            branch=payment_branch,
+                            business_date=payment_date,
+                        ).first()
+                        if summary and summary.reviewed_at:
+                            return payment_error(
+                                'This branch day has been reviewed and locked. '
+                                'Record the payment on an open business date.'
+                            )
+                    job = None
+                    subtotal = amount
+                    vat_total = Decimal('0')
+                    if create_job_card:
+                        job = _create_quick_payment_job_card(
+                            client, service_type, amount, payment_date,
+                            payment_branch, request.user, notes, paid=False,
+                        )
+                        vat_total = sum(
+                            item.vat_amount for item in job.line_items.all()
+                        )
+                        subtotal = job.total_fee - vat_total
+                    credit_invoice = Invoice.objects.create(
+                        client=client,
+                        branch=payment_branch,
+                        service_type=service_type,
+                        job_card=job,
+                        is_credit_sale=sum(tenders.values(), Decimal('0')) < amount,
+                        due_date=payment_date + timedelta(days=14),
+                        subtotal=subtotal,
+                        vat_total=vat_total,
+                        grand_total=amount,
+                        status='sent',
+                        payment_method=(
+                            'mixed' if len(tenders) > 1
+                            else next(iter(tenders), '')
+                        ),
+                        notes=invoice_notes,
+                        created_by=request.user,
                     )
-                    vat_total = sum(
-                        item.vat_amount for item in job.line_items.all()
+                    Invoice.objects.filter(pk=credit_invoice.pk).update(
+                        date_issued=payment_date,
                     )
-                    subtotal = job.total_fee - vat_total
-                credit_invoice = Invoice.objects.create(
-                    client=client,
-                    branch=payment_branch,
-                    service_type=service_type,
-                    job_card=job,
-                    is_credit_sale=True,
-                    due_date=payment_date + timedelta(days=14),
-                    subtotal=subtotal,
-                    vat_total=vat_total,
-                    grand_total=amount,
-                    status='sent',
-                    notes=invoice_notes,
-                    created_by=request.user,
-                )
-                Invoice.objects.filter(pk=credit_invoice.pk).update(
-                    date_issued=payment_date,
+                    for tender_method, tender_amount in tenders.items():
+                        Payment.objects.create(
+                            invoice=credit_invoice,
+                            client=client,
+                            service_type=service_type,
+                            amount=tender_amount,
+                            payment_date=payment_date,
+                            method=tender_method,
+                            reference=reference,
+                            notes=notes,
+                            received_by=request.user,
+                            branch=payment_branch,
+                        )
+                    if is_external_branch:
+                        _create_external_branch_payment_entries(
+                            payment_branch, payment_date, client, service_type,
+                            tenders, reference, request.user,
+                        )
+            except IntegrityError:
+                return payment_error(
+                    'This reference has already been recorded for the branch and date.'
                 )
             engagement_note = f'on job card {job.job_number} and ' if job else ''
+            credit_balance = amount - sum(tenders.values(), Decimal('0'))
             confirmation = (
-                f'UGX {amount:,.0f} recorded as credit for '
+                f'UGX {amount:,.0f} recorded for '
                 f'{client.get_display_name()} {engagement_note}'
                 f'on invoice {credit_invoice.invoice_number}. '
-                f'Due {credit_invoice.due_date:%d %b %Y}. No cash payment was recorded.'
+                f'Due {credit_invoice.due_date:%d %b %Y}.'
             )
+            if credit_balance:
+                confirmation += f' UGX {credit_balance:,.0f} remains on credit.'
+            else:
+                confirmation += ' No balance remains on credit.'
+            if not tenders:
+                confirmation += ' No cash payment was recorded.'
             _complete_payment_submission(
                 submission,
                 confirmation,
@@ -1110,11 +1316,6 @@ def quick_payment(request):
 
         allocated_count = 0
         remaining = amount
-        unpaid_invoices = scope_queryset(
-            request.user, Invoice.objects.filter(client=client),
-        ).exclude(status__in=['paid', 'written_off']).order_by('date_issued', 'pk')
-        if is_external_branch:
-            unpaid_invoices = unpaid_invoices.filter(branch=payment_branch)
         try:
             with transaction.atomic():
                 if is_external_branch:
@@ -1128,101 +1329,123 @@ def quick_payment(request):
                             'Record the payment on an open business date.'
                         )
 
-                if service_type and not is_external_branch:
-                    job = _create_quick_payment_job_card(
-                        client, service_type, amount, payment_date, payment_branch,
-                        request.user, notes, paid=True,
-                    )
-                    vat_total = sum(
-                        item.vat_amount for item in job.line_items.all()
-                    )
+                if service_type and (
+                    not is_external_branch or not unpaid_invoices.exists()
+                ):
+                    job = None
+                    if create_job_card:
+                        job = _create_quick_payment_job_card(
+                            client, service_type, amount, payment_date,
+                            payment_branch, request.user, notes, paid=True,
+                        )
+                        vat_total = sum(
+                            item.vat_amount for item in job.line_items.all()
+                        )
+                        subtotal = job.total_fee - vat_total
+                    elif service_type.vat_applicable:
+                        subtotal = (amount / Decimal('1.18')).quantize(Decimal('0.01'))
+                        vat_total = amount - subtotal
+                    else:
+                        subtotal = amount
+                        vat_total = Decimal('0')
                     invoice = Invoice.objects.create(
                         client=client,
                         branch=payment_branch,
                         service_type=service_type,
                         job_card=job,
                         due_date=payment_date + timedelta(days=14),
-                        subtotal=job.total_fee - vat_total,
+                        subtotal=subtotal,
                         vat_total=vat_total,
                         grand_total=amount,
                         status='sent',
-                        payment_method=method,
+                        payment_method=(
+                            'mixed' if len(tenders) > 1
+                            else next(iter(tenders), method)
+                        ),
                         notes=notes,
                         created_by=request.user,
                     )
                     Invoice.objects.filter(pk=invoice.pk).update(
                         date_issued=payment_date,
                     )
-                    Payment.objects.create(
-                        invoice=invoice,
-                        client=client,
-                        service_type=service_type,
-                        amount=amount,
-                        payment_date=payment_date,
-                        method=method,
-                        reference=reference,
-                        notes=notes,
-                        received_by=request.user,
-                        branch=payment_branch,
-                    )
-                    allocated_count = 1
-                    remaining = Decimal('0')
-                else:
-                    for invoice in unpaid_invoices.select_for_update():
-                        if remaining <= 0:
-                            break
-                        invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
-                        balance = invoice.grand_total - invoice.amount_paid
-                        if balance <= 0:
-                            continue
-                        applied_amount = min(balance, remaining)
+                    for tender_method, tender_amount in tenders.items():
                         Payment.objects.create(
                             invoice=invoice,
                             client=client,
                             service_type=service_type,
-                            amount=applied_amount,
+                            amount=tender_amount,
                             payment_date=payment_date,
-                            method=method,
-                            reference=reference,
-                            notes=notes,
-                            received_by=request.user,
-                            branch=invoice.branch or payment_branch,
-                        )
-                        remaining -= applied_amount
-                        allocated_count += 1
-
-                    if remaining > 0:
-                        Payment.objects.create(
-                            client=client,
-                            service_type=service_type,
-                            amount=remaining,
-                            payment_date=payment_date,
-                            method=method,
+                            method=tender_method,
                             reference=reference,
                             notes=notes,
                             received_by=request.user,
                             branch=payment_branch,
                         )
+                    allocated_count = 1
+                    remaining = Decimal('0')
+                else:
+                    tender_remaining = dict(tenders)
+                    unapplied_service_type = service_type
+                    for invoice in unpaid_invoices.select_for_update():
+                        if not tender_remaining or remaining <= 0:
+                            break
+                        invoice.refresh_from_db(fields=['grand_total', 'amount_paid'])
+                        balance = invoice.grand_total - invoice.amount_paid
+                        if balance <= 0:
+                            continue
+                        invoice_remaining = min(balance, remaining)
+                        if service_type and not invoice.service_type_id:
+                            invoice.service_type = service_type
+                            invoice.save(update_fields=['service_type'])
+                        if create_job_card and not invoice.job_card_id:
+                            _create_job_card_for_invoice(invoice, request.user)
+                        for tender_method in list(tender_remaining):
+                            if invoice_remaining <= 0:
+                                break
+                            applied_amount = min(
+                                invoice_remaining, tender_remaining[tender_method],
+                            )
+                            if applied_amount <= 0:
+                                continue
+                            Payment.objects.create(
+                                invoice=invoice,
+                                client=client,
+                                service_type=invoice.service_type or service_type,
+                                amount=applied_amount,
+                                payment_date=payment_date,
+                                method=tender_method,
+                                reference=reference,
+                                notes=notes,
+                                received_by=request.user,
+                                branch=invoice.branch or payment_branch,
+                            )
+                            tender_remaining[tender_method] -= applied_amount
+                            invoice_remaining -= applied_amount
+                            remaining -= applied_amount
+                            if tender_remaining[tender_method] == 0:
+                                del tender_remaining[tender_method]
+                        if invoice_remaining < balance:
+                            allocated_count += 1
+                            unapplied_service_type = invoice.service_type or service_type
+
+                    if remaining > 0:
+                        for tender_method, tender_amount in tender_remaining.items():
+                            Payment.objects.create(
+                                client=client,
+                                service_type=unapplied_service_type,
+                                amount=tender_amount,
+                                payment_date=payment_date,
+                                method=tender_method,
+                                reference=reference,
+                                notes=notes,
+                                received_by=request.user,
+                                branch=payment_branch,
+                            )
 
                 if is_external_branch:
-                    account_for_method = {
-                        'cash': 'cash',
-                        'mobile_money': 'mobile_money',
-                        'bank_transfer': 'bank_transfer',
-                    }
-                    description = f'Customer payment — {client.get_display_name()}'
-                    if service_type:
-                        description += f' — {service_type.name}'
-                    BranchDailyTransaction.objects.create(
-                        branch=payment_branch,
-                        business_date=payment_date,
-                        direction='inflow',
-                        category='service_receipt',
-                        description=description[:255],
-                        account=account_for_method[method],
-                        amount=amount,
-                        reference=reference,
-                        entered_by=request.user,
+                    _create_external_branch_payment_entries(
+                        payment_branch, payment_date, client, service_type,
+                        tenders, reference, request.user,
                     )
         except IntegrityError:
             return payment_error(
@@ -1270,7 +1493,9 @@ def quick_payment(request):
         'clients': clients,
         'payment_submission_token': uuid4(),
         'services': services,
-        'payment_methods': Payment.METHOD + [('credit', 'Credit')],
+        'payment_methods': Payment.METHOD + [
+            ('mixed', 'Mixed'), ('credit', 'Credit'),
+        ],
         'client_types': Client.CLIENT_TYPE,
         'service_categories': service_category_choices(),
         'service_branches': accessible_branches(request.user),

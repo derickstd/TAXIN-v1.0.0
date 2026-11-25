@@ -468,6 +468,16 @@ class BranchAccessTests(TestCase):
 
         self.assertCountEqual(list(visible), [self.client_one, self.client_two])
 
+    def test_company_ceo_can_see_company_branches_but_not_other_companies(self):
+        ceo = User.objects.create_user(
+            username='branchceo', password='pass1234', role='ceo',
+            company=self.company,
+        )
+
+        visible = scope_queryset(ceo, Client.objects.all())
+
+        self.assertCountEqual(list(visible), [self.client_one, self.client_two])
+
     def test_unassigned_staff_has_no_branch_data_access(self):
         unassigned = User.objects.create_user(
             username='unassigned', password='pass1234', role='tax_officer',
