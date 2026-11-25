@@ -98,7 +98,7 @@
             <td>{% if payment.invoice %}<a href="{% url 'billing:detail' payment.invoice.pk %}">{{ payment.invoice.invoice_number }}</a>{% else %}—{% endif %}</td>
             <td>{{ payment.get_method_display }}</td>
             <td>{{ payment.reference|default:'—' }}</td>
-            <td>{{ payment.received_by.get_full_name|default:payment.received_by.username|default:'—' }}</td>
+            <td>{% if payments.received_by %} {{ payment.received_by.get_full_name|default:payment.received_by.username }} {% else %} — {% endif %}</td>
             <td class="text-r ugx">{{ payment.amount|floatformat:0|intcomma }}</td>
             <td>
               <a class="btn btn-outline btn-sm" href="{% url 'billing:payment_receipt' payment.pk %}"><i class="fas fa-eye"></i> View</a>
