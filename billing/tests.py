@@ -1328,6 +1328,31 @@ class PaymentReceiptReportTests(TestCase):
             reverse('billing:payment_receipt', args=[self.payment.pk]),
         )
 
+    def test_receipt_report_prints_all_filtered_rows_with_watermark(self):
+        for index in range(31):
+            Payment.objects.create(
+                client=self.customer,
+                service_type=self.service,
+                branch=self.branch,
+                amount=Decimal('10.00'),
+                method='cash',
+                payment_date=self.payment_date,
+                reference=f'print-report-{index}',
+                received_by=self.user,
+            )
+
+        response = self.client.get(reverse('billing:payments_report'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['record_count'], 32)
+        self.assertEqual(len(response.context['payments']), 30)
+        self.assertEqual(response.context['print_payments'].count(), 32)
+        last_payment = Payment.objects.get(reference='print-report-30')
+        self.assertContains(response, last_payment.receipt_number)
+        self.assertContains(response, 'class="report-watermark"')
+        self.assertContains(response, 'class="payment-report-print"')
+        self.assertContains(response, 'End of report')
+
     def test_receipt_report_search_matches_customer_and_service_names(self):
         for search in (self.customer.full_name, self.service.name):
             with self.subTest(search=search):
@@ -1469,6 +1494,42 @@ class PaymentReceiptReportTests(TestCase):
                 self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
                 self.assertIn(b'%PDF-', pdf_response.content[:10])
                 self.assertIn('attachment;', pdf_response['Content-Disposition'])
+
+    def test_receipt_shows_amount_words_invoice_balance_and_remarks(self):
+        invoice = Invoice.objects.create(
+            client=self.customer,
+            branch=self.branch,
+            service_type=self.service,
+            due_date=self.payment_date,
+            subtotal=Decimal('2000.00'),
+            grand_total=Decimal('2000.00'),
+            status='sent',
+            created_by=self.user,
+        )
+        payment = Payment.objects.create(
+            invoice=invoice,
+            client=self.customer,
+            service_type=self.service,
+            branch=self.branch,
+            amount=Decimal('1234.50'),
+            method='cash',
+            payment_date=self.payment_date,
+            received_by=self.user,
+        )
+
+        response = self.client.get(
+            reverse('billing:payment_receipt', args=[payment.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Amount in words')
+        self.assertContains(response, 'Uganda Shillings One Thousand, Two Hundred and Thirty Four and 50/100 only')
+        self.assertContains(response, 'Invoice settlement')
+        self.assertContains(response, 'UGX 2,000.00')
+        self.assertContains(response, 'UGX 1,234.50')
+        self.assertContains(response, 'UGX 765.50')
+        self.assertContains(response, 'Part payment received; balance remains outstanding.')
+        self.assertContains(response, 'class="report-watermark"')
 
     def test_payment_receipt_obeys_active_branch_scope(self):
         other_branch = Branch.objects.create(

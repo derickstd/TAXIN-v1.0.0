@@ -161,7 +161,8 @@ class CoreVisibilityTests(TestCase):
 
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'Create New Branch')
+        self.assertContains(response, 'Branch details')
+        self.assertContains(response, 'Save company and branches')
 
         response = self.client.post(url, {'action': 'setup_business_branches'})
         self.assertRedirects(response, url)
@@ -179,6 +180,67 @@ class CoreVisibilityTests(TestCase):
         request = RequestFactory().get('/admin/')
         self.assertFalse(branch_admin.has_add_permission(request))
         self.assertFalse(branch_admin.has_delete_permission(request))
+
+    def test_company_branch_page_updates_company_and_adds_branch(self):
+        company = Company.objects.create(
+            name='Initial Company',
+            slug='initial-company',
+            email='old@example.test',
+        )
+        branch = Branch.objects.create(
+            company=company, name='Main', slug='initial-company-main',
+            phone='111',
+        )
+        admin_user = User.objects.create_user(
+            username='company-editor', password='pass1234',
+            role='admin', company=company,
+        )
+        self.client.force_login(admin_user)
+        url = reverse('core:admin_company_branches', args=[company.pk])
+        response = self.client.get(url)
+        formset = response.context['branch_formset']
+        prefix = formset.prefix
+        data = {
+            'action': 'save_company_branches',
+            'name': 'Updated Company Name',
+            'registration_number': 'REG-22',
+            'tin': 'TIN-22',
+            'email': 'updated@example.test',
+            'phone': '+256700000000',
+            'address': 'New company address',
+            'default_branch': str(branch.pk),
+            f'{prefix}-TOTAL_FORMS': '2',
+            f'{prefix}-INITIAL_FORMS': '1',
+            f'{prefix}-MIN_NUM_FORMS': '0',
+            f'{prefix}-MAX_NUM_FORMS': '1000',
+            f'{prefix}-0-id': str(branch.pk),
+            f'{prefix}-0-name': branch.name,
+            f'{prefix}-0-slug': branch.slug,
+            f'{prefix}-0-address': branch.address,
+            f'{prefix}-0-phone': '+256700000009',
+            f'{prefix}-0-is_active': 'on',
+            f'{prefix}-0-external_reporting': '',
+            f'{prefix}-1-name': 'North Branch',
+            f'{prefix}-1-slug': '',
+            f'{prefix}-1-address': 'North address',
+            f'{prefix}-1-phone': '+256700000001',
+            f'{prefix}-1-is_active': 'on',
+            f'{prefix}-1-external_reporting': 'on',
+        }
+
+        response = self.client.post(url, data)
+
+        self.assertRedirects(response, url)
+        company.refresh_from_db()
+        self.assertEqual(company.name, 'Updated Company Name')
+        self.assertEqual(company.email, 'updated@example.test')
+        self.assertEqual(company.phone, '+256700000000')
+        branch.refresh_from_db()
+        self.assertEqual(branch.phone, '+256700000009')
+        new_branch = company.branches.get(name='North Branch')
+        self.assertEqual(new_branch.slug, 'initial-company-north-branch')
+        self.assertEqual(new_branch.phone, '+256700000001')
+        self.assertTrue(new_branch.external_reporting)
 
     def test_company_admin_has_a_sidebar_link_to_branch_setup(self):
         company = Company.objects.create(name='TAXMAN', slug='taxman')

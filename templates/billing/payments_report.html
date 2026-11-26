@@ -9,7 +9,39 @@
 <li class="active payment-report-breadcrumb" aria-current="page">Payments &amp; Receipts</li>
 {% endblock %}
 
+{% block extra_css %}
+<style>
+.payment-report-print{display:none}
+@page{size:A4 landscape;margin:12mm}
+@media print{
+  html,body{height:auto;min-height:0;overflow:visible!important;background:#fff!important}
+  .main{display:block;width:100%;max-width:none;min-height:0;margin:0!important}
+  .page-body{display:block;width:100%;max-width:none;min-height:0;margin:0;padding:0;overflow:visible}
+  .payment-report-screen{display:none!important}
+  .payment-report-print{display:block!important;position:relative;z-index:1;color:#182b3b;font:9pt Arial,sans-serif}
+  .payment-report-print-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12mm;padding-bottom:5mm;border-bottom:2px solid #0e7490}
+  .payment-report-print-header h1{margin:0;color:#164e63;font-size:20pt}
+  .payment-report-print-header p{margin:1mm 0;color:#526777;font-size:9pt}
+  .payment-report-print-meta{text-align:right;font-size:8pt;line-height:1.55}
+  .payment-report-print-summary{display:flex;justify-content:space-between;gap:10mm;margin:5mm 0;padding:3mm 4mm;border:1px solid #cbd6dd;background:#f5fafb}
+  .payment-report-print table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:7.5pt}
+  .payment-report-print th{padding:2mm 1.5mm;background:#e8f4f6;color:#164e63;text-align:left;border:1px solid #b9c9d1}
+  .payment-report-print td{padding:1.7mm 1.5mm;border:1px solid #d5dfe4;vertical-align:top;overflow-wrap:anywhere}
+  .payment-report-print tr{break-inside:avoid;page-break-inside:avoid}
+  .payment-report-print thead{display:table-header-group}
+  .payment-report-print tfoot{display:table-footer-group}
+  .payment-report-print .print-amount{text-align:right;white-space:nowrap}
+  .payment-report-print-footer{margin-top:5mm;padding-top:2mm;border-top:1px solid #cbd6dd;text-align:center;color:#607483;font-size:8pt}
+  .report-watermark{z-index:0!important;opacity:.075!important}
+  .report-watermark img{width:58mm!important;max-height:58mm!important}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+{% endblock %}
+
 {% block content %}
+
+{% include "components/report_watermark.html" %}
 
 <div class="page-header payment-report-page-header">
   <div class="d-flex gap-2 flex-wrap no-print">
@@ -23,7 +55,7 @@
   </div>
 </div>
 
-<section class="payment-report-summary" aria-label="Filtered payment totals">
+<section class="payment-report-summary payment-report-screen" aria-label="Filtered payment totals">
   <div class="payment-report-summary__item">
     <span>Matching receipts</span>
     <strong>{{ record_count|intcomma }}</strong>
@@ -121,7 +153,7 @@
 </div>
 {% endif %}
 
-<section class="card-box card-compact payment-report-results">
+<section class="card-box card-compact payment-report-results payment-report-screen">
 
   <div class="card-head">
     <span>Receipt records</span>
@@ -357,6 +389,64 @@
   </div>
 </section>
 
-{% include "components/pagination_controls.html" %}
+<div class="no-print">
+  {% include "components/pagination_controls.html" %}
+</div>
+
+<section class="payment-report-print" aria-label="Printable payment report">
+  <header class="payment-report-print-header">
+    <div>
+      <h1>{% if report_company %}{{ report_company.name }}{% else %}Taxin{% endif %}</h1>
+      {% if report_branch %}<p>{{ report_branch.name }} branch</p>{% endif %}
+      <p>Payment receipts report</p>
+    </div>
+    <div class="payment-report-print-meta">
+      <strong>Generated:</strong> {{ report_generated_at|date:'d M Y, H:i' }}<br>
+      {% if report_filters.date_from %}<strong>From:</strong> {{ report_filters.date_from|date:'d M Y' }}<br>{% endif %}
+      {% if report_filters.date_to %}<strong>To:</strong> {{ report_filters.date_to|date:'d M Y' }}<br>{% endif %}
+      {% if report_filters.method %}<strong>Method:</strong> {{ report_filters.method }}<br>{% endif %}
+      {% if report_filters.search %}<strong>Search:</strong> {{ report_filters.search }}{% endif %}
+    </div>
+  </header>
+  <div class="payment-report-print-summary">
+    <span><strong>Matching receipts:</strong> {{ record_count|intcomma }}</span>
+    <span><strong>Total received:</strong> UGX {{ total_amount|floatformat:2|intcomma }}</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:10%">Receipt</th>
+        <th style="width:8%">Date</th>
+        <th style="width:15%">Customer</th>
+        <th style="width:14%">Service</th>
+        <th style="width:10%">Invoice</th>
+        <th style="width:10%">Method</th>
+        <th style="width:13%">Reference</th>
+        <th style="width:10%">Received by</th>
+        <th style="width:10%;text-align:right">Amount (UGX)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for payment in print_payments %}
+      <tr>
+        <td>{{ payment.receipt_number }}</td>
+        <td>{{ payment.payment_date|date:'d M Y' }}</td>
+        <td>{% if payment.client %}{{ payment.client.get_display_name }}{% else %}Unassigned{% endif %}</td>
+        <td>{{ payment.service_type.name|default:'—' }}</td>
+        <td>{{ payment.invoice.invoice_number|default:'—' }}</td>
+        <td>{{ payment.get_method_display }}</td>
+        <td>{{ payment.reference|default:'—' }}</td>
+        <td>{% if payment.received_by %}{{ payment.received_by.get_full_name|default:payment.received_by.username }}{% else %}—{% endif %}</td>
+        <td class="print-amount">{{ payment.amount|floatformat:2|intcomma }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="9">No payment records match these filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <footer class="payment-report-print-footer">
+    End of report · {{ record_count|intcomma }} receipt(s) · Total UGX {{ total_amount|floatformat:2|intcomma }}
+  </footer>
+</section>
 
 {% endblock %}

@@ -113,12 +113,17 @@ class CompanySettingsForm(forms.ModelForm):
             self.fields['default_branch'].queryset = self.instance.branches.all()
         else:
             self.fields['default_branch'].queryset = Branch.objects.none()
+        for field in self.fields.values():
+            field.widget.attrs.setdefault('class', 'form-control')
 
 
 class BranchSettingsForm(forms.ModelForm):
     class Meta:
         model = Branch
-        fields = ['name', 'slug', 'address', 'phone', 'logo', 'is_active']
+        fields = [
+            'name', 'slug', 'address', 'phone', 'logo', 'is_active',
+            'external_reporting',
+        ]
         widgets = {
             'address': forms.Textarea(attrs={'rows': 2}),
             'logo': forms.ClearableFileInput(attrs={
@@ -126,6 +131,12 @@ class BranchSettingsForm(forms.ModelForm):
                 'accept': 'image/*',
             }),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['slug'].required = False
+        for field in self.fields.values():
+            field.widget.attrs.setdefault('class', 'form-control')
 
     def clean_logo(self):
         logo = self.files.get(self.add_prefix('logo'))

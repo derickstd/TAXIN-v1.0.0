@@ -13,6 +13,8 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
+from django.utils.text import slugify
+from django.db import transaction
 from django.db.models import Q, Count
 from django.views.decorators.http import require_POST
 from .models import User, Company, AuditLog, Branch, SystemModuleVisibility
@@ -330,19 +332,48 @@ def admin_company_branches(request, company_id):
     companies = Company.objects.all() if request.user.is_superuser else Company.objects.filter(pk=request.user.company_id)
     company = get_object_or_404(companies, pk=company_id)
     branches = company.branches.order_by('name')
+    from django.forms.models import inlineformset_factory
+    from .views import BranchSettingsForm, CompanySettingsForm
+
+    BranchFormSet = inlineformset_factory(
+        Company, Branch, form=BranchSettingsForm, extra=1, can_delete=False,
+    )
+    company_form = CompanySettingsForm(instance=company)
+    branch_formset = BranchFormSet(instance=company)
+
     if request.method == 'POST':
-        if request.POST.get('action') != 'setup_business_branches':
-            messages.error(request, 'Only TAXMAN, PRIME FOCUS, and ABA UGANDA are supported branches.')
+        if request.POST.get('action') == 'setup_business_branches':
+            ensure_business_branches(company)
+            messages.success(request, 'TAXMAN, PRIME FOCUS, and ABA UGANDA are ready.')
+            return redirect('core:admin_company_branches', company_id=company.pk)
+        if request.POST.get('action') != 'save_company_branches':
+            messages.error(request, 'Submit the company and branch form to save changes.')
             return redirect('core:admin_company_branches', company_id=company.pk)
 
-        ensure_business_branches(company)
-        messages.success(request, 'TAXMAN, PRIME FOCUS, and ABA UGANDA are ready.')
-        return redirect('core:admin_company_branches', company_id=company.pk)
+        company_form = CompanySettingsForm(request.POST, instance=company)
+        branch_formset = BranchFormSet(
+            request.POST, request.FILES, instance=company,
+        )
+        if company_form.is_valid() and branch_formset.is_valid():
+            with transaction.atomic():
+                company_form.save()
+                branches_to_save = branch_formset.save(commit=False)
+                for branch in branches_to_save:
+                    branch.company = company
+                    if not branch.slug:
+                        branch.slug = slugify(f'{company.slug}-{branch.name}')
+                    branch.save()
+                branch_formset.save_m2m()
+            messages.success(request, 'Company and branch details updated.')
+            return redirect('core:admin_company_branches', company_id=company.pk)
+        messages.error(request, 'Please correct the company and branch errors below.')
 
     return render(request, 'core/admin_company_branches.html', {
         'company': company,
         'branches': branches,
-        'can_edit_branch_profiles': request.user.company_id == company.pk,
+        'company_form': company_form,
+        'branch_formset': branch_formset,
+        'can_edit_branch_profiles': True,
     })
 
 

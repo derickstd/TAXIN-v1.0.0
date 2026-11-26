@@ -222,15 +222,34 @@ def payment_receipts_report(request):
         record_count=Count('pk'),
         amount=Sum('amount'),
     )
+    print_payments = payments.order_by('-payment_date', '-pk')
     page_obj = paginate_queryset(
-        request, payments.order_by('-payment_date', '-pk'), per_page=30,
+        request, print_payments, per_page=30,
+    )
+    filters = filter_form.cleaned_data if filter_form.is_valid() else {}
+    selected_branch = filters.get('branch')
+    report_branch = selected_branch or getattr(request, 'active_branch', None)
+    report_company = (
+        report_branch.company if report_branch
+        else getattr(request.user, 'company', None)
     )
     return render(request, 'billing/payments_report.html', {
         'filter_form': filter_form,
         'payments': page_obj,
+        'print_payments': print_payments,
         'page_obj': page_obj,
         'record_count': totals['record_count'],
         'total_amount': totals['amount'] or Decimal('0.00'),
+        'report_generated_at': timezone.localtime(),
+        'report_branch': report_branch,
+        'report_company': report_company,
+        'report_filters': {
+            'search': filters.get('search', ''),
+            'date_from': filters.get('date_from'),
+            'date_to': filters.get('date_to'),
+            'method': dict(Payment.METHOD).get(filters.get('method'), ''),
+            'branch': selected_branch.name if selected_branch else '',
+        },
         'can_delete_records': (
             request.user.is_superuser
             or request.user.role in ('admin', 'ceo')
@@ -254,6 +273,88 @@ def _payment_receipt_branch_and_company(payment):
     if branch:
         company = branch.company
     return branch, company
+
+
+def _integer_to_words(value):
+    small_numbers = (
+        'Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven',
+        'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen',
+        'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen',
+    )
+    tens = (
+        '', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy',
+        'Eighty', 'Ninety',
+    )
+    scales = ('', 'Thousand', 'Million', 'Billion', 'Trillion')
+
+    def under_thousand(number):
+        words = []
+        if number >= 100:
+            words.extend((small_numbers[number // 100], 'Hundred'))
+            number %= 100
+            if number:
+                words.append('and')
+        if number >= 20:
+            words.append(tens[number // 10])
+            if number % 10:
+                words.append(small_numbers[number % 10])
+        elif number:
+            words.append(small_numbers[number])
+        return ' '.join(words)
+
+    if value == 0:
+        return small_numbers[0]
+    groups = []
+    scale_index = 0
+    while value:
+        group = value % 1000
+        if group:
+            group_words = under_thousand(group)
+            scale = scales[scale_index]
+            groups.append(f'{group_words} {scale}'.strip())
+        value //= 1000
+        scale_index += 1
+    return ', '.join(reversed(groups))
+
+
+def _amount_in_words(amount):
+    amount = Decimal(amount).quantize(Decimal('0.01'))
+    whole_amount = int(amount)
+    cents = int((amount - whole_amount) * 100)
+    words = f'Uganda Shillings {_integer_to_words(whole_amount)}'
+    if cents:
+        words += f' and {cents:02d}/100'
+    return f'{words} only'
+
+
+def _payment_receipt_summary(payment):
+    invoice = payment.invoice if payment.invoice_id else None
+    invoice_total = invoice.grand_total if invoice else None
+    total_paid = invoice.amount_paid if invoice else None
+    balance_due = invoice.balance_due if invoice else None
+    if payment.notes:
+        remarks = payment.notes
+    elif invoice and balance_due < 0:
+        remarks = 'Invoice overpaid; excess is held as a client credit.'
+    elif invoice and balance_due == 0:
+        remarks = 'Invoice paid in full.'
+    elif invoice:
+        remarks = 'Part payment received; balance remains outstanding.'
+    else:
+        remarks = 'Payment received on account.'
+    customer_phone = (
+        payment.client.phone_whatsapp or payment.client.phone_primary
+        if payment.client_id else ''
+    )
+    return {
+        'amount_in_words': _amount_in_words(payment.amount),
+        'invoice_total': invoice_total,
+        'total_paid': total_paid,
+        'balance_due': balance_due,
+        'remarks': remarks,
+        'customer_phone': customer_phone,
+        'customer_email': payment.client.email if payment.client_id else '',
+    }
 
 
 def _payment_receipt_pdf(payment, branch, company):
@@ -334,12 +435,33 @@ def _payment_receipt_pdf(payment, branch, company):
         if branch.phone:
             details.insert(4, ('Branch phone', branch.phone))
     if company:
+        if company.address and not (branch and branch.address):
+            details.append(('Company address', company.address))
+        if company.phone and not (branch and branch.phone):
+            details.append(('Company phone', company.phone))
         if company.registration_number:
             details.append(('Registration number', company.registration_number))
         if company.tin:
             details.append(('Company TIN', company.tin))
         if company.email:
             details.append(('Company email', company.email))
+    summary = _payment_receipt_summary(payment)
+    if summary['customer_phone']:
+        details.insert(3, ('Customer phone', summary['customer_phone']))
+    if summary['customer_email']:
+        details.insert(4, ('Customer email', summary['customer_email']))
+    details.extend([
+        ('Amount in words', summary['amount_in_words']),
+    ])
+    if summary['invoice_total'] is not None:
+        details.extend([
+            ('Invoice total', f"UGX {summary['invoice_total']:,.2f}"),
+            ('Total paid to date', f"UGX {summary['total_paid']:,.2f}"),
+            (
+                'Balance due' if summary['balance_due'] >= 0 else 'Credit balance',
+                f"UGX {abs(summary['balance_due']):,.2f}",
+            ),
+        ])
 
     rows = [
         [paragraph(label, label_style), paragraph(value, value_style)]
@@ -360,18 +482,22 @@ def _payment_receipt_pdf(payment, branch, company):
     story = [
         Paragraph('PAYMENT RECEIPT', title_style),
         receipt_table,
+        Spacer(1, 8 * mm),
+        Paragraph('Remarks', label_style),
+        Paragraph(escape(summary['remarks']).replace('\n', '<br/>'), value_style),
     ]
-    if payment.notes:
-        story.extend([
-            Spacer(1, 10 * mm),
-            Paragraph('Notes', label_style),
-            Paragraph(
-                escape(payment.notes).replace('\n', '<br/>'),
-                value_style,
-            ),
-        ])
     story.extend([
         Spacer(1, 12 * mm),
+        Paragraph(
+            'Received by: ____________________    Customer acknowledgement: ____________________',
+            ParagraphStyle(
+                'ReceiptSignature',
+                parent=value_style,
+                alignment=TA_CENTER,
+                textColor=colors.HexColor('#64748b'),
+            ),
+        ),
+        Spacer(1, 5 * mm),
         Paragraph(
             'This is a computer-generated receipt.',
             ParagraphStyle(
@@ -385,6 +511,16 @@ def _payment_receipt_pdf(payment, branch, company):
 
     def draw_branding(pdf_canvas, doc):
         page_width, page_height = A4
+        pdf_canvas.saveState()
+        pdf_canvas.setFillColor(colors.HexColor('#cbdde1'))
+        if hasattr(pdf_canvas, 'setFillAlpha'):
+            pdf_canvas.setFillAlpha(0.35)
+        pdf_canvas.setFont('Helvetica-Bold', 34)
+        pdf_canvas.translate(page_width / 2, page_height / 2)
+        pdf_canvas.rotate(32)
+        pdf_canvas.drawCentredString(0, 0, 'TAXIN • OFFICIAL RECEIPT')
+        pdf_canvas.restoreState()
+
         x = doc.leftMargin
         top = page_height - 15 * mm
         if branch and branch.logo:
@@ -450,12 +586,14 @@ def payment_receipt(request, pk):
     )
     payment = get_object_or_404(payments, pk=pk)
     branch, company = _payment_receipt_branch_and_company(payment)
+    summary = _payment_receipt_summary(payment)
     if request.GET.get('format') == 'pdf':
         return _payment_receipt_pdf(payment, branch, company)
     return render(request, 'billing/payment_receipt.html', {
         'payment': payment,
         'branch': branch,
         'company': company,
+        'receipt_summary': summary,
         'can_delete_records': (
             request.user.is_superuser
             or request.user.role in ('admin', 'ceo')

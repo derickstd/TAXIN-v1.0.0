@@ -574,7 +574,7 @@ class ExternalBranchReportTests(TestCase):
         self.assertTrue(response.context['open_summary_modal'])
         self.assertContains(response, 'A daily summary cannot be dated in the future.')
 
-    def test_manager_can_view_other_branch_ledger_but_not_its_financial_report(self):
+    def test_manager_ledger_stays_in_workspace_when_other_branch_is_requested(self):
         response = self.client.get(reverse('documents:financial_reports'), {
             'branch': self.other_branch.pk,
         })
@@ -586,7 +586,11 @@ class ExternalBranchReportTests(TestCase):
         self.assertEqual(ledger_response.status_code, 200)
         self.assertEqual(
             ledger_response.context['selected_branch'],
-            self.other_branch,
+            self.branch,
+        )
+        self.assertEqual(
+            ledger_response.context['transactions'].paginator.count,
+            0,
         )
 
     def test_daily_ledger_records_external_transactions_and_blocks_duplicate_references(self):
@@ -907,7 +911,7 @@ class InternalBranchDailySummaryTests(TestCase):
         self.assertContains(response, 'Direct payment')
         self.assertEqual(response.context['total_inflow'], Decimal('500'))
 
-    def test_company_admin_sees_all_branches_in_daily_ledger_from_branch_workspace(self):
+    def test_company_admin_ledger_uses_active_branch_workspace_only(self):
         today = timezone.localdate()
         other_branch = Branch.objects.create(
             company=self.company,
@@ -941,20 +945,16 @@ class InternalBranchDailySummaryTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 200)
-        ledger_entry = next(
-            row for row in response.context['transactions']
-            if row['record_type'] == 'daily_entry'
-        )
-        self.assertEqual(ledger_entry['id'], entry.pk)
-        self.assertEqual(ledger_entry['branch'], other_branch)
-        self.assertTrue(ledger_entry['can_edit'])
+        self.assertEqual(response.context['selected_branch'], self.branch)
+        self.assertEqual(response.context['transactions'].paginator.count, 0)
+        self.assertNotContains(response, 'Other branch daily receipt')
         edit_response = self.client.get(reverse(
             'documents:ledger_transaction_edit',
             args=['daily_entry', entry.pk],
         ))
-        self.assertEqual(edit_response.status_code, 200)
+        self.assertEqual(edit_response.status_code, 404)
 
-    def test_branch_user_sees_other_branch_transactions_without_write_access(self):
+    def test_branch_user_ledger_hides_other_branch_transactions(self):
         today = timezone.localdate()
         other_branch = Branch.objects.create(
             company=self.company,
@@ -977,13 +977,9 @@ class InternalBranchDailySummaryTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 200)
-        ledger_entry = next(
-            row for row in response.context['transactions']
-            if row['record_type'] == 'daily_entry'
-        )
-        self.assertEqual(ledger_entry['id'], entry.pk)
-        self.assertEqual(ledger_entry['branch'], other_branch)
-        self.assertFalse(ledger_entry['can_edit'])
+        self.assertEqual(response.context['selected_branch'], self.branch)
+        self.assertEqual(response.context['transactions'].paginator.count, 0)
+        self.assertNotContains(response, 'Shared branch visibility test')
         self.assertNotIn(
             other_branch,
             response.context['external_branches'],
@@ -1056,6 +1052,29 @@ class InternalBranchDailySummaryTests(TestCase):
                 self.assertContains(response, 'ledger-period-menu')
                 self.assertNotContains(response, 'All accessible branches')
                 self.assertNotContains(response, 'id="ledger-date"')
+
+    def test_daily_ledger_defaults_to_this_month(self):
+        today = timezone.localdate()
+        month_start = date(today.year, today.month, 1)
+        Payment.objects.create(
+            amount=Decimal('25'), payment_date=month_start,
+            received_by=self.manager, branch=self.branch,
+        )
+        Payment.objects.create(
+            amount=Decimal('50'),
+            payment_date=month_start - timezone.timedelta(days=1),
+            received_by=self.manager, branch=self.branch,
+        )
+
+        response = self.client.get(reverse('documents:branch_daily_ledger'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['period'], 'this_month')
+        self.assertEqual(response.context['date_from'], month_start)
+        self.assertEqual(response.context['date_to'], today)
+        self.assertEqual(response.context['transactions'].paginator.count, 1)
+        self.assertEqual(response.context['total_inflow'], Decimal('25'))
+        self.assertContains(response, 'This month')
 
     def test_expense_form_submission_appears_pending_then_updates_ledger_on_approval(self):
         business_date = timezone.localdate()
@@ -1276,7 +1295,7 @@ class BranchAccountingReportTests(TestCase):
             Decimal('50'),
         )
         self.assertEqual(ledger.context['total_inflow'], Decimal('150'))
-        self.assertEqual(ledger.context['total_outflow'], Decimal('0'))
+        self.assertEqual(ledger.context['total_outflow'], Decimal('50'))
         self.assertContains(ledger, 'Bank deposit transfer')
         transfer_rows = [
             row for row in ledger.context['transactions']
@@ -1284,13 +1303,39 @@ class BranchAccountingReportTests(TestCase):
         ]
         self.assertEqual(len(transfer_rows), 1)
         self.assertEqual(transfer_rows[0]['inflow'], Decimal('0'))
+        self.assertEqual(transfer_rows[0]['outflow'], Decimal('50'))
         self.assertEqual(transfer_rows[0]['transfer_amount'], Decimal('50'))
         self.assertEqual(
             sum(row['outflow'] for row in transfer_rows),
-            Decimal('0'),
+            Decimal('50'),
         )
         self.assertContains(ledger, 'Transfer amount:')
         self.assertFalse(Expense.objects.exists())
+
+    def test_mobile_money_bank_deposit_counts_as_ledger_money_out(self):
+        today = timezone.localdate()
+        BranchAccountTransfer.objects.create(
+            branch=self.branch,
+            transfer_date=today,
+            source_account='mobile_money',
+            destination_account='bank',
+            amount=Decimal('75'),
+            description='Mobile money deposit',
+            entered_by=self.user,
+        )
+
+        response = self.client.get(reverse('documents:branch_daily_ledger'), {
+            'branch': self.branch.pk,
+            'date': today.isoformat(),
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['total_outflow'], Decimal('75'))
+        transfer_row = next(
+            row for row in response.context['transactions']
+            if row['record_type'] == 'transfer'
+        )
+        self.assertEqual(transfer_row['outflow'], Decimal('75'))
 
     def test_account_transfer_records_bank_charges_as_expense(self):
         today = timezone.localdate()
@@ -1487,7 +1532,7 @@ class BranchAccountingReportTests(TestCase):
         )
         self.assertEqual(
             sum(row['outflow'] for row in ledger_transfers),
-            Decimal('0'),
+            Decimal('50'),
         )
         self.assertEqual(
             sum(row['transfer_amount'] for row in ledger_transfers),
@@ -1552,6 +1597,54 @@ class LedgerTransactionManagementTests(TestCase):
         self.category = ExpenseCategory.objects.create(
             name='Ledger management test expense',
         )
+
+    def test_admin_and_ceo_all_branches_workspace_shows_all_branch_ledger_rows(self):
+        Payment.objects.create(
+            amount=Decimal('15'), payment_date=self.today,
+            received_by=self.admin, branch=self.branch,
+        )
+        BranchDailyTransaction.objects.create(
+            branch=self.external_branch,
+            business_date=self.today,
+            direction='inflow',
+            category='service_receipt',
+            description='Another branch ledger entry',
+            account='cash',
+            amount=Decimal('25'),
+            entered_by=self.admin,
+        )
+
+        for role in ('admin', 'ceo'):
+            with self.subTest(role=role):
+                self.admin.role = role
+                self.admin.save(update_fields=['role'])
+                response = self.client.get(
+                    reverse('documents:branch_daily_ledger'),
+                    {'date': self.today.isoformat()},
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIsNone(response.context['selected_branch'])
+                self.assertTrue(response.context['show_all_branches'])
+                self.assertEqual(
+                    response.context['transactions'].paginator.count,
+                    2,
+                )
+                self.assertEqual(
+                    response.context['total_inflow'],
+                    Decimal('40'),
+                )
+                self.assertContains(response, 'Another branch ledger entry')
+
+        branch_response = self.client.get(
+            reverse('documents:branch_daily_ledger'),
+            {'branch': self.branch.pk, 'date': self.today.isoformat()},
+        )
+
+        self.assertEqual(branch_response.status_code, 200)
+        self.assertEqual(branch_response.context['selected_branch'], self.branch)
+        self.assertEqual(branch_response.context['transactions'].paginator.count, 1)
+        self.assertEqual(branch_response.context['total_inflow'], Decimal('15'))
 
     def _record_fixtures(self):
         return [

@@ -18,6 +18,7 @@
 </div>
 
 {% if branches %}
+{% if selected_branch or show_all_branches %}
 <section class="card-box mb-3">
   <div class="card-body">
     <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -237,7 +238,7 @@
 <section class="card-box">
   <div class="card-head">
     <span><i class="fas fa-list"></i> Transactions · {{ transactions.paginator.count }}</span>
-    <span class="text-muted">{{ period_label }} · {{ date_from|date:'d M Y' }}{% if date_from != date_to %} – {{ date_to|date:'d M Y' }}{% endif %}{% if selected_branch %} · {{ selected_branch.name }}{% endif %}</span>
+    <span class="text-muted">{{ period_label }} · {{ date_from|date:'d M Y' }}{% if date_from != date_to %} – {{ date_to|date:'d M Y' }}{% endif %}{% if selected_branch %} · {{ selected_branch.name }}{% elif show_all_branches %} · All branches{% endif %}</span>
   </div>
   <div class="tbl-wrap">
     <table class="tbl">
@@ -306,6 +307,11 @@
   </div>
   {% endif %}
 </section>
+{% else %}
+<div class="alert-note">
+  Select a branch workspace to view its daily ledger. The ledger does not combine transactions from multiple branches.
+</div>
+{% endif %}
 {% else %}
 <div class="alert-note">No branches are assigned to your account. Ask company leadership to set up branches and assign your access.</div>
 {% endif %}

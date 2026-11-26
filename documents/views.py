@@ -408,21 +408,10 @@ def _can_manage_ledger_transactions(user):
 
 
 def _ledger_visible_branches(user):
-    if user.is_superuser:
-        return Branch.objects.filter(is_active=True)
-    company_id = user.company_id
-    if not company_id and user.branch_id:
-        company_id = Branch.objects.filter(
-            pk=user.branch_id, is_active=True,
-        ).values_list('company_id', flat=True).first()
-    if company_id:
-        return Branch.objects.filter(company_id=company_id, is_active=True)
     return accessible_branches(user)
 
 
 def _ledger_accessible_branches(user):
-    if _can_manage_ledger_transactions(user):
-        return _ledger_visible_branches(user)
     return accessible_branches(user)
 
 
@@ -638,21 +627,34 @@ def ledger_transaction_delete(request, record_type, pk):
 
 def _branch_daily_ledger(request, expense_only=False):
     branches = _ledger_visible_branches(request.user)
+    branch_id = request.GET.get('branch') or request.POST.get('branch')
+    active_branch = getattr(request, 'active_branch', None)
+    if active_branch:
+        selected_branch = get_object_or_404(branches, pk=active_branch.pk)
+        if (
+            request.method == 'POST'
+            and branch_id
+            and str(selected_branch.pk) != str(branch_id)
+        ):
+            raise Http404
+    else:
+        selected_branch = (
+            get_object_or_404(branches, pk=branch_id) if branch_id else None
+        )
+    can_manage_transactions = _can_manage_ledger_transactions(request.user)
+    show_all_branches = (
+        not active_branch and not selected_branch and can_manage_transactions
+    )
     external_branches = _ledger_accessible_branches(
         request.user,
     ).filter(external_reporting=True)
-    branch_id = request.GET.get('branch') or request.POST.get('branch')
-    selected_branch = get_object_or_404(branches, pk=branch_id) if branch_id else None
-    can_manage_transactions = _can_manage_ledger_transactions(request.user)
-    if (
-        not selected_branch
-        and branches.count() == 1
-        and not can_manage_transactions
-    ):
-        selected_branch = branches.first()
-    explicitly_selected_branch = bool(request.GET.get('branch'))
-
-    requested_period = request.GET.get('period') or request.POST.get('period', 'today')
+    if selected_branch:
+        external_branches = external_branches.filter(pk=selected_branch.pk)
+    elif not show_all_branches:
+        external_branches = external_branches.none()
+    requested_period = request.GET.get('period') or request.POST.get(
+        'period', 'this_month',
+    )
     raw_date = request.GET.get('date', '')
     period_options = [
         ('today', 'Today'),
@@ -700,7 +702,6 @@ def _branch_daily_ledger(request, expense_only=False):
         selected_branch
         and selected_branch.external_reporting
         and external_branches.filter(pk=selected_branch.pk).exists()
-        and (not can_manage_transactions or explicitly_selected_branch)
     ):
         initial['branch'] = selected_branch
     requested_direction = request.GET.get('direction')
@@ -753,9 +754,12 @@ def _branch_daily_ledger(request, expense_only=False):
             require_branch_selection=can_manage_transactions,
         )
 
-    selected_branches = branches
     if selected_branch:
-        selected_branches = selected_branches.filter(pk=selected_branch.pk)
+        selected_branches = branches.filter(pk=selected_branch.pk)
+    elif show_all_branches:
+        selected_branches = branches
+    else:
+        selected_branches = branches.none()
     internal_branches = selected_branches.filter(external_reporting=False)
     summaries = list(
         BranchDailySummary.objects.filter(
@@ -945,6 +949,14 @@ def _branch_daily_ledger(request, expense_only=False):
             if transfer.destination_account == 'bank'
             else 'Bank withdrawal transfer'
         )
+        transfer_outflow = (
+            transfer.amount
+            if (
+                transfer.destination_account == 'bank'
+                and transfer.source_account in ('cash', 'mobile_money')
+            )
+            else zero
+        )
         common = {
             'branch': transfer.branch,
             'business_date': transfer.transfer_date,
@@ -954,7 +966,7 @@ def _branch_daily_ledger(request, expense_only=False):
             'method': 'Internal transfer',
             'reference': transfer.reference,
             'recorded_by': user_label(transfer.entered_by),
-            'counts_in_totals': False,
+            'counts_in_totals': bool(transfer_outflow),
             'record_type': 'transfer',
         }
         append_transaction(
@@ -963,6 +975,7 @@ def _branch_daily_ledger(request, expense_only=False):
                 f'{source_label} to {destination_label} — '
                 f'{transfer.description}'
             ),
+            outflow=transfer_outflow,
             transfer_amount=transfer.amount,
         )
 
@@ -1011,6 +1024,7 @@ def _branch_daily_ledger(request, expense_only=False):
         'branches': branches,
         'external_branches': external_branches,
         'selected_branch': selected_branch,
+        'show_all_branches': show_all_branches,
         'business_date': business_date,
         'date_from': date_from,
         'date_to': date_to,

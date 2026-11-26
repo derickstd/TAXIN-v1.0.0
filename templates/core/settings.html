@@ -97,6 +97,7 @@
                   <th>Phone</th>
                   <th>Branch Logo</th>
                   <th>Active</th>
+                  <th>External Reporting</th>
                 </tr>
               </thead>
               <tbody id="branchFormRows">
@@ -113,6 +114,7 @@
                     {{ form.logo }}{{ form.logo.errors }}
                   </td>
                   <td>{{ form.is_active }}</td>
+                  <td>{{ form.external_reporting }}{{ form.external_reporting.errors }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -125,6 +127,7 @@
                 <td>{{ branch_formset.empty_form.phone }}</td>
                 <td>{{ branch_formset.empty_form.logo }}</td>
                 <td>{{ branch_formset.empty_form.is_active }}</td>
+                <td>{{ branch_formset.empty_form.external_reporting }}</td>
               </tr>
             </template>
           </div>
