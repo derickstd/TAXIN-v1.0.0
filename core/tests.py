@@ -1,3 +1,4 @@
+from importlib import import_module
 import sys
 from datetime import date, datetime, timezone as datetime_timezone
 from decimal import Decimal
@@ -5,6 +6,7 @@ from io import BytesIO
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from django.apps import apps
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -28,6 +30,107 @@ from core.models import User, ModelVisibility, UserModelPermission, SystemModule
 from core.utils import is_model_visible, user_can_view_model, user_can_edit_model
 from core.branch_access import scope_queryset
 from core.views import UserForm
+
+
+class PreNovemberTaxmanBranchMigrationTests(TestCase):
+    def test_backfills_unassigned_pre_cutoff_records_only(self):
+        company = Company.objects.create(name='Legacy Co', slug='legacy-co')
+        taxman = Branch.objects.create(company=company, name='TAXMAN')
+        other_branch = Branch.objects.create(company=company, name='Other')
+        user = User.objects.create_user(
+            username='legacy-branch-user',
+            password='pass1234',
+            company=company,
+        )
+        old_client = Client.objects.create(
+            full_name='Legacy Client',
+            phone_primary='+256700111222',
+            created_by=user,
+        )
+        cutoff_client = Client.objects.create(
+            full_name='Cutoff Client',
+            phone_primary='+256700111223',
+            created_by=user,
+        )
+        assigned_client = Client.objects.create(
+            full_name='Already Assigned Client',
+            phone_primary='+256700111224',
+            created_by=user,
+            branch=other_branch,
+        )
+        Client.objects.filter(pk=old_client.pk).update(
+            date_registered=date(2026, 10, 31),
+        )
+        Client.objects.filter(pk=cutoff_client.pk).update(
+            date_registered=date(2026, 11, 1),
+        )
+        Client.objects.filter(pk=assigned_client.pk).update(
+            date_registered=date(2026, 10, 31),
+        )
+
+        invoice = Invoice.objects.create(
+            client=old_client,
+            due_date=date(2026, 11, 30),
+            created_by=user,
+        )
+        assigned_invoice = Invoice.objects.create(
+            client=old_client,
+            due_date=date(2026, 11, 30),
+            created_by=user,
+            branch=other_branch,
+        )
+        Invoice.objects.filter(pk=invoice.pk).update(
+            date_issued=date(2026, 10, 31),
+        )
+        Invoice.objects.filter(pk=assigned_invoice.pk).update(
+            date_issued=date(2026, 10, 31),
+        )
+        payment = Payment.objects.create(
+            client=old_client,
+            amount=Decimal('100'),
+            payment_date=date(2026, 10, 31),
+            received_by=user,
+        )
+        income = OtherIncome.objects.create(
+            source_name='Legacy income',
+            amount=Decimal('100'),
+            income_date=date(2026, 10, 31),
+            recorded_by=user,
+        )
+        job = JobCard.objects.create(client=old_client, created_by=user)
+        JobCard.objects.filter(pk=job.pk).update(
+            created_at=timezone.make_aware(datetime(2026, 10, 31, 12)),
+        )
+        expense = Expense.objects.create(
+            expense_date=date(2026, 10, 31),
+            description='Legacy expense',
+            amount=Decimal('100'),
+            created_by=user,
+            client=old_client,
+        )
+
+        migration = import_module(
+            'core.migrations.0021_backfill_pre_november_taxman_branches',
+        )
+        migration.assign_pre_cutoff_records(apps, None)
+
+        for model, record in (
+            (Client, old_client),
+            (Invoice, invoice),
+            (Payment, payment),
+            (OtherIncome, income),
+            (JobCard, job),
+            (Expense, expense),
+        ):
+            record.refresh_from_db()
+            self.assertEqual(record.branch_id, taxman.pk, model.__name__)
+
+        cutoff_client.refresh_from_db()
+        assigned_client.refresh_from_db()
+        assigned_invoice.refresh_from_db()
+        self.assertIsNone(cutoff_client.branch_id)
+        self.assertEqual(assigned_client.branch_id, other_branch.pk)
+        self.assertEqual(assigned_invoice.branch_id, other_branch.pk)
 
 
 class LogoutViewTests(TestCase):
